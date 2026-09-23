@@ -1,0 +1,13 @@
+{
+  "name": "mcp-gateway",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "openspec": "openspec"
+  },
+  "devDependencies": {
+    "@fission-ai/openspec": "^1.13.1"
+  }
+}
