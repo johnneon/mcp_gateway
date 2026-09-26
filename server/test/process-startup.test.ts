@@ -140,10 +140,24 @@ async function stopAll(): Promise<void> {
 }
 
 beforeAll(async () => {
+  const { execFileSync } = await import('node:child_process');
+  const webRoot = path.join(repoRoot, 'web');
+  const viteCli = path.join(repoRoot, 'node_modules', 'vite', 'bin', 'vite.js');
+  const tscCli = path.join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc');
+
+  execFileSync(process.execPath, [viteCli, 'build'], {
+    cwd: webRoot,
+    stdio: 'pipe',
+  });
+  execFileSync(process.execPath, [tscCli], {
+    cwd: serverRoot,
+    stdio: 'pipe',
+  });
+
   const { access } = await import('node:fs/promises');
   await access(mainJs);
-  await access(path.join(repoRoot, 'web', 'dist', 'index.html'));
-});
+  await access(path.join(webRoot, 'dist', 'index.html'));
+}, 120_000);
 
 afterEach(async () => {
   await stopAll();
