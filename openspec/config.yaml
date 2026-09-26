@@ -1,8 +1,8 @@
 schema: spec-driven
 
 context: |
-  Read AGENTS.md before writing artifacts.
-  MCP Gateway is one Node.js process. It stores connector credentials and exposes a fixed tool list over MCP Streamable HTTP. A bearer token authenticates the MCP client. Connector secrets stay inside the process.
+  Read AGENTS.md and docs/workflow.md before writing artifacts.
+  MCP Gateway is one Node.js process. It stores account credentials for connectors defined in code and exposes their tools over MCP Streamable HTTP. A configuration's bearer token authenticates the MCP client and selects the accounts it sees. Account secrets stay inside the process. State is one encrypted JSON file. The admin UI has no login and runs on its own port.
   Write change artifacts in Russian. MCP tool names, descriptions, error text, and admin UI copy stay in English.
   Product vision is mcp-gateway-spec.md. Current behavior is openspec/specs. The contract for this change is its own delta specs.
   A new connector is a new change plus code. Do not add a runtime catalog of tools.
@@ -15,7 +15,7 @@ rules:
     - Requirements use SHALL. Each requirement has at least one Given/When/Then scenario.
     - Scenarios are testable with a fake provider, without a live external service.
   design:
-    - Hosts and secrets stay in gateway code. Model arguments do not carry a URL, a host, or a secret.
+    - Hosts come from connector code or operator-entered account fields. Secrets stay in the process. Model arguments do not carry a URL, a host, or a secret.
   tasks:
     - Each task is small enough to implement and test in one pass.
     - Include automated tests for the new scenarios.
@@ -23,9 +23,11 @@ rules:
 operations:
   apply:
     guidance:
-      - Implement only the accepted tasks.
+      - Work on the branch change/<change>. Never commit to main.
+      - Implement only the accepted tasks. Commit each task after its tests pass.
       - Do not edit mcp-gateway-spec.md or files under openspec/specs. Archive merges specs.
-      - Follow the backend, frontend, and tests skills.
+      - Follow the backend, frontend, frontend-cover-tests, and tests skills. Write tests in the same task as the code.
   archive:
     guidance:
-      - Archive only after .harness/reports/<change>.md exists and lists no blockers.
+      - Archive only after openspec/changes/<change>/verification.md is committed and says blockers: 0.
+      - Archive on the change branch, commit it, then push and open the pull request into main.
