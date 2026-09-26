@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { MissingEnvError, parseEnv } from '../src/env.js';
 
-const SECRET_KEY = 'test-encryption-key-DO-NOT-LEAK';
+/** 32 zero-ish bytes as base64; value must not appear in error text. */
+const SECRET_KEY = 'ZW52LXRlc3Qta2V5LTMyLWJ5dGVzLXBhZGRlZCEhISE=';
+const SECRET_KEY_BYTES = Buffer.from(SECRET_KEY, 'base64');
 const DATA_DIR_VALUE = 'C:\\tmp\\gateway-data-secret-path';
 const MCP_HOST_VALUE = '127.0.0.1';
 const MCP_PORT_VALUE = '3100';
 const ADMIN_PORT_VALUE = '3200';
+
+/** Valid base64 that decodes to 16 bytes, not 32. */
+const WRONG_LENGTH_KEY = 'AQEBAQEBAQEBAQEBAQEBAQ==';
+/** Characters outside the standard base64 alphabet. */
+const INVALID_ALPHABET_KEY = 'not-valid-base64!!!@@@@####';
 
 function fullEnv(
   overrides: Record<string, string | undefined> = {},
@@ -92,6 +99,31 @@ describe('process-startup: Обязательные переменные окр�
   });
 });
 
+describe('process-startup: ENCRYPTION_KEY — base64 ровно 32 байта', () => {
+  it('Неверная длина после base64 — имя ENCRYPTION_KEY', () => {
+    expectMissingVariable(fullEnv({ ENCRYPTION_KEY: WRONG_LENGTH_KEY }), 'ENCRYPTION_KEY', [
+      WRONG_LENGTH_KEY,
+      SECRET_KEY,
+      DATA_DIR_VALUE,
+    ]);
+  });
+
+  it('Недопустимый base64 — имя ENCRYPTION_KEY', () => {
+    expectMissingVariable(fullEnv({ ENCRYPTION_KEY: INVALID_ALPHABET_KEY }), 'ENCRYPTION_KEY', [
+      INVALID_ALPHABET_KEY,
+      SECRET_KEY,
+      DATA_DIR_VALUE,
+    ]);
+  });
+
+  it('Фикстуры старта используют валидный ключ без утечки', () => {
+    const config = parseEnv(fullEnv());
+    expect(Buffer.isBuffer(config.encryptionKey)).toBe(true);
+    expect(config.encryptionKey).toEqual(SECRET_KEY_BYTES);
+    expect(config.encryptionKey.length).toBe(32);
+  });
+});
+
 describe('process-startup: ADMIN_HOST по умолчанию 127.0.0.1', () => {
   it('ADMIN_HOST не задана — defaults to 127.0.0.1', () => {
     const config = parseEnv(fullEnv({ ADMIN_HOST: undefined }));
@@ -110,15 +142,13 @@ describe('process-startup: ADMIN_HOST по умолчанию 127.0.0.1', () => 
 });
 
 describe('parseEnv success shape', () => {
-  it('returns parsed hosts, ports, dataDir, and encryptionKey', () => {
+  it('returns parsed hosts, ports, dataDir, and encryptionKey Buffer', () => {
     const config = parseEnv(fullEnv());
-    expect(config).toEqual({
-      mcpHost: MCP_HOST_VALUE,
-      mcpPort: 3100,
-      adminHost: '127.0.0.1',
-      adminPort: 3200,
-      dataDir: DATA_DIR_VALUE,
-      encryptionKey: SECRET_KEY,
-    });
+    expect(config.mcpHost).toBe(MCP_HOST_VALUE);
+    expect(config.mcpPort).toBe(3100);
+    expect(config.adminHost).toBe('127.0.0.1');
+    expect(config.adminPort).toBe(3200);
+    expect(config.dataDir).toBe(DATA_DIR_VALUE);
+    expect(config.encryptionKey).toEqual(SECRET_KEY_BYTES);
   });
 });

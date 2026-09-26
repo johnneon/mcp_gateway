@@ -9,7 +9,8 @@ const serverRoot = path.resolve(here, '..');
 const repoRoot = path.resolve(serverRoot, '..');
 const mainJs = path.join(serverRoot, 'dist', 'main.js');
 
-const ENCRYPTION_KEY = 'spawn-test-encryption-key-UNIQUE-9f3a';
+/** Valid standard base64 of exactly 32 bytes; must not appear in process output. */
+const ENCRYPTION_KEY = 'c3Bhd24tdGVzdC1rZXktMzItYnl0ZXMtcGFkZGVkISE=';
 const DATA_DIR = path.join(repoRoot, 'data', 'spawn-test-UNIQUE-dir');
 
 type RunningProcess = {
