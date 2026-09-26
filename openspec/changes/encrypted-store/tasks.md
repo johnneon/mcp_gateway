@@ -18,4 +18,4 @@
 
 ## 4. Полная проверка пакета
 
-- [ ] 4.1 С корня: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` — код 0. Имена тестов покрывают сценарии delta `encrypted-store` (включая каталог `data` и gitignore) и добавленные/изменённые сценарии `process-startup`. Проверка: все команды завершаются нулевым кодом.
+- [x] 4.1 С корня: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` — код 0. Имена тестов покрывают сценарии delta `encrypted-store` (включая каталог `data` и gitignore) и добавленные/изменённые сценарии `process-startup`. Проверка: все команды завершаются нулевым кодом.

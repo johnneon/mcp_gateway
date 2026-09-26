@@ -1,5 +1,4 @@
-import { open as openFd, closeSync, fsyncSync } from 'node:fs';
-import { readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { open as openFile, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { decryptDocument, encryptDocument, type JsonObject } from './codec.js';
 
@@ -75,42 +74,28 @@ async function renameOverwriting(tempPath: string, filePath: string): Promise<vo
   }
 }
 
-function fsyncFile(filePath: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    openFd(filePath, 'r+', (openError, fd) => {
-      if (openError) {
-        reject(openError);
-        return;
-      }
-      try {
-        fsyncSync(fd);
-        closeSync(fd);
-        resolve();
-      } catch (error) {
-        try {
-          closeSync(fd);
-        } catch {
-          // ignore close errors after fsync failure
-        }
-        reject(error);
-      }
-    });
-  });
+async function fsyncFile(filePath: string): Promise<void> {
+  const handle = await openFile(filePath, 'r+');
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return undefined;
+  }
+  const code = error.code;
+  return typeof code === 'string' ? code : undefined;
 }
 
 function isEnoent(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code: unknown }).code === 'ENOENT'
-  );
+  return errorCode(error) === 'ENOENT';
 }
 
 function isExistError(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null || !('code' in error)) {
-    return false;
-  }
-  const code = (error as { code: unknown }).code;
+  const code = errorCode(error);
   return code === 'EEXIST' || code === 'EPERM' || code === 'EACCES';
 }
