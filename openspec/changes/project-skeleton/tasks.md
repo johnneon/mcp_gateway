@@ -4,7 +4,7 @@
 
 - [x] 1.1 Настроить npm workspaces в корневом `package.json` (`server`, `web`), ES modules, скрипты `typecheck` / `test` / `build` / `start`; создать `server/package.json` и `web/package.json` с зависимостями из design (Express 5, `@modelcontextprotocol/sdk`, zod, Vitest, TypeScript на server; React, Vite, Vitest, TypeScript на web; без Radix, пока shell без него). Проверка: `npm install` завершается без ошибки, в lockfile есть workspaces.
 
-- [ ] 1.2 Добавить TypeScript strict и конфиги Vitest/Vite для обоих пакетов (`tsconfig`, `vitest.config`, `vite.config` с alias `@` → `web/src`), минимальные заглушки entry чтобы `typecheck` не падал на пустоте. Проверка: `npm run typecheck` проходит.
+- [x] 1.2 Добавить TypeScript strict и конфиги Vitest/Vite для обоих пакетов (`tsconfig`, `vitest.config`, `vite.config` с alias `@` → `web/src`), минимальные заглушки entry чтобы `typecheck` не падал на пустоте. Проверка: `npm run typecheck` проходит.
 
 ## 2. Окружение
 
