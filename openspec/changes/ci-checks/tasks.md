@@ -8,7 +8,7 @@
 
 - [x] 2.1 Добавить ESLint 9 flat config в корне (typescript-eslint `strictTypeChecked` или эквивалент, `@typescript-eslint/no-explicit-any` error везде включая тесты, unsafe-any семейство включено, для `web/` — `eslint-plugin-react-hooks` recommended, последним — `eslint-config-prettier`; ignores `dist`/`node_modules`/coverage). Корневой скрипт `lint`. Проверка: `npm run lint` запускается (может падать на скелете до задачи 2.2).
 
-- [ ] 2.2 Довести существующий код `server/` и `web/` до lint-clean и format-clean без ослабления `any`/unsafe и без escape hatch на тесты. Проверка: `npm run lint` и `npm run format:check` завершаются кодом 0; `npm run typecheck` проходит.
+- [x] 2.2 Довести существующий код `server/` и `web/` до lint-clean и format-clean без ослабления `any`/unsafe и без escape hatch на тесты. Проверка: `npm run lint` и `npm run format:check` завершаются кодом 0; `npm run typecheck` проходит.
 
 ## 3. GitHub Actions workflow
 
