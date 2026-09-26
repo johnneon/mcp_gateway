@@ -41,6 +41,12 @@ server/
 
 Create a folder only when a change needs it.
 
+## Comments
+
+Write a comment only where the logic is genuinely non-trivial or hard to see from the names and structure. The comment states the constraint or the reason, not a retelling of the next lines.
+
+Leave ordinary code uncommented: no banners, no notes that repeat a function or variable name, no comments on straightforward control flow.
+
 ## Architecture
 
 - **Routes** handle HTTP only: parse with `zod`, call a service, map the result to a status code. No business logic in a route.
