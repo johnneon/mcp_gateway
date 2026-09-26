@@ -222,4 +222,11 @@ describe('encrypted-store: Каталог состояния в проекте �
     await access(expected);
     expect(path.relative(projectData, expected).includes('..')).toBe(false);
   });
+
+  it('data/ в .gitignore', async () => {
+    const gitignore = await readFile(path.join(repoRoot, '.gitignore'), 'utf8');
+    const lines = gitignore.split(/\r?\n/);
+    expect(lines).toContain('data/');
+    expect(lines.filter((line) => line === 'data/')).toHaveLength(1);
+  });
 });
