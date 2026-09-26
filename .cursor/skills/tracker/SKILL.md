@@ -13,7 +13,18 @@ Every change starts from one issue on the project board. One issue is one change
 | Repository | `johnneon/mcp_gateway` |
 | Status | Backlog, Ready, In progress, In review, Done |
 
-`gh` needs the `project` scope; `gh auth status` shows it. If `gh` is not on `PATH`, call `& "$env:ProgramFiles\GitHub CLI\gh.exe"`. In Windows PowerShell, do not put double quotes inside `--jq` or `-f query=` arguments; they are stripped on the way to `gh`. Parse `--format json` output with `ConvertFrom-Json` instead.
+`gh` needs the `project` scope; `gh auth status` shows it. If `gh` is not on `PATH`, call `& "$env:ProgramFiles\GitHub CLI\gh.exe"`.
+
+Windows PowerShell breaks native arguments that contain double quotes. Parse `--format json` output with `ConvertFrom-Json` instead of `--jq` filters with quotes. Pass every issue, comment, and pull request body through a file:
+
+```powershell
+$bodyFile = New-TemporaryFile
+[IO.File]::WriteAllText($bodyFile, @"
+<body>
+"@)
+gh <command> --body-file $bodyFile
+Remove-Item $bodyFile
+```
 
 ## Status by step
 
@@ -48,7 +59,12 @@ gh issue view <n> --repo johnneon/mcp_gateway --json number,title,body,state,pro
 When a task arrives without an issue, create one before propose, from the person's words. Title is the change name. Body in the language of the existing cards: outcome, what is included, how it is checked.
 
 ```powershell
-gh issue create --repo johnneon/mcp_gateway --title "<name>" --assignee "@me" --project "Task tracker" --body @"
+gh issue create --repo johnneon/mcp_gateway --title "<name>" --assignee "@me" --project "Task tracker" --body-file $bodyFile
+```
+
+Body:
+
+```markdown
 **Исход.** <outcome>
 
 **Входит**
@@ -56,7 +72,6 @@ gh issue create --repo johnneon/mcp_gateway --title "<name>" --assignee "@me" --
 - <item>
 
 **Проверка.** <check>
-"@
 ```
 
 Then move the card to Backlog with the script below and report the issue link to the person.
@@ -87,11 +102,15 @@ The script resolves the project, the Status field, and the card by name, and fai
 Once, after the propose commit:
 
 ```powershell
-gh issue comment <n> --repo johnneon/mcp_gateway --body @"
-Proposal ``<name>``: ``openspec/changes/<name>/`` on branch ``change/<name>``, pushed at finish.
+gh issue comment <n> --repo johnneon/mcp_gateway --body-file $bodyFile
+```
+
+Body:
+
+```markdown
+Proposal `<name>`: `openspec/changes/<name>/` on branch `change/<name>`, pushed at finish.
 
 <outcome and non-goals in two or three sentences>
-"@
 ```
 
 No other comments. The pull request link appears on the issue by itself.

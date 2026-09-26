@@ -64,6 +64,8 @@ Task: <id>
 "@
 ```
 
+Keep double quotes out of the message; Windows PowerShell breaks native arguments that contain them.
+
 ## Staging
 
 - Inspect `git status` and `git diff` first. Stage paths explicitly: `git add <path> ...`. No `git add -A`, no `git add .`.
@@ -76,10 +78,15 @@ Only after `verification.md` says `blockers: 0` and the change is archived.
 
 1. The tree is clean and the full test suite passes.
 2. `git push -u origin change/<name>`.
-3. Create the pull request into `main`:
+3. Create the pull request into `main`. Write the body to a file as `tracker` shows; an inline `--body` breaks on double quotes in Windows PowerShell.
 
 ```powershell
-gh pr create --base main --head change/<name> --title "<prefix>: <outcome>" --body @"
+gh pr create --base main --head change/<name> --title "<prefix>: <outcome>" --body-file $bodyFile
+```
+
+Body:
+
+```markdown
 Closes #<n>
 
 ## Outcome
@@ -93,7 +100,6 @@ blockers: 0 — see verification.md in the archived change.
 
 ## How to check
 <commands to run the process and the tests>
-"@
 ```
 
 4. Move the issue card to In review per `tracker`.
