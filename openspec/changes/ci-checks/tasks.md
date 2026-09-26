@@ -12,7 +12,7 @@
 
 ## 3. GitHub Actions workflow
 
-- [ ] 3.1 Добавить `.github/workflows/ci.yml`: `pull_request` → `main`, Node.js 22, `npm ci`, затем `typecheck`, `lint`, `format:check`, `test`, `build`; job id согласован с design (`checks`). Проверка: файл существует; автотест сценария «Workflow объявляет Node 22 и все проверки» из delta проходит (чтение YAML без GitHub API).
+- [x] 3.1 Добавить `.github/workflows/ci.yml`: `pull_request` → `main`, Node.js 22, `npm ci`, затем `typecheck`, `lint`, `format:check`, `test`, `build`; job id согласован с design (`checks`). Проверка: файл существует; автотест сценария «Workflow объявляет Node 22 и все проверки» из delta проходит (чтение YAML без GitHub API).
 
 ## 4. Автотесты delta
 
