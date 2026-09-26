@@ -10,6 +10,7 @@
 
 - Один зашифрованный файл состояния, загрузка до `listen`.
 - Формат ключа и layout файла зафиксированы и проверяемы автотестами.
+- Каталог данных — проектный `data`; `DATA_DIR` обязательна; `data/` в `.gitignore`.
 - API `open` / read / `replace` для следующих этапов без доменной модели.
 - Ошибки на английском, фиксированный текст, без ключа и без содержимого файла.
 
@@ -31,7 +32,7 @@
 
 ### 2. Путь файла
 
-`path.join(DATA_DIR, 'state.bin')`.
+`path.join(DATA_DIR, 'state.bin')`. `DATA_DIR` остаётся обязательной переменной окружения и не убирается из контракта старта. Для работающего шлюза `DATA_DIR` указывает на проектный каталог `data` в корне репозитория (рядом с `server/` и `web/`), то есть файл — `data/state.bin`. Временный файл записи — `data/state.bin.tmp` в том же каталоге (`path.join(DATA_DIR, 'state.bin.tmp')`). Автотесты MAY задавать `DATA_DIR` подкаталогом внутри `data/`, чтобы оставаться под gitignore и не перезаписывать локальный `data/state.bin`.
 
 ### 3. On-disk layout
 
@@ -80,11 +81,14 @@
 
 ### 8. Интеграция в старт и тесты
 
-`main.ts`: `parseEnv` → `open` store → при ошибке store писать фиксированный текст в stderr и `exit(1)` → иначе `listen`. Фикстуры `ENCRYPTION_KEY` в существующих process-startup тестах становятся валидным 32-байтным base64; assert «значение ключа не в stdout/stderr» сохраняется.
+`main.ts`: `parseEnv` → `open` store → при ошибке store писать фиксированный текст в stderr и `exit(1)` → иначе `listen`. Фикстуры `ENCRYPTION_KEY` в существующих process-startup тестах становятся валидным 32-байтным base64; assert «значение ключа не в stdout/stderr» сохраняется. Тестовый `DATA_DIR` — подкаталог проектного `data/`, не корневой `data/state.bin` оператора.
 
 **Структура (ориентир):**
 
 ```text
+data/                 DATA_DIR работающего шлюза; в .gitignore как data/
+  state.bin
+  state.bin.tmp
 server/src/
   env.ts              encryptionKey: Buffer; validate base64/length
   store/
@@ -96,6 +100,9 @@ server/test/
   store*.test.ts      сценарии encrypted-store
 ```
 
+### 9. Имя каталога и gitignore
+
+Каталог данных в репозитории называется `data` (не другое имя). В корневом `.gitignore` уже есть строка `data/` — apply проверяет, что она присутствует, и не добавляет второй паттерн. Благодаря этому `state.bin` и `state.bin.tmp` никогда не коммитятся.
 ## Risks / Trade-offs
 
 - [Нет cross-process lock] → Mitigation: один процесс шлюза по продуктовой модели; зафиксировано в non-goals.
@@ -109,4 +116,4 @@ server/test/
 
 ## Open Questions
 
-Нет. Решения 1–8 приняты до propose.
+Нет. Решения 1–9 приняты (1–8 до propose; 9 — каталог `data` и существующий gitignore — при ревизии).
