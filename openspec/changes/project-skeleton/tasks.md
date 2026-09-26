@@ -18,7 +18,7 @@
 
 ## 4. Web shell
 
-- [ ] 4.1 Минимальный React + CSS modules shell в `web/src/app/` (английский текст, без экранов Configurations/Connectors), `index.html`, сборка Vite в dist. Компонентный/smoke-тест оболочки по `frontend-cover-tests` по мере необходимости. Проверка: `npm test -w web`, `npm run build -w web` проходят; dist содержит HTML/JS.
+- [x] 4.1 Минимальный React + CSS modules shell в `web/src/app/` (английский текст, без экранов Configurations/Connectors), `index.html`, сборка Vite в dist. Компонентный/smoke-тест оболочки по `frontend-cover-tests` по мере необходимости. Проверка: `npm test -w web`, `npm run build -w web` проходят; dist содержит HTML/JS.
 
 ## 5. Корневая проверка
 
