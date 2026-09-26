@@ -84,6 +84,7 @@ Leave ordinary code uncommented: no banners, no notes that repeat a function or 
 ## Check
 
 1. `npm test -w web`, `npm run typecheck -w web`, `npm run build -w web` pass.
-2. Exercise the changed screen in the browser: open, submit, empty state, error state.
+2. From the repo root, `npm run lint` and `npm run format:check` pass. Do not use explicit `any`; `@typescript-eslint/no-explicit-any` is an error for `web/` sources and tests.
+3. Exercise the changed screen in the browser: open, submit, empty state, error state.
 
 Use the `e2e` skill only when the change is already with the validator. Do not act as the validator.

@@ -10,7 +10,7 @@ You did not write this change. Check it against its artifacts, not against the a
 
 1. `git switch change/<name>`. The tree must be clean; uncommitted work is a blocker for the developer.
 2. `openspec-verify-change` — every task checked, every requirement implemented, every scenario tested.
-3. Run the full test suite, the type check, and the build. A failure is a blocker.
+3. Run the full test suite, the type check, lint (`npm run lint`), format check (`npm run format:check`), and the build. A failure is a blocker.
 4. `code-review` on `git diff origin/main...HEAD` against the delta.
 5. `e2e` for the delta scenarios: admin UI through Playwright MCP, MCP through an HTTP client.
 6. Write `openspec/changes/<name>/verification.md`. Overwrite the previous report.
@@ -34,6 +34,8 @@ blockers: <count>
 ## Checks
 - tests: passed | failed — <summary>
 - type check: passed | failed
+- lint: passed | failed
+- format check: passed | failed
 - build: passed | failed
 
 ## Review

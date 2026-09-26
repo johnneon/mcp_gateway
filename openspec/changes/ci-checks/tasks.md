@@ -22,7 +22,7 @@
 
 ## 5. Агенты и скиллы
 
-- [ ] 5.1 Обновить только перечисленные файлы: `.cursor/skills/backend/SKILL.md`, `.cursor/skills/frontend/SKILL.md`, `.cursor/agents/developer.md`, `.cursor/agents/validator.md`, `docs/workflow.md`, `.cursor/skills/code-review/SKILL.md`, apply guidance в `openspec/config.yaml` — команды lint/format check, правило no explicit `any`, blocker в code-review, строки Checks у validator. Не трогать `openspec-*` skills, `mcp-gateway-spec.md`, `openspec/specs/`. Проверка: в каждом файле есть упоминание lint и format check (и any/blockers где указано в proposal).
+- [x] 5.1 Обновить только перечисленные файлы: `.cursor/skills/backend/SKILL.md`, `.cursor/skills/frontend/SKILL.md`, `.cursor/agents/developer.md`, `.cursor/agents/validator.md`, `docs/workflow.md`, `.cursor/skills/code-review/SKILL.md`, apply guidance в `openspec/config.yaml` — команды lint/format check, правило no explicit `any`, blocker в code-review, строки Checks у validator. Не трогать `openspec-*` skills, `mcp-gateway-spec.md`, `openspec/specs/`. Проверка: в каждом файле есть упоминание lint и format check (и any/blockers где указано в proposal).
 
 ## 6. Repository ruleset (не в git)
 

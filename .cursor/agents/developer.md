@@ -33,7 +33,8 @@ Use when asked to implement an accepted change or `/opsx-apply`.
    - `server/` code follows `backend`, including its testing section;
    - `web/` code follows `frontend`, component tests follow `frontend-cover-tests`;
    - every delta scenario the task touches gets a test per `tests`;
-   - tests, type check, and build pass;
+   - tests, type check, lint, format check, and build pass;
+   - do not introduce explicit `any` (`@typescript-eslint/no-explicit-any` is an error);
    - check the task in `tasks.md` and commit the task.
 4. Do not edit `mcp-gateway-spec.md` or `openspec/specs/`. If a scenario is wrong, stop and report it.
 5. Finish with what was done, how to start the process, and how to run the tests. Do not declare the change done.
