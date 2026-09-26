@@ -1,5 +1,7 @@
 # ci-checks
 
+Re-check after the Node 20 actions warning fix (`8c357ab`).
+
 ## Result
 blockers: 0
 
@@ -9,21 +11,21 @@ blockers: 0
 - format:check различает сломанный и нормальный фрагмент: met
 
 ## Checks
-- tests: passed — 21 tests (server 19, web 2); CI contract tests cover workflow YAML, ESLint `any`, and Prettier check
+- tests: passed — 21 tests (server 19, web 2); workflow Vitest asserts Node 22 plus `typecheck`, `lint`, `format:check`, `test`, `build`
 - type check: passed
 - lint: passed
 - format check: passed
 - build: passed
 
 ## Review
-- note: format-check Vitest scenarios invoke the Prettier binary with `--check`/`--write` on a temp fragment under `server/`, not the root `npm run format:check` script; delta allows an equivalent Prettier check with the project config
-- note: explicit `any` appears only as a string fixture inside `server/test/ci/eslint-any.test.ts` to assert the rule fires; no production or permanent test source introduces typed `any`
-- note: repository ruleset `ci-checks` (id 24043785) is active on `refs/heads/main`, requires status check `ci / checks`, `bypass_actors` is empty (`current_user_can_bypass: never`) — confirmed via `gh api`, outside git
+- note: fix `8c357ab` only updates `.github/workflows/ci.yml` to `ubuntu-24.04`, `actions/checkout@v7`, `actions/setup-node@v7`; `node-version` remains `22`; action-version bump is not a blocker
+- note: no explicit `any` and no weakened ESLint rule in the fix diff
+- note: repository ruleset `ci-checks` (id 24043785) is `enforcement: active` on `refs/heads/main`, required context exactly `checks`, `bypass_actors` empty (`current_user_can_bypass: never`) — confirmed via `gh api`
 
 ## E2E
-- no admin UI or MCP tool scenarios in delta: skipped — change is workflow YAML, ESLint, and Prettier, covered by Vitest; nothing to walk in the browser or over `/mcp`
+- skipped — no admin UI or MCP scenarios in this change
 
 ## Leaks
-- diff `origin/main...HEAD`: clean
-- CI / lint / format tooling and agent skill updates: clean (no secrets, no `.env`, no encrypted store)
-- MCP / admin UI surfaces: not exercised (no product UI or MCP delta in this change)
+- fix diff `8c357ab` (`.github/workflows/ci.yml`): clean
+- working tree on `change/ci-checks`: clean
+- MCP / admin UI surfaces: not exercised (no product UI or MCP delta)
