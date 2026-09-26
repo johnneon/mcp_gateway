@@ -42,12 +42,13 @@ The subject after the prefix says why, not which files changed. English, imperat
 - `docs:` OpenSpec artifacts, verification reports, documentation
 - `chore:` tooling, dependencies, configuration
 
-The body names the change, and the task or the blocker:
+The body names the change, its issue from the `tracker` skill, and the task or the blocker:
 
 ```
 feat: store account secrets encrypted at rest
 
 Change: encrypted-store
+Issue: #7
 Task: 1.2
 ```
 
@@ -58,6 +59,7 @@ git commit -m @"
 <type>: <why>
 
 Change: <name>
+Issue: #<n>
 Task: <id>
 "@
 ```
@@ -78,6 +80,8 @@ Only after `verification.md` says `blockers: 0` and the change is archived.
 
 ```powershell
 gh pr create --base main --head change/<name> --title "<prefix>: <outcome>" --body @"
+Closes #<n>
+
 ## Outcome
 <one or two sentences>
 
@@ -92,9 +96,12 @@ blockers: 0 — see verification.md in the archived change.
 "@
 ```
 
-4. Report the pull request link to the person.
+4. Move the issue card to In review per `tracker`.
+5. Report the pull request link to the person.
 
-If `gh` is missing or not authenticated, push anyway and give the person the compare link `https://github.com/<owner>/<repo>/compare/main...change/<name>?expand=1`. Say that `gh` needs `gh auth login`.
+`Closes #<n>` is what closes the issue on merge; a pull request without it leaves the card in In review.
+
+If `gh` is not on `PATH`, use the full path from `tracker`. If it is not authenticated, push anyway and give the person the compare link `https://github.com/<owner>/<repo>/compare/main...change/<name>?expand=1`. Say that `gh` needs `gh auth login`.
 
 After the pull request exists, further fixes go to the same branch: commit, a new validator round, push. Do not open a second pull request.
 

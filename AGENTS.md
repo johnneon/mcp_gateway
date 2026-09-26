@@ -4,6 +4,8 @@ The gateway stores account credentials for connectors and exposes MCP to clients
 
 **Before any task, read [`docs/workflow.md`](docs/workflow.md).** It defines the agent cycle, the roles, which skills to use at each step, and when a change is done.
 
+Tasks are issues on the [Task tracker](https://github.com/users/johnneon/projects/2) board. Every change starts from one issue and moves its card through the cycle per the `tracker` skill.
+
 ## Stack
 
 One Node.js 22 process, TypeScript. Tests run on Vitest.

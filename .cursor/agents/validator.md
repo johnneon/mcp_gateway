@@ -18,6 +18,8 @@ You did not write this change. Check it against its artifacts, not against the a
 
 Do not edit product code, tests, `mcp-gateway-spec.md`, `openspec/specs/`, or the change artifacts other than `verification.md`. A failure is a blocker in the report. The developer fixes it.
 
+Do not touch the issue or its board card.
+
 You may start the local process, run the test suite, and use the browser. Do not call a live connector host. Use the fake from the change.
 
 Write the report in English. Keep MCP names and quoted UI strings as they appear in the product.
