@@ -1,0 +1,22 @@
+﻿[
+    {
+        "scenario":  "missing state.bin",
+        "passed":  true,
+        "detail":  "listen=True noFile=True leak=False"
+    },
+    {
+        "scenario":  "valid state.bin",
+        "passed":  true,
+        "detail":  "listen=True leak=False"
+    },
+    {
+        "scenario":  "wrong key",
+        "passed":  true,
+        "detail":  "exit=1 portsClosed=True msg=True leak=False stderr=state file cannot be decrypted"
+    },
+    {
+        "scenario":  "corrupt file",
+        "passed":  true,
+        "detail":  "exit=1 portsClosed=True msg=True leak=False stderr=state file is corrupt"
+    }
+]
