@@ -99,4 +99,4 @@ Write the tests in the same task as the code. Scenario coverage rules are in the
 - Pass the clock, random token source, and timeouts through deps so tests control them. No real sleeps.
 - Each test creates its own state. No order dependence and no shared data directory.
 
-Commands: `npm test -w server`, `npm run typecheck -w server`.
+Commands: `npm test -w server`, `npm run typecheck -w server`, and from the repo root `npm run lint` and `npm run format:check`. Do not use explicit `any`; `@typescript-eslint/no-explicit-any` is an error for `server/` sources and tests.

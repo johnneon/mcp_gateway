@@ -64,12 +64,14 @@ async function waitForPort(host: string, port: number, timeoutMs: number): Promi
     }
     await new Promise((r) => setTimeout(r, 50));
   }
-  throw new Error(`Timed out waiting for ${host}:${port}`);
+  throw new Error(`Timed out waiting for ${host}:${String(port)}`);
 }
 
 async function startGateway(
   envOverrides: Record<string, string | undefined>,
-): Promise<RunningProcess & { mcpHost: string; mcpPort: number; adminHost: string; adminPort: number }> {
+): Promise<
+  RunningProcess & { mcpHost: string; mcpPort: number; adminHost: string; adminPort: number }
+> {
   const mcpPort = await getFreePort();
   const adminPort = await getFreePort();
   const mcpHost = '127.0.0.1';
@@ -85,13 +87,14 @@ async function startGateway(
     ADMIN_PORT: String(adminPort),
     DATA_DIR,
     ENCRYPTION_KEY,
-    ...envOverrides,
   };
 
-  // Explicit undefined deletes the key for "not set" scenarios.
+  // Explicit undefined omits the key for "not set" scenarios.
   for (const [key, value] of Object.entries(envOverrides)) {
     if (value === undefined) {
-      delete env[key];
+      Reflect.deleteProperty(env, key);
+    } else {
+      env[key] = value;
     }
   }
 
@@ -130,7 +133,9 @@ async function stopAll(): Promise<void> {
         resolve();
         return;
       }
-      state.child.once('exit', () => resolve());
+      state.child.once('exit', () => {
+        resolve();
+      });
       setTimeout(() => {
         state.child.kill('SIGKILL');
         resolve();
@@ -192,7 +197,7 @@ describe('process-startup: ADMIN_HOST по умолчанию 127.0.0.1', () => 
 describe('process-startup: Admin раздаёт production-сборку web', () => {
   it('Корень admin отдаёт HTML оболочки', async () => {
     const proc = await startGateway({ ADMIN_HOST: '127.0.0.1' });
-    const response = await fetch(`http://${proc.adminHost}:${proc.adminPort}/`);
+    const response = await fetch(`http://${proc.adminHost}:${String(proc.adminPort)}/`);
     expect(response.ok).toBe(true);
     const body = await response.text();
     expect(body.toLowerCase()).toContain('<!doctype html');

@@ -19,13 +19,14 @@ Review `git diff origin/main...HEAD` on `change/<name>` against the accepted art
 - A test was weakened or removed to make it pass.
 - `mcp-gateway-spec.md` or `openspec/specs/` changed during apply.
 - A commit on the branch contains `.env`, a key, the data directory, or a real secret.
+- A new or changed file introduces explicit `any`, or the change breaks the repository ESLint / Prettier contract (`npm run lint` or `npm run format:check` would fail).
 
 ## Note
 
 - Architecture drift: logic in an Express route, a service that imports Express or reads `process.env`, a module-level singleton.
 - Frontend drift: a dumb component that fetches, Radix imported outside `shared/ui`, domain names in `shared/ui`, styles outside a CSS module, raw values instead of tokens.
 - Test drift: queries by test id where a role exists, asserting internal state, whole-tree snapshots, real sleeps.
-- Naming, file structure, comment wording.
+- Naming, file structure, ordinary style notes that do not break the ESLint / Prettier contract.
 
 A note does not block archive. Raise a note to a blocker only when it breaks a law in `AGENTS.md`.
 

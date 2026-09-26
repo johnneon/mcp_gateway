@@ -27,6 +27,7 @@ operations:
       - Implement only the accepted tasks. Commit each task after its tests pass.
       - Do not edit mcp-gateway-spec.md or files under openspec/specs. Archive merges specs.
       - Follow the backend, frontend, frontend-cover-tests, and tests skills. Write tests in the same task as the code.
+      - After each task, tests, typecheck, lint, format check, and build pass. Do not introduce explicit any.
   archive:
     guidance:
       - Archive only after openspec/changes/<change>/verification.md is committed and says blockers: 0.

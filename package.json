@@ -12,11 +12,20 @@
   "scripts": {
     "openspec": "openspec",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
+    "lint": "eslint .",
+    "format": "prettier --write --no-error-on-unmatched-pattern \"server/**/*.{ts,tsx,css,json}\" \"web/**/*.{ts,tsx,css,json}\" \".github/workflows/*.{yml,yaml}\" \"package.json\" \".prettierrc.json\" \"eslint.config.js\"",
+    "format:check": "prettier --check --no-error-on-unmatched-pattern \"server/**/*.{ts,tsx,css,json}\" \"web/**/*.{ts,tsx,css,json}\" \".github/workflows/*.{yml,yaml}\" \"package.json\" \".prettierrc.json\" \"eslint.config.js\"",
     "test": "npm run test -w server && npm run test -w web",
     "build": "npm run build -w web && npm run build -w server",
     "start": "npm run start -w server"
   },
   "devDependencies": {
-    "@fission-ai/openspec": "^1.13.1"
+    "@eslint/js": "^9.39.5",
+    "@fission-ai/openspec": "^1.13.1",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "prettier": "^3.9.9",
+    "typescript-eslint": "^8.70.1"
   }
 }
