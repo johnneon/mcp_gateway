@@ -14,8 +14,10 @@ export type EnvConfig = {
   adminHost: string;
   adminPort: number;
   dataDir: string;
-  encryptionKey: string;
+  encryptionKey: Buffer;
 };
+
+const STANDARD_BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
 function readRequired(env: Record<string, string | undefined>, name: string): string {
   const value = env[name];
@@ -33,6 +35,21 @@ function parsePort(name: string, raw: string): number {
   return port;
 }
 
+function parseEncryptionKey(raw: string): Buffer {
+  if (!STANDARD_BASE64.test(raw) || raw.length % 4 !== 0) {
+    throw new MissingEnvError('ENCRYPTION_KEY');
+  }
+  const key = Buffer.from(raw, 'base64');
+  if (key.length !== 32) {
+    throw new MissingEnvError('ENCRYPTION_KEY');
+  }
+  // Buffer.from is permissive; reject strings that round-trip differently.
+  if (key.toString('base64') !== raw) {
+    throw new MissingEnvError('ENCRYPTION_KEY');
+  }
+  return key;
+}
+
 /**
  * Parse gateway environment. Callers pass a plain object; only main.ts reads process.env.
  */
@@ -41,7 +58,7 @@ export function parseEnv(env: Record<string, string | undefined>): EnvConfig {
   const mcpPort = parsePort('MCP_PORT', readRequired(env, 'MCP_PORT'));
   const adminPort = parsePort('ADMIN_PORT', readRequired(env, 'ADMIN_PORT'));
   const dataDir = readRequired(env, 'DATA_DIR');
-  const encryptionKey = readRequired(env, 'ENCRYPTION_KEY');
+  const encryptionKey = parseEncryptionKey(readRequired(env, 'ENCRYPTION_KEY'));
 
   const adminHostRaw = env.ADMIN_HOST;
   const adminHost = adminHostRaw === undefined || adminHostRaw === '' ? '127.0.0.1' : adminHostRaw;
