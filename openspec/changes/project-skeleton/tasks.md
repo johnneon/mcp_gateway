@@ -8,7 +8,7 @@
 
 ## 2. Окружение
 
-- [ ] 2.1 Реализовать `server/src/env.ts` (`parseEnv`): обязательные `MCP_HOST`, `MCP_PORT`, `ADMIN_PORT`, `DATA_DIR`, `ENCRYPTION_KEY`; `ADMIN_HOST` по умолчанию `127.0.0.1`; пустая строка = отсутствие; ошибка содержит только имя переменной. Автотесты сценариев delta «Нет MCP_HOST|MCP_PORT|ADMIN_PORT|DATA_DIR|ENCRYPTION_KEY» и default `ADMIN_HOST` (юнит на подставном env-объекте, без печати значений). Проверка: `npm test -w server` покрывает эти сценарии и проходит.
+- [x] 2.1 Реализовать `server/src/env.ts` (`parseEnv`): обязательные `MCP_HOST`, `MCP_PORT`, `ADMIN_PORT`, `DATA_DIR`, `ENCRYPTION_KEY`; `ADMIN_HOST` по умолчанию `127.0.0.1`; пустая строка = отсутствие; ошибка содержит только имя переменной. Автотесты сценариев delta «Нет MCP_HOST|MCP_PORT|ADMIN_PORT|DATA_DIR|ENCRYPTION_KEY» и default `ADMIN_HOST` (юнит на подставном env-объекте, без печати значений). Проверка: `npm test -w server` покрывает эти сценарии и проходит.
 
 ## 3. HTTP-приложения и точка входа
 
