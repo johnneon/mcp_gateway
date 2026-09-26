@@ -12,7 +12,7 @@
 
 ## 3. HTTP-приложения и точка входа
 
-- [ ] 3.1 Реализовать `server/src/http/createMcpApp.ts` и `createAdminApp.ts` (Express apps без `listen`; admin раздаёт static production-сборку `web`), `server/src/main.ts` (единственное чтение `process.env` → parseEnv → apps → два listen; при MissingEnv — print имени, `process.exit(1)`). Проверка: модули собираются, `npm run typecheck -w server` проходит.
+- [x] 3.1 Реализовать `server/src/http/createMcpApp.ts` и `createAdminApp.ts` (Express apps без `listen`; admin раздаёт static production-сборку `web`), `server/src/main.ts` (единственное чтение `process.env` → parseEnv → apps → два listen; при MissingEnv — print имени, `process.exit(1)`). Проверка: модули собираются, `npm run typecheck -w server` проходит.
 
 - [ ] 3.2 Автотесты сценариев «Оба слушателя принимают соединение», «ADMIN_HOST не задана» / «задана явно» и «Корень admin отдаёт HTML оболочки»: spawn процесса с контролируемым env, TCP connect, HTTP GET `/` на admin после `npm run build -w web`. Проверка: тесты проходят; stdout/stderr успешного старта не содержат значений `ENCRYPTION_KEY` и `DATA_DIR`.
 
