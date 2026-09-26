@@ -66,6 +66,12 @@ Import a component through its folder: `import { AccountForm } from '@/features/
 - Each feature keeps its calls in `features/<feature>/api.ts`. Smart components call those functions; dumb components never do.
 - Every async view has explicit loading, empty, and error states.
 
+## Comments
+
+Write a comment only where the logic is genuinely non-trivial or hard to see from the names and structure. The comment states the constraint or the reason, not a retelling of the next lines.
+
+Leave ordinary code uncommented: no banners, no notes that repeat a function or variable name, no comments on straightforward control flow.
+
 ## Interface rules
 
 - UI copy is English.
