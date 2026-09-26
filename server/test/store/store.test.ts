@@ -146,8 +146,8 @@ describe('encrypted-store: Путь и формат файла состояни�
   it('Файл лежит по согласованному пути', async () => {
     const dataDir = await makeDataDir();
     const filePath = path.join(dataDir, 'state.bin');
-    await writeFile(filePath, encryptDocument(KEY_A, { ok: true }));
     const store = await open(dataDir, KEY_A);
+    await store.replace({ ok: true });
     expect(store.read()).toEqual({ ok: true });
     const onDisk = await readFile(filePath);
     expect(onDisk[0]).toBe(1);
@@ -155,11 +155,49 @@ describe('encrypted-store: Путь и формат файла состояни�
   });
 });
 
+describe('encrypted-store: Replace сохраняет документ для повторного открытия', () => {
+  it('Запись и повторное открытие тем же ключом', async () => {
+    const dataDir = await makeDataDir();
+    const doc = { alpha: 1, nested: { canary: CANARY } };
+    const store = await open(dataDir, KEY_A);
+    await store.replace(doc);
+    const again = await open(dataDir, KEY_A);
+    expect(again.read()).toEqual(doc);
+  });
+});
+
+describe('encrypted-store: Ciphertext не содержит открытый текст документа', () => {
+  it('Canary отсутствует в байтах файла', async () => {
+    const dataDir = await makeDataDir();
+    const store = await open(dataDir, KEY_A);
+    await store.replace({ note: CANARY });
+    const bytes = await readFile(path.join(dataDir, 'state.bin'));
+    expect(bytes.includes(Buffer.from(CANARY, 'utf8'))).toBe(false);
+  });
+});
+
+describe('encrypted-store: Перекрывающиеся replace сериализованы', () => {
+  it('Два перекрывающихся replace не портят файл', async () => {
+    const dataDir = await makeDataDir();
+    const store = await open(dataDir, KEY_A);
+    const first = store.replace({ n: 1, mark: 'first' });
+    const second = store.replace({ n: 2, mark: 'second' });
+    const results = await Promise.allSettled([first, second]);
+    expect(results.every((r) => r.status === 'fulfilled')).toBe(true);
+    const onDisk = await open(dataDir, KEY_A);
+    const doc = onDisk.read();
+    expect(doc).toEqual(store.read());
+    expect(doc).toEqual({ n: 2, mark: 'second' });
+  });
+});
+
 describe('encrypted-store: Программный API хранилища', () => {
-  it('Open и read доступны без доменной модели', async () => {
+  it('Open, read и replace доступны без доменной модели', async () => {
     const dataDir = await makeDataDir();
     const store = await open(dataDir, KEY_A);
     expect(store.read()).toEqual({});
+    await store.replace({ only: 'store-api' });
+    expect(store.read()).toEqual({ only: 'store-api' });
   });
 });
 
@@ -171,5 +209,17 @@ describe('encrypted-store: Каталог состояния в проекте �
     );
     const relative = path.relative(repoRoot, dataDir);
     expect(relative.startsWith('data')).toBe(true);
+  });
+
+  it('Путь файла в проектном data', async () => {
+    const projectData = path.join(repoRoot, 'data');
+    await mkdir(projectData, { recursive: true });
+    const isolated = await mkdtemp(path.join(projectData, 'project-path-'));
+    tempDirs.push(isolated);
+    const store = await open(isolated, KEY_A);
+    await store.replace({ pathCheck: true });
+    const expected = path.join(isolated, 'state.bin');
+    await access(expected);
+    expect(path.relative(projectData, expected).includes('..')).toBe(false);
   });
 });
