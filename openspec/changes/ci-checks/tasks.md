@@ -16,7 +16,7 @@
 
 ## 4. Автотесты delta
 
-- [ ] 4.1 Автотесты сценариев ESLint: explicit `any` в temp-фрагментах под путями как у `server/` и `web/` даёт ошибку `@typescript-eslint/no-explicit-any` (ESLint API или spawn). Имена тестов включают id требования и имя сценария. Проверка: тесты проходят в `npm test` (workspace по design).
+- [x] 4.1 Автотесты сценариев ESLint: explicit `any` в temp-фрагментах под путями как у `server/` и `web/` даёт ошибку `@typescript-eslint/no-explicit-any` (ESLint API или spawn). Имена тестов включают id требования и имя сценария. Проверка: тесты проходят в `npm test` (workspace по design).
 
 - [ ] 4.2 Автотесты сценариев `format:check`: ненулевой exit на сломанном фрагменте, нулевой — на отформатированном. Проверка: тесты проходят; полный `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` с корня — код 0.
 
