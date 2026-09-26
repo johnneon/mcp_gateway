@@ -1,0 +1,7 @@
+package-lock.json
+dist
+node_modules
+coverage
+docs/**
+openspec/**
+mcp-gateway-spec.md

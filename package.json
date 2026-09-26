@@ -12,11 +12,14 @@
   "scripts": {
     "openspec": "openspec",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
+    "format": "prettier --write --no-error-on-unmatched-pattern \"server/**/*.{ts,tsx,css,json}\" \"web/**/*.{ts,tsx,css,json}\" \".github/workflows/*.{yml,yaml}\" \"package.json\" \".prettierrc.json\"",
+    "format:check": "prettier --check --no-error-on-unmatched-pattern \"server/**/*.{ts,tsx,css,json}\" \"web/**/*.{ts,tsx,css,json}\" \".github/workflows/*.{yml,yaml}\" \"package.json\" \".prettierrc.json\"",
     "test": "npm run test -w server && npm run test -w web",
     "build": "npm run build -w web && npm run build -w server",
     "start": "npm run start -w server"
   },
   "devDependencies": {
-    "@fission-ai/openspec": "^1.13.1"
+    "@fission-ai/openspec": "^1.13.1",
+    "prettier": "^3.9.9"
   }
 }

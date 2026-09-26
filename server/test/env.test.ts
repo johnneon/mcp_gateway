@@ -42,51 +42,53 @@ function expectMissingVariable(
 
 describe('process-startup: Обязательные переменные окружения при старте', () => {
   it('Нет MCP_HOST — MissingEnvError with name only', () => {
-    expectMissingVariable(
-      fullEnv({ MCP_HOST: undefined }),
-      'MCP_HOST',
-      [SECRET_KEY, DATA_DIR_VALUE, MCP_PORT_VALUE, ADMIN_PORT_VALUE],
-    );
+    expectMissingVariable(fullEnv({ MCP_HOST: undefined }), 'MCP_HOST', [
+      SECRET_KEY,
+      DATA_DIR_VALUE,
+      MCP_PORT_VALUE,
+      ADMIN_PORT_VALUE,
+    ]);
   });
 
   it('Нет MCP_HOST — empty string treated as missing', () => {
-    expectMissingVariable(
-      fullEnv({ MCP_HOST: '' }),
-      'MCP_HOST',
-      [SECRET_KEY, DATA_DIR_VALUE],
-    );
+    expectMissingVariable(fullEnv({ MCP_HOST: '' }), 'MCP_HOST', [SECRET_KEY, DATA_DIR_VALUE]);
   });
 
   it('Нет MCP_PORT — MissingEnvError with name only', () => {
-    expectMissingVariable(
-      fullEnv({ MCP_PORT: undefined }),
-      'MCP_PORT',
-      [SECRET_KEY, DATA_DIR_VALUE, MCP_HOST_VALUE, ADMIN_PORT_VALUE],
-    );
+    expectMissingVariable(fullEnv({ MCP_PORT: undefined }), 'MCP_PORT', [
+      SECRET_KEY,
+      DATA_DIR_VALUE,
+      MCP_HOST_VALUE,
+      ADMIN_PORT_VALUE,
+    ]);
   });
 
   it('Нет ADMIN_PORT — MissingEnvError with name only', () => {
-    expectMissingVariable(
-      fullEnv({ ADMIN_PORT: undefined }),
-      'ADMIN_PORT',
-      [SECRET_KEY, DATA_DIR_VALUE, MCP_HOST_VALUE, MCP_PORT_VALUE],
-    );
+    expectMissingVariable(fullEnv({ ADMIN_PORT: undefined }), 'ADMIN_PORT', [
+      SECRET_KEY,
+      DATA_DIR_VALUE,
+      MCP_HOST_VALUE,
+      MCP_PORT_VALUE,
+    ]);
   });
 
   it('Нет DATA_DIR — MissingEnvError with name only', () => {
-    expectMissingVariable(
-      fullEnv({ DATA_DIR: undefined }),
-      'DATA_DIR',
-      [SECRET_KEY, MCP_HOST_VALUE, MCP_PORT_VALUE, ADMIN_PORT_VALUE],
-    );
+    expectMissingVariable(fullEnv({ DATA_DIR: undefined }), 'DATA_DIR', [
+      SECRET_KEY,
+      MCP_HOST_VALUE,
+      MCP_PORT_VALUE,
+      ADMIN_PORT_VALUE,
+    ]);
   });
 
   it('Нет ENCRYPTION_KEY — MissingEnvError with name only', () => {
-    expectMissingVariable(
-      fullEnv({ ENCRYPTION_KEY: undefined }),
-      'ENCRYPTION_KEY',
-      [SECRET_KEY, DATA_DIR_VALUE, MCP_HOST_VALUE, MCP_PORT_VALUE, ADMIN_PORT_VALUE],
-    );
+    expectMissingVariable(fullEnv({ ENCRYPTION_KEY: undefined }), 'ENCRYPTION_KEY', [
+      SECRET_KEY,
+      DATA_DIR_VALUE,
+      MCP_HOST_VALUE,
+      MCP_PORT_VALUE,
+      ADMIN_PORT_VALUE,
+    ]);
   });
 });
 

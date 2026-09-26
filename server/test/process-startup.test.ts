@@ -69,7 +69,9 @@ async function waitForPort(host: string, port: number, timeoutMs: number): Promi
 
 async function startGateway(
   envOverrides: Record<string, string | undefined>,
-): Promise<RunningProcess & { mcpHost: string; mcpPort: number; adminHost: string; adminPort: number }> {
+): Promise<
+  RunningProcess & { mcpHost: string; mcpPort: number; adminHost: string; adminPort: number }
+> {
   const mcpPort = await getFreePort();
   const adminPort = await getFreePort();
   const mcpHost = '127.0.0.1';

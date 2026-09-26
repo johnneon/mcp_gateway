@@ -44,8 +44,7 @@ export function parseEnv(env: Record<string, string | undefined>): EnvConfig {
   const encryptionKey = readRequired(env, 'ENCRYPTION_KEY');
 
   const adminHostRaw = env.ADMIN_HOST;
-  const adminHost =
-    adminHostRaw === undefined || adminHostRaw === '' ? '127.0.0.1' : adminHostRaw;
+  const adminHost = adminHostRaw === undefined || adminHostRaw === '' ? '127.0.0.1' : adminHostRaw;
 
   return {
     mcpHost,

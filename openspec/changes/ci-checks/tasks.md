@@ -2,7 +2,7 @@
 
 ## 1. Prettier и корневые скрипты format
 
-- [ ] 1.1 Добавить Prettier в корневые devDependencies, конфиг и `.prettierignore` (исключить `package-lock.json`, `dist`, `node_modules`, `docs/**`, `openspec/**`, `mcp-gateway-spec.md`; форматировать TS/TSX/CSS/JSON под `server/` и `web/`, workflow YAML и корневые конфиги по design). Корневые скрипты `format` и `format:check`. Проверка: `npm run format:check` завершается кодом 0 после первичного `format` по включённым путям (без переписывания Markdown docs/openspec).
+- [x] 1.1 Добавить Prettier в корневые devDependencies, конфиг и `.prettierignore` (исключить `package-lock.json`, `dist`, `node_modules`, `docs/**`, `openspec/**`, `mcp-gateway-spec.md`; форматировать TS/TSX/CSS/JSON под `server/` и `web/`, workflow YAML и корневые конфиги по design). Корневые скрипты `format` и `format:check`. Проверка: `npm run format:check` завершается кодом 0 после первичного `format` по включённым путям (без переписывания Markdown docs/openspec).
 
 ## 2. ESLint
 
