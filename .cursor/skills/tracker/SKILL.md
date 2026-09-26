@@ -91,6 +91,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/skills/tracker/scrip
 
 The script resolves the project, the Status field, and the card by name, and fails with a message if the issue is not on the board. A failure to move the card is reported to the person; it does not undo the git step.
 
+At finish, the board workflow `Pull request linked to issue` also sets a status a few seconds after the pull request opens. Move the card after `gh pr create` returns, wait about 30 seconds, and read the status again with `gh issue view <n> --json projectItems`. If it is not In review, move it once more and tell the person the workflow must target In review, as `docs/workflow.md` lists.
+
 ## Link the change to the issue
 
 - `openspec/changes/<name>/proposal.md` has the line `Issue: #<n>` right under `# Proposal`. Later modes read the number from there, also after archive.
