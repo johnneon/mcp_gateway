@@ -6,7 +6,7 @@
 
 ## 2. Admin: /mcp до статики
 
-- [ ] 2.1 В `createAdminApp` до `express.static` зарегистрировать `app.all('/mcp')` → 404, `text/plain; charset=utf-8`, тело `Not Found`. Автотесты: GET и POST `/mcp` → 404 даже при файле-коллизии в тестовом `webRoot`; GET `/` по-прежнему отдаёт HTML оболочки. Проверка: тесты admin-маршрутизации проходят.
+- [x] 2.1 В `createAdminApp` до `express.static` зарегистрировать `app.all('/mcp')` → 404, `text/plain; charset=utf-8`, тело `Not Found`. Автотесты: GET и POST `/mcp` → 404 даже при файле-коллизии в тестовом `webRoot`; GET `/` по-прежнему отдаёт HTML оболочки. Проверка: тесты admin-маршрутизации проходят.
 
 ## 3. Полная проверка пакета
 

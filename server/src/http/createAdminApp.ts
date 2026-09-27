@@ -18,6 +18,12 @@ function defaultWebRoot(): string {
 export function createAdminApp(options: CreateAdminAppOptions = {}): Express {
   const webRoot = options.webRoot ?? defaultWebRoot();
   const app = express();
+
+  // Before static: a file named mcp in webRoot must not be served as /mcp.
+  app.all('/mcp', (_req, res) => {
+    res.status(404).set('Content-Type', 'text/plain; charset=utf-8').send('Not Found');
+  });
+
   app.use(express.static(webRoot));
   return app;
 }

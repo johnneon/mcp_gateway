@@ -1,5 +1,9 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { createAdminApp } from '../../src/http/createAdminApp.js';
 import { createMcpApp } from '../../src/http/createMcpApp.js';
 
 /** Test canaries that must never appear in MCP responses. */
@@ -112,5 +116,65 @@ describe('mcp-port-routing: Чужой путь на порту MCP — 404', ()
 
     expect(response.status).toBe(404);
     expect(response.text).toBe('Not Found');
+  });
+});
+
+const adminTempDirs: string[] = [];
+
+afterEach(async () => {
+  while (adminTempDirs.length > 0) {
+    const dir = adminTempDirs.pop();
+    if (dir) {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+});
+
+async function makeAdminWebRoot(options: { mcpFileContent?: string }): Promise<string> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'mcp-port-routing-admin-'));
+  adminTempDirs.push(dir);
+  await writeFile(
+    path.join(dir, 'index.html'),
+    '<!doctype html><html><head><title>MCP Gateway</title></head><body>admin shell</body></html>\n',
+    'utf8',
+  );
+  if (options.mcpFileContent !== undefined) {
+    await writeFile(path.join(dir, 'mcp'), options.mcpFileContent, 'utf8');
+  }
+  return dir;
+}
+
+describe('mcp-port-routing: Порт admin не обслуживает /mcp', () => {
+  it('GET /mcp на admin — 404 до статики', async () => {
+    const collisionContent = 'STATIC-MCP-COLLISION-CANARY-UNIQUE';
+    const webRoot = await makeAdminWebRoot({ mcpFileContent: collisionContent });
+    const app = createAdminApp({ webRoot });
+    const response = await request(app).get('/mcp');
+
+    expect(response.status).toBe(404);
+    expect(response.headers['content-type']).toMatch(/text\/plain/);
+    expect(response.text).toBe('Not Found');
+    expect(response.text).not.toBe(collisionContent);
+    expect(response.text).not.toContain(collisionContent);
+  });
+
+  it('POST /mcp на admin — 404', async () => {
+    const webRoot = await makeAdminWebRoot({});
+    const app = createAdminApp({ webRoot });
+    const response = await request(app).post('/mcp');
+
+    expect(response.status).toBe(404);
+    expect(response.text).toBe('Not Found');
+  });
+
+  it('GET / на admin по-прежнему HTML', async () => {
+    const webRoot = await makeAdminWebRoot({});
+    const app = createAdminApp({ webRoot });
+    const response = await request(app).get('/');
+
+    expect(response.status).toBeGreaterThanOrEqual(200);
+    expect(response.status).toBeLessThan(400);
+    expect(response.text.toLowerCase()).toContain('<!doctype html');
+    expect(response.text).toContain('MCP Gateway');
   });
 });
