@@ -10,7 +10,7 @@
 
 ## 3. Stateless Streamable HTTP and empty tools/list
 
-- [ ] 3.1 After successful auth, handle `POST /mcp` with `@modelcontextprotocol/sdk` Streamable HTTP: one new transport per request, `sessionIdGenerator` undefined, `enableJsonResponse` true; `McpServer` name `mcp-gateway`, version `0.0.0`, no tools registered. Happy-path test: listen on `127.0.0.1` ephemeral port; `Client` + `StreamableHTTPClientTransport` with an enabled configuration bearer; initialize succeeds; `listTools()` is `[]`. Check: the happy-path test passes; no session id required across requests for this contract.
+- [x] 3.1 After successful auth, handle `POST /mcp` with `@modelcontextprotocol/sdk` Streamable HTTP: one new transport per request, `sessionIdGenerator` undefined, `enableJsonResponse` true; `McpServer` name `mcp-gateway`, version `0.0.0`, no tools registered. Happy-path test: listen on `127.0.0.1` ephemeral port; `Client` + `StreamableHTTPClientTransport` with an enabled configuration bearer; initialize succeeds; `listTools()` is `[]`. Check: the happy-path test passes; no session id required across requests for this contract.
 
 ## 4. Full package check
 

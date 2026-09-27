@@ -1,9 +1,49 @@
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { createMcpApp } from '../../src/http/createMcpApp.js';
 import type { JsonObject } from '../../src/store/codec.js';
 import type { EncryptedStore } from '../../src/store/store.js';
 import { hashToken } from '../../src/token/token.js';
+
+const openServers: http.Server[] = [];
+
+afterEach(async () => {
+  while (openServers.length > 0) {
+    const server = openServers.pop();
+    if (!server) {
+      continue;
+    }
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+});
+
+async function listenMcpApp(
+  store: EncryptedStore,
+): Promise<{ baseUrl: string; server: http.Server }> {
+  const app = createMcpApp({ store });
+  const server = http.createServer(app);
+  openServers.push(server);
+  await new Promise<void>((resolve, reject) => {
+    server.listen(0, '127.0.0.1', () => {
+      resolve();
+    });
+    server.once('error', reject);
+  });
+  const address = server.address() as AddressInfo;
+  return { baseUrl: `http://127.0.0.1:${String(address.port)}`, server };
+}
 
 const ENABLED_NAME = 'Enabled Ops Config UNIQUE';
 const DISABLED_NAME = 'Disabled Ops Config UNIQUE';
@@ -150,5 +190,67 @@ describe('mcp-endpoint: Identical Unauthorized refusal for failed auth', () => {
       expect(response.text).not.toContain(DISABLED_NAME);
     }
     expect(new Set(responses.map((r) => r.text))).toEqual(new Set(['Unauthorized']));
+  });
+});
+
+describe('mcp-endpoint: Stateless Streamable HTTP with empty tools/list', () => {
+  it('Initialize and empty tools/list with enabled bearer', async () => {
+    const store = storeWithConfigs([
+      { id: 'cfg-enabled', name: ENABLED_NAME, token: ENABLED_TOKEN, enabled: true },
+    ]);
+    const { baseUrl } = await listenMcpApp(store);
+    const transport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`), {
+      requestInit: {
+        headers: {
+          Authorization: `Bearer ${ENABLED_TOKEN}`,
+        },
+      },
+    });
+    const client = new Client({ name: 'mcp-endpoint-test', version: '0.0.0' });
+    await client.connect(transport);
+    const listed = await client.listTools();
+    expect(listed.tools).toEqual([]);
+    await client.close();
+  });
+
+  it('No session id on successful POST', async () => {
+    const store = storeWithConfigs([
+      { id: 'cfg-enabled', name: ENABLED_NAME, token: ENABLED_TOKEN, enabled: true },
+    ]);
+    const app = createMcpApp({ store });
+    const response = await request(app)
+      .post('/mcp')
+      .set('Authorization', `Bearer ${ENABLED_TOKEN}`)
+      .set('Accept', 'application/json, text/event-stream')
+      .send(INITIALIZE_BODY);
+
+    expect(response.status).not.toBe(401);
+    expect(response.headers['mcp-session-id']).toBeUndefined();
+    expect(response.body).toMatchObject({
+      jsonrpc: '2.0',
+      id: 1,
+      result: expect.objectContaining({
+        serverInfo: { name: 'mcp-gateway', version: '0.0.0' },
+      }) as unknown,
+    });
+
+    const followUp = await request(app)
+      .post('/mcp')
+      .set('Authorization', `Bearer ${ENABLED_TOKEN}`)
+      .set('Accept', 'application/json, text/event-stream')
+      .send({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/list',
+        params: {},
+      });
+
+    expect(followUp.status).not.toBe(401);
+    expect(followUp.headers['mcp-session-id']).toBeUndefined();
+    expect(followUp.body).toMatchObject({
+      jsonrpc: '2.0',
+      id: 2,
+      result: { tools: [] },
+    });
   });
 });
