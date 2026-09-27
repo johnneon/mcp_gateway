@@ -14,4 +14,4 @@
 
 ## 4. Full package check
 
-- [ ] 4.1 From the root: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` exit 0. Test names cover every scenario of the `mcp-endpoint`, modified `mcp-port-routing`, and removed `configurations-api` freeze deltas. Check: every command exits 0.
+- [x] 4.1 From the root: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` exit 0. Test names cover every scenario of the `mcp-endpoint`, modified `mcp-port-routing`, and removed `configurations-api` freeze deltas. Check: every command exits 0.
