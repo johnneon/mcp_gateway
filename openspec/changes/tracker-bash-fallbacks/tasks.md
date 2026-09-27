@@ -2,7 +2,7 @@
 
 ## 1. Bash board scripts
 
-- [ ] 1.1 Add `.cursor/skills/tracker/scripts/set-status.sh` beside `set-status.ps1`: issue number and Status (`Backlog`, `Ready`, `In progress`, `In review`, `Done`); resolve project `2`, owner `johnneon`, repo `johnneon/mcp_gateway`, Status field, and card; fail if Status is not an option or the issue is not on the board; print `#<n> -> <Status>`; bash 3.2; JSON via `jq` / `gh --jq`. Check: script exists; file-read automated test for scenario "Script documents required Status arguments" passes.
+- [x] 1.1 Add `.cursor/skills/tracker/scripts/set-status.sh` beside `set-status.ps1`: issue number and Status (`Backlog`, `Ready`, `In progress`, `In review`, `Done`); resolve project `2`, owner `johnneon`, repo `johnneon/mcp_gateway`, Status field, and card; fail if Status is not an option or the issue is not on the board; print `#<n> -> <Status>`; bash 3.2; JSON via `jq` / `gh --jq`. Check: script exists; file-read automated test for scenario "Script documents required Status arguments" passes.
 
 - [ ] 1.2 Add `.cursor/skills/tracker/scripts/set-iteration.sh` beside `set-iteration.ps1`: issue number; GraphQL field `Iteration`; pick covering iteration by calendar days (start ≤ today < start+duration AddDays); latest start on ties; fail with a message if none covers today; print `#<n> -> <title>`; no unix-epoch day math; bash 3.2. Check: script exists; file-read automated test for scenario "Script documents calendar-day iteration selection" passes.
 
