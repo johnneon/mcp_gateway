@@ -10,4 +10,4 @@
 
 ## 3. Полная проверка пакета
 
-- [ ] 3.1 С корня: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` — код 0. Имена тестов покрывают все сценарии delta `mcp-port-routing`. Проверка: все команды завершаются нулевым кодом.
+- [x] 3.1 С корня: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` — код 0. Имена тестов покрывают все сценарии delta `mcp-port-routing`. Проверка: все команды завершаются нулевым кодом.
