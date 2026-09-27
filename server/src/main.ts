@@ -21,8 +21,9 @@ async function start(): Promise<void> {
     throw error;
   }
 
+  let store;
   try {
-    await open(config.dataDir, config.encryptionKey);
+    store = await open(config.dataDir, config.encryptionKey);
   } catch (error) {
     if (error instanceof StoreCorruptError || error instanceof StoreDecryptError) {
       exitWithMessage(error.message);
@@ -31,7 +32,7 @@ async function start(): Promise<void> {
   }
 
   const mcpApp = createMcpApp();
-  const adminApp = createAdminApp();
+  const adminApp = createAdminApp({ store });
 
   mcpApp.listen(config.mcpPort, config.mcpHost);
   adminApp.listen(config.adminPort, config.adminHost);
