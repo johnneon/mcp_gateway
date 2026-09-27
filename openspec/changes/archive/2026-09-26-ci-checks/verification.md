@@ -6,9 +6,9 @@ Re-check after the Node 20 actions warning fix (`8c357ab`).
 blockers: 0
 
 ## Spec
-- Workflow на pull_request в main: met
-- ESLint отвергает explicit any в server и web: met
-- format:check различает сломанный и нормальный фрагмент: met
+- Workflow on pull_request into main: met
+- ESLint rejects explicit any in server and web: met
+- format:check distinguishes a broken snippet from a formatted one: met
 
 ## Checks
 - tests: passed — 21 tests (server 19, web 2); workflow Vitest asserts Node 22 plus `typecheck`, `lint`, `format:check`, `test`, `build`

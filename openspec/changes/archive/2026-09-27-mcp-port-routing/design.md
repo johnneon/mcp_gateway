@@ -2,90 +2,90 @@
 
 ## Context
 
-См. `proposal.md` — Why. Каркас `project-skeleton` уже разделяет `createMcpApp` и `createAdminApp` без `listen`; `encrypted-store` открывает store до `listen`. Сейчас `createMcpApp` возвращает пустой Express; `createAdminApp` сразу вешает `express.static` на `web/dist`. Vision: `mcp-gateway-spec.md` (§ HTTP). Текущий контракт старта: `openspec/specs/process-startup/spec.md` (два слушателя и HTML на `/`) — не переписывается. Этап roadmap 4; Streamable HTTP — этап 6 (`mcp-endpoint`).
+See `proposal.md` — Why. The `project-skeleton` frame already splits `createMcpApp` and `createAdminApp` without `listen`; `encrypted-store` opens the store before `listen`. Right now `createMcpApp` returns an empty Express app; `createAdminApp` mounts `express.static` on `web/dist` immediately. Vision: `mcp-gateway-spec.md` (HTTP section). The current startup contract is `openspec/specs/process-startup/spec.md` (two listeners and HTML at `/`) and is not rewritten. This is roadmap stage 4; Streamable HTTP is stage 6 (`mcp-endpoint`).
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Зафиксировать маршруты MCP: `GET /health`, stub `/mcp` → 501, остальное → 404.
-- Защитить admin от обслуживания `/mcp` статикой.
-- Автотесты HTTP к фабрикам без `listen` и без живого провайдера.
+- Fix the MCP routes: `GET /health`, a `/mcp` stub → 501, everything else → 404.
+- Keep admin from serving `/mcp` as a static file.
+- HTTP automated tests against the factories, without `listen` and without a live provider.
 
 **Non-Goals:**
 
-- Streamable HTTP, bearer, `/api`, экраны, конфигурации, коннекторы, store.
-- Правки `mcp-gateway-spec.md` и `openspec/specs/` до archive.
-- Изменение контракта старта (`process-startup`).
+- Streamable HTTP, bearer, `/api`, screens, configurations, connectors, and the store.
+- Edits to `mcp-gateway-spec.md` and `openspec/specs/` before archive.
+- Changing the startup contract (`process-startup`).
 
 ## Decisions
 
-Приняты человеком до propose; здесь не переоткрываются.
+Accepted by the person before propose; they are not reopened here.
 
-### 1. GET /health на MCP
+### 1. GET /health on MCP
 
-- Без аутентификации.
-- Статус 200, `Content-Type: application/json`.
-- Тело ровно `{ "status": "ok" }` (после `JSON.parse` — объект с одним полем `status` со строкой `ok`).
-- Без `DATA_DIR`, `ENCRYPTION_KEY`, хостов и портов в теле.
-- Присутствие `Authorization` не меняет ответ.
-- Query string (`GET /health?...`) не меняет маршрут.
+- No authentication.
+- Status 200, `Content-Type: application/json`.
+- Body exactly `{ "status": "ok" }` (after `JSON.parse`, an object with one field `status` whose string is `ok`).
+- No `DATA_DIR`, `ENCRYPTION_KEY`, hosts, or ports in the body.
+- A present `Authorization` header does not change the response.
+- A query string (`GET /health?...`) does not change the route.
 
-**Альтернатива (отклонена):** расширенный health с uptime, версией или портами — противоречит «без каталога и секретов» и минимальному этапу 4.
+**Alternative (rejected):** an extended health with uptime, a version, or ports — that contradicts "no directory and no secrets" and the minimal stage 4.
 
-### 2. Путь /mcp на MCP — 501
+### 2. Path /mcp on MCP — 501
 
-- Маршрут `/mcp` зарегистрирован для всех методов (`app.all('/mcp', ...)` или эквивалент).
-- Ответ: HTTP 501, `Content-Type: text/plain; charset=utf-8`.
-- Тело ровно: `Not Implemented` (ASCII, без JSON, без секретов).
-- Нет монтирования Streamable HTTP и нет проверки bearer (этап `mcp-endpoint`, issue stage 6).
+- The route `/mcp` is registered for every method (`app.all('/mcp', ...)` or equivalent).
+- Response: HTTP 501, `Content-Type: text/plain; charset=utf-8`.
+- Body exactly: `Not Implemented` (ASCII, no JSON, no secrets).
+- No Streamable HTTP mount and no bearer check (stage `mcp-endpoint`).
 
-**Альтернатива (отклонена):** 404 на `/mcp` до появления MCP — хуже: клиент не отличит «ещё не реализовано» от «чужой путь»; roadmap явно регистрирует `/mcp` уже на этапе 4.
+**Alternative (rejected):** 404 on `/mcp` until MCP exists — worse, because a client cannot tell "not implemented yet" from "a foreign path". The roadmap registers `/mcp` already at stage 4.
 
-### 3. Чужие запросы на MCP — 404
+### 3. Foreign requests on MCP — 404
 
-- Финальный обработчик: статус 404, `Content-Type: text/plain; charset=utf-8`, тело ровно `Not Found`.
-- Чужими считаются: любой путь кроме `GET /health` и `/mcp`; также `POST`/`PUT`/`DELETE` `/health`; путь `/health/` (trailing slash).
-- Express `strict routing` / явная регистрация только `GET /health` без trailing slash — чтобы `/health/` не совпал с health.
+- Final handler: status 404, `Content-Type: text/plain; charset=utf-8`, body exactly `Not Found`.
+- Foreign means: any path other than `GET /health` and `/mcp`; also `POST`/`PUT`/`DELETE` `/health`; the path `/health/` (trailing slash).
+- Express `strict routing` / registering only `GET /health` without a trailing slash, so `/health/` does not match health.
 
-**Альтернатива (отклонена):** полагаться на дефолтный HTML 404 Express — длиннее, не English-фиксированный контракт, риск утечки стека в dev.
+**Alternative (rejected):** relying on Express's default HTML 404 — longer, not a fixed English contract, and a risk of leaking a stack in dev.
 
-### 4. /mcp на admin до статики
+### 4. /mcp on admin before static files
 
-- В `createAdminApp` до `express.static`: `app.all('/mcp', ...)` → 404, `text/plain; charset=utf-8`, тело `Not Found`.
-- Цель: файл в `web/dist` или будущий SPA fallback не сможет отдать `/mcp`.
-- `GET /` без изменений: по-прежнему статика / `index.html`.
+- In `createAdminApp`, before `express.static`: `app.all('/mcp', ...)` → 404, `text/plain; charset=utf-8`, body `Not Found`.
+- Goal: a file in `web/dist` or a future SPA fallback cannot serve `/mcp`.
+- `GET /` is unchanged: still static files / `index.html`.
 
-**Альтернатива (отклонена):** фильтр только в reverse proxy — продукт обязан сам не пересекаться по законам портов.
+**Alternative (rejected):** a filter only in the reverse proxy — the product itself must not overlap, by the port laws.
 
-### 5. Тесты
+### 5. Tests
 
-- HTTP к `createMcpApp()` и `createAdminApp({ webRoot })` через `supertest` (devDependency `@mcp-gateway/server`, плюс `@types/supertest` при необходимости).
-- Без вызова `listen` на `MCP_PORT`/`ADMIN_PORT`, без живого MCP-провайдера и без браузера.
-- Тестовый `webRoot` — временный каталог с минимальным `index.html` и (для сценария коллизии) файлом, который иначе отдал бы `/mcp`.
-- Имена тестов включают требование и сценарий delta; покрытие — скилл `tests`.
-- Экраны и Playwright в этом изменении не трогаются.
+- HTTP against `createMcpApp()` and `createAdminApp({ webRoot })` through `supertest` (a devDependency of `@mcp-gateway/server`, plus `@types/supertest` if needed).
+- No `listen` on `MCP_PORT`/`ADMIN_PORT`, no live MCP provider, and no browser.
+- The test `webRoot` is a temp directory with a minimal `index.html` and (for the collision scenario) a file that would otherwise be served at `/mcp`.
+- Test names include the delta requirement and scenario; coverage follows the `tests` skill.
+- Screens and Playwright are not touched in this change.
 
-**Структура (ориентир):**
+**Structure (guide):**
 
 ```text
 server/src/http/
   createMcpApp.ts     GET /health, all /mcp → 501, fallback 404
-  createAdminApp.ts   all /mcp → 404, затем static
+  createAdminApp.ts   all /mcp → 404, then static
 server/test/http/
-  mcp-port-routing.test.ts   сценарии delta через supertest
+  mcp-port-routing.test.ts   delta scenarios through supertest
 ```
 
 ## Risks / Trade-offs
 
-- [501 на /mcp до этапа 6 может удивить клиента, который ждёт MCP] → Mitigation: зафиксировано roadmap; этап `mcp-endpoint` заменит обработчик.
-- [express.static и точное имя файла-коллизии в тесте зависят от правил раздачи] → Mitigation: в тесте класть файл с именем, которое static реально отдал бы по `/mcp` без явного обработчика; assert сравнивает статус 404 и отсутствие содержимого файла.
-- [Жёсткие строки `Not Implemented` / `Not Found`] → Mitigation: одно место в коде маршрутов; сценарии проверяют короткий English без секретов и точный текст из этого дизайна.
+- [501 on /mcp before stage 6 may surprise a client that expects MCP] → Mitigation: recorded in the roadmap; stage `mcp-endpoint` replaces the handler.
+- [express.static and the exact colliding file name in the test depend on how files are served] → Mitigation: the test places a file with the name static would actually serve at `/mcp` without the explicit handler; the assert compares status 404 and the absence of the file contents.
+- [Fixed strings `Not Implemented` / `Not Found`] → Mitigation: one place in the route code; scenarios check short English with no secrets and the exact text from this design.
 
 ## Migration Plan
 
-Чистое добавление маршрутов. Откат — revert коммитов изменения. Миграции данных нет.
+A pure addition of routes. Rollback is reverting the change's commits. There is no data migration.
 
 ## Open Questions
 
-Нет. Решения 1–5 приняты до propose.
+None. Decisions 1–5 were accepted before propose.

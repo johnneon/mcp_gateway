@@ -2,113 +2,113 @@
 
 ## Purpose
 
-Задаёт HTTP-маршрутизацию портов MCP и admin: разрешённые пути, ответы без секретов и отказ на чужие запросы, пока Streamable HTTP ещё не смонтирован.
+Defines HTTP routing for the MCP and admin ports: the allowed paths, responses that contain no secrets, and rejection of foreign requests, until Streamable HTTP is mounted.
 
 ## Requirements
 
-### Requirement: GET /health на порту MCP без аутентификации
+### Requirement: GET /health on the MCP port without authentication
 
-Слушатель MCP SHALL отвечать на `GET /health` без требования заголовка `Authorization`. Ответ SHALL иметь статус 200, заголовок `Content-Type` со значением `application/json` и тело ровно JSON-объект `{ "status": "ok" }`. Тело SHALL NOT содержать путь каталога данных, значение ключа шифрования, имена или значения хостов и портов. Наличие заголовка `Authorization` SHALL NOT менять статус, тип содержимого и тело ответа. Строка запроса (query string) на `GET /health` SHALL NOT менять маршрут: ответ остаётся тем же успешным health.
+The MCP listener SHALL answer `GET /health` without requiring an `Authorization` header. The response SHALL have status 200, a `Content-Type` header of `application/json`, and a body that is exactly the JSON object `{ "status": "ok" }`. The body SHALL NOT contain the data directory path, the encryption key value, or host or port names or values. An `Authorization` header SHALL NOT change the status, the content type, or the body. A query string on `GET /health` SHALL NOT change the route: the response stays the same successful health.
 
-#### Scenario: GET /health без Authorization
+#### Scenario: GET /health without Authorization
 
-- **GIVEN** приложение MCP создано через фабрику без `listen`
-- **WHEN** клиент выполняет `GET /health` без заголовка `Authorization`
-- **THEN** статус ответа 200
-- **AND** `Content-Type` содержит `application/json`
-- **AND** тело после разбора JSON глубоко равно `{ "status": "ok" }`
-- **AND** сериализованное тело не содержит подстрок каталога данных, ключа шифрования, хостов и портов из окружения теста
+- **GIVEN** the MCP app is created through the factory without `listen`
+- **WHEN** the client performs `GET /health` without an `Authorization` header
+- **THEN** the response status is 200
+- **AND** `Content-Type` contains `application/json`
+- **AND** the body parsed as JSON deep-equals `{ "status": "ok" }`
+- **AND** the serialized body does not contain substrings of the data directory, the encryption key, or hosts and ports from the test environment
 
-#### Scenario: GET /health с Authorization не меняет ответ
+#### Scenario: GET /health with Authorization does not change the response
 
-- **GIVEN** приложение MCP создано через фабрику без `listen`
-- **WHEN** клиент выполняет `GET /health` с заголовком `Authorization` (произвольное значение bearer, известное тесту)
-- **THEN** статус ответа 200
-- **AND** тело после разбора JSON глубоко равно `{ "status": "ok" }`
-- **AND** ответ не содержит значение переданного bearer
+- **GIVEN** the MCP app is created through the factory without `listen`
+- **WHEN** the client performs `GET /health` with an `Authorization` header (an arbitrary bearer value known to the test)
+- **THEN** the response status is 200
+- **AND** the body parsed as JSON deep-equals `{ "status": "ok" }`
+- **AND** the response does not contain the bearer value that was sent
 
-#### Scenario: GET /health с query string
+#### Scenario: GET /health with a query string
 
-- **GIVEN** приложение MCP создано через фабрику без `listen`
-- **WHEN** клиент выполняет `GET /health?x=1`
-- **THEN** статус ответа 200
-- **AND** тело после разбора JSON глубоко равно `{ "status": "ok" }`
+- **GIVEN** the MCP app is created through the factory without `listen`
+- **WHEN** the client performs `GET /health?x=1`
+- **THEN** the response status is 200
+- **AND** the body parsed as JSON deep-equals `{ "status": "ok" }`
 
-### Requirement: /mcp на порту MCP возвращает 501
+### Requirement: /mcp on the MCP port returns 501
 
-Слушатель MCP SHALL регистрировать путь `/mcp` для всех HTTP-методов, которые достигает обработчик. Ответ SHALL иметь статус 501 и короткое английское текстовое тело без секретов, без каталога данных, без ключа шифрования и без значений хостов и портов. Streamable HTTP и проверка bearer в этом изменении SHALL NOT выполняться.
+The MCP listener SHALL register the path `/mcp` for every HTTP method the handler reaches. The response SHALL have status 501 and a short English text body with no secrets, no data directory, no encryption key, and no host or port values. This change SHALL NOT run Streamable HTTP or check a bearer.
 
-#### Scenario: GET /mcp — 501 без секретов
+#### Scenario: GET /mcp — 501 without secrets
 
-- **GIVEN** приложение MCP создано через фабрику без `listen`
-- **WHEN** клиент выполняет `GET /mcp`
-- **THEN** статус ответа 501
-- **AND** тело ответа — короткий английский текст
-- **AND** тело не содержит каталог данных, ключ шифрования, хосты и порты из окружения теста
+- **GIVEN** the MCP app is created through the factory without `listen`
+- **WHEN** the client performs `GET /mcp`
+- **THEN** the response status is 501
+- **AND** the response body is short English text
+- **AND** the body does not contain the data directory, the encryption key, or hosts and ports from the test environment
 
-#### Scenario: POST /mcp — 501 без секретов
+#### Scenario: POST /mcp — 501 without secrets
 
-- **GIVEN** приложение MCP создано через фабрику без `listen`
-- **WHEN** клиент выполняет `POST /mcp` с произвольным телом
-- **THEN** статус ответа 501
-- **AND** тело ответа — короткий английский текст без секретов
+- **GIVEN** the MCP app is created through the factory without `listen`
+- **WHEN** the client performs `POST /mcp` with an arbitrary body
+- **THEN** the response status is 501
+- **AND** the response body is short English text with no secrets
 
-### Requirement: Чужой путь на порту MCP — 404
+### Requirement: A foreign path on the MCP port is 404
 
-Любой путь на слушателе MCP, кроме зарегистрированных `GET /health` и `/mcp`, SHALL возвращать статус 404 с коротким английским текстовым телом без секретов. Запросы `POST`, `PUT` и `DELETE` к `/health` SHALL считаться чужими и возвращать 404. Путь `/health/` (со trailing slash) SHALL считаться чужим и возвращать 404.
+Any path on the MCP listener other than the registered `GET /health` and `/mcp` SHALL return status 404 with a short English text body and no secrets. `POST`, `PUT`, and `DELETE` to `/health` SHALL count as foreign and return 404. The path `/health/` (with a trailing slash) SHALL count as foreign and return 404.
 
-#### Scenario: Неизвестный путь — 404
+#### Scenario: Unknown path — 404
 
-- **GIVEN** приложение MCP создано через фабрику без `listen`
-- **WHEN** клиент выполняет `GET /unknown`
-- **THEN** статус ответа 404
-- **AND** тело ответа — короткий английский текст без секретов
+- **GIVEN** the MCP app is created through the factory without `listen`
+- **WHEN** the client performs `GET /unknown`
+- **THEN** the response status is 404
+- **AND** the response body is short English text with no secrets
 
 #### Scenario: POST /health — 404
 
-- **GIVEN** приложение MCP создано через фабрику без `listen`
-- **WHEN** клиент выполняет `POST /health`
-- **THEN** статус ответа 404
+- **GIVEN** the MCP app is created through the factory without `listen`
+- **WHEN** the client performs `POST /health`
+- **THEN** the response status is 404
 
 #### Scenario: PUT /health — 404
 
-- **GIVEN** приложение MCP создано через фабрику без `listen`
-- **WHEN** клиент выполняет `PUT /health`
-- **THEN** статус ответа 404
+- **GIVEN** the MCP app is created through the factory without `listen`
+- **WHEN** the client performs `PUT /health`
+- **THEN** the response status is 404
 
 #### Scenario: DELETE /health — 404
 
-- **GIVEN** приложение MCP создано через фабрику без `listen`
-- **WHEN** клиент выполняет `DELETE /health`
-- **THEN** статус ответа 404
+- **GIVEN** the MCP app is created through the factory without `listen`
+- **WHEN** the client performs `DELETE /health`
+- **THEN** the response status is 404
 
 #### Scenario: GET /health/ — 404
 
-- **GIVEN** приложение MCP создано через фабрику без `listen`
-- **WHEN** клиент выполняет `GET /health/`
-- **THEN** статус ответа 404
+- **GIVEN** the MCP app is created through the factory without `listen`
+- **WHEN** the client performs `GET /health/`
+- **THEN** the response status is 404
 
-### Requirement: Порт admin не обслуживает /mcp
+### Requirement: The admin port does not serve /mcp
 
-Слушатель admin SHALL иметь явный обработчик пути `/mcp` для всех методов, зарегистрированный до раздачи статики `web`. Этот обработчик SHALL возвращать статус 404 с коротким английским текстовым телом без секретов. Даже если в корне статики есть файл, который мог бы обслужиться по `/mcp`, ответ SHALL оставаться 404. `GET /` на admin SHALL по-прежнему возвращать успешный ответ с HTML оболочкой приложения.
+The admin listener SHALL have an explicit handler for the path `/mcp`, for every method, registered before the `web` static files. That handler SHALL return status 404 with a short English text body and no secrets. Even if the static root contains a file that could be served at `/mcp`, the response SHALL stay 404. `GET /` on admin SHALL still return a successful response with the application shell HTML.
 
-#### Scenario: GET /mcp на admin — 404 до статики
+#### Scenario: GET /mcp on admin — 404 before static files
 
-- **GIVEN** приложение admin создано через фабрику с тестовым корнем статики, в котором лежит файл, способный обслужиться по пути `/mcp` (например `mcp` или `mcp.html` — как принято для `express.static` в тесте)
-- **WHEN** клиент выполняет `GET /mcp`
-- **THEN** статус ответа 404
-- **AND** тело ответа — короткий английский текст
-- **AND** тело не совпадает с содержимым файла статики
+- **GIVEN** the admin app is created through the factory with a test static root that contains a file which could be served at `/mcp` (for example `mcp` or `mcp.html`, whichever `express.static` would serve in the test)
+- **WHEN** the client performs `GET /mcp`
+- **THEN** the response status is 404
+- **AND** the response body is short English text
+- **AND** the body does not match the static file's contents
 
-#### Scenario: POST /mcp на admin — 404
+#### Scenario: POST /mcp on admin — 404
 
-- **GIVEN** приложение admin создано через фабрику без `listen`
-- **WHEN** клиент выполняет `POST /mcp`
-- **THEN** статус ответа 404
+- **GIVEN** the admin app is created through the factory without `listen`
+- **WHEN** the client performs `POST /mcp`
+- **THEN** the response status is 404
 
-#### Scenario: GET / на admin по-прежнему HTML
+#### Scenario: GET / on admin still returns HTML
 
-- **GIVEN** приложение admin создано через фабрику с корнем статики, содержащим `index.html` оболочки
-- **WHEN** клиент выполняет `GET /`
-- **THEN** статус ответа успешный
-- **AND** тело содержит HTML оболочку admin UI
+- **GIVEN** the admin app is created through the factory with a static root that contains the shell `index.html`
+- **WHEN** the client performs `GET /`
+- **THEN** the response status is successful
+- **AND** the body contains the admin UI shell HTML

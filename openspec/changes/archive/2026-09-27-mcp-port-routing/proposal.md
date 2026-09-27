@@ -4,36 +4,36 @@ Issue: #8
 
 ## Why
 
-Два HTTP-слушателя уже принимают TCP-соединения, но порт MCP пустой, а порт admin отдаёт только статику. Без явных маршрутов чужой путь может получить ответ по умолчанию Express или, на admin, случайный файл из `web/dist`. Vision и этап 4 требуют, чтобы порты отвечали только на разрешённые пути и не раскрывали каталог данных, ключ и хосты.
+The two HTTP listeners already accept TCP connections, but the MCP port is empty and the admin port serves only static files. Without explicit routes, a foreign path can get Express's default response or, on admin, a stray file from `web/dist`. The vision and stage 4 require the ports to answer only on the allowed paths and not to reveal the data directory, the key, or hosts.
 
 ## What Changes
 
-- На порту MCP появляется `GET /health` без аутентификации: JSON ровно `{ "status": "ok" }`, без каталога, ключа, хостов и портов.
-- Путь `/mcp` на порту MCP зарегистрирован и отвечает HTTP 501 с коротким английским телом; Streamable HTTP и bearer — вне этого изменения (этап `mcp-endpoint`).
-- Любой другой путь на порту MCP — HTTP 404 с коротким английским телом без секретов; `POST`/`PUT`/`DELETE` `/health` и `/health/` — 404; query string на `GET /health` маршрут не меняет.
-- На порту admin явный обработчик `/mcp` (все методы) возвращает 404 до статики, чтобы файл из `web/dist` или будущий SPA fallback не обслужил этот путь. `GET /` по-прежнему отдаёт HTML оболочки.
-- Автотесты — HTTP к `createMcpApp()` и `createAdminApp()` без `listen` и без живого провайдера. Экраны не затрагиваются.
+- The MCP port gains `GET /health` with no authentication: JSON exactly `{ "status": "ok" }`, with no directory, key, hosts, or ports.
+- The path `/mcp` on the MCP port is registered and returns HTTP 501 with a short English body. Streamable HTTP and bearer auth are outside this change (stage `mcp-endpoint`).
+- Any other path on the MCP port is HTTP 404 with a short English body and no secrets. `POST`/`PUT`/`DELETE` `/health` and `/health/` are 404. A query string on `GET /health` does not change the route.
+- The admin port has an explicit `/mcp` handler (every method) that returns 404 before static files, so a file from `web/dist` or a future SPA fallback cannot serve that path. `GET /` still returns the shell HTML.
+- Automated tests are HTTP against `createMcpApp()` and `createAdminApp()` without `listen` and without a live provider. Screens are not touched.
 
 ## Non-goals
 
-- Streamable HTTP, bearer-аутентификация, полноценный MCP на `/mcp`.
-- Admin API `/api`, экраны admin UI, конфигурации, коннекторы.
-- Изменения зашифрованного хранилища.
-- Правки `mcp-gateway-spec.md` и файлов под `openspec/specs/` (синхронизация — при archive).
+- Streamable HTTP, bearer authentication, and a real MCP on `/mcp`.
+- The admin API `/api`, admin UI screens, configurations, and connectors.
+- Changes to the encrypted store.
+- Edits to `mcp-gateway-spec.md` and files under `openspec/specs/` (sync happens at archive).
 
 ## Capabilities
 
 ### New Capabilities
 
-- `mcp-port-routing`: маршрутизация и ответы портов MCP и admin по путям `/health`, `/mcp` и чужим запросам; отсутствие секретов в телах; тесты на фабриках приложений без `listen`.
+- `mcp-port-routing`: routing and responses of the MCP and admin ports for `/health`, `/mcp`, and foreign requests; no secrets in bodies; tests against the app factories without `listen`.
 
 ### Modified Capabilities
 
-- (нет) — `process-startup` уже покрывает два слушателя и HTML на корне admin; требования старта не меняются.
+- (none) — `process-startup` already covers the two listeners and HTML at the admin root; startup requirements do not change.
 
 ## Impact
 
-- `server/src/http/createMcpApp.ts`: маршруты `GET /health`, `/mcp` → 501, остальное → 404.
-- `server/src/http/createAdminApp.ts`: явный `/mcp` → 404 до `express.static`.
-- Новые тесты в `server/test/` (HTTP к apps через supertest или эквивалент без `listen`).
-- `main.ts`, env, store, web UI — без изменений контракта.
+- `server/src/http/createMcpApp.ts`: routes `GET /health`, `/mcp` → 501, everything else → 404.
+- `server/src/http/createAdminApp.ts`: explicit `/mcp` → 404 before `express.static`.
+- New tests in `server/test/` (HTTP against the apps through supertest or an equivalent, without `listen`).
+- `main.ts`, env, store, and the web UI — no contract change.

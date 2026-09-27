@@ -23,8 +23,8 @@ function assertNoSecrets(body: string): void {
   }
 }
 
-describe('mcp-port-routing: GET /health на порту MCP без аутентификации', () => {
-  it('GET /health без Authorization', async () => {
+describe('mcp-port-routing: GET /health on the MCP port without authentication', () => {
+  it('GET /health without Authorization', async () => {
     const app = createMcpApp();
     const response = await request(app).get('/health');
 
@@ -34,7 +34,7 @@ describe('mcp-port-routing: GET /health на порту MCP без аутент�
     assertNoSecrets(response.text);
   });
 
-  it('GET /health с Authorization не меняет ответ', async () => {
+  it('GET /health with Authorization does not change the response', async () => {
     const app = createMcpApp();
     const response = await request(app).get('/health').set('Authorization', BEARER);
 
@@ -45,7 +45,7 @@ describe('mcp-port-routing: GET /health на порту MCP без аутент�
     assertNoSecrets(response.text);
   });
 
-  it('GET /health с query string', async () => {
+  it('GET /health with a query string', async () => {
     const app = createMcpApp();
     const response = await request(app).get('/health?x=1');
 
@@ -54,8 +54,8 @@ describe('mcp-port-routing: GET /health на порту MCP без аутент�
   });
 });
 
-describe('mcp-port-routing: /mcp на порту MCP возвращает 501', () => {
-  it('GET /mcp — 501 без секретов', async () => {
+describe('mcp-port-routing: /mcp on the MCP port returns 501', () => {
+  it('GET /mcp — 501 without secrets', async () => {
     const app = createMcpApp();
     const response = await request(app).get('/mcp');
 
@@ -65,7 +65,7 @@ describe('mcp-port-routing: /mcp на порту MCP возвращает 501', 
     assertNoSecrets(response.text);
   });
 
-  it('POST /mcp — 501 без секретов', async () => {
+  it('POST /mcp — 501 without secrets', async () => {
     const app = createMcpApp();
     const response = await request(app).post('/mcp').send({ anything: true });
 
@@ -75,8 +75,8 @@ describe('mcp-port-routing: /mcp на порту MCP возвращает 501', 
   });
 });
 
-describe('mcp-port-routing: Чужой путь на порту MCP — 404', () => {
-  it('Неизвестный путь — 404', async () => {
+describe('mcp-port-routing: A foreign path on the MCP port is 404', () => {
+  it('Unknown path — 404', async () => {
     const app = createMcpApp();
     const response = await request(app).get('/unknown');
 
@@ -144,8 +144,8 @@ async function makeAdminWebRoot(options: { mcpFileContent?: string }): Promise<s
   return dir;
 }
 
-describe('mcp-port-routing: Порт admin не обслуживает /mcp', () => {
-  it('GET /mcp на admin — 404 до статики', async () => {
+describe('mcp-port-routing: The admin port does not serve /mcp', () => {
+  it('GET /mcp on admin — 404 before static files', async () => {
     const collisionContent = 'STATIC-MCP-COLLISION-CANARY-UNIQUE';
     const webRoot = await makeAdminWebRoot({ mcpFileContent: collisionContent });
     const app = createAdminApp({ webRoot });
@@ -158,7 +158,7 @@ describe('mcp-port-routing: Порт admin не обслуживает /mcp', ()
     expect(response.text).not.toContain(collisionContent);
   });
 
-  it('POST /mcp на admin — 404', async () => {
+  it('POST /mcp on admin — 404', async () => {
     const webRoot = await makeAdminWebRoot({});
     const app = createAdminApp({ webRoot });
     const response = await request(app).post('/mcp');
@@ -167,7 +167,7 @@ describe('mcp-port-routing: Порт admin не обслуживает /mcp', ()
     expect(response.text).toBe('Not Found');
   });
 
-  it('GET / на admin по-прежнему HTML', async () => {
+  it('GET / on admin still returns HTML', async () => {
     const webRoot = await makeAdminWebRoot({});
     const app = createAdminApp({ webRoot });
     const response = await request(app).get('/');

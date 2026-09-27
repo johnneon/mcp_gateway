@@ -2,117 +2,117 @@
 
 ## Context
 
-См. `proposal.md` — Why. Сейчас: npm workspaces `server`/`web`, корневые скрипты `typecheck` / `test` / `build` / `start`, capability `process-startup`. Каталога `.github/workflows/` нет. ESLint и Prettier не подключены. Скиллы `backend`/`frontend` и агенты требуют только tests / typecheck / build. Обязательность merge на GitHub не задана файлом в git — только ruleset/branch protection на стороне GitHub.
+See `proposal.md` — Why. Right now: npm workspaces `server`/`web`, root scripts `typecheck` / `test` / `build` / `start`, capability `process-startup`. There is no `.github/workflows/` directory. ESLint and Prettier are not wired in. The `backend`/`frontend` skills and the agents require only tests / typecheck / build. Whether a merge is required on GitHub is not set by a file in git — only by a ruleset or branch protection on the GitHub side.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Один workflow на PR в `main`: Node 22, `npm ci`, затем typecheck → lint → format:check → test → build.
-- Один корневой ESLint 9 flat config на `server/` и `web/`; Prettier владеет форматированием через `eslint-config-prettier` последним в цепочке.
-- Корневые `lint`, `format`, `format:check`; CI и агенты вызывают их с корня.
-- Ruleset на GitHub делает check обязательным без admin bypass; создание через `gh api` на apply.
-- Сценарии delta покрыты Vitest без GitHub API; ruleset — задача + проверка validator через `gh`.
+- One workflow on a PR into `main`: Node 22, `npm ci`, then typecheck → lint → format:check → test → build.
+- One root ESLint 9 flat config for `server/` and `web/`; Prettier owns formatting through `eslint-config-prettier` last in the chain.
+- Root `lint`, `format`, `format:check`; CI and agents call them from the root.
+- A GitHub ruleset makes the check required with no admin bypass; it is created through `gh api` during apply.
+- Delta scenarios are covered by Vitest with no GitHub API; the ruleset is a task plus a validator check through `gh`.
 
-**Non-Goals (уровень дизайна):**
+**Non-Goals (design level):**
 
-- Husky / pre-commit как обязательный gate.
-- Coverage thresholds, matrix ОС, кэш npm сверх разумного минимума Actions.
-- Переформатирование Markdown vision/docs/openspec.
-- Изменение runtime-поведения процесса.
+- Husky / pre-commit as a required gate.
+- Coverage thresholds, an OS matrix, and an npm cache beyond a reasonable Actions minimum.
+- Reformatting Markdown in the vision, docs, or openspec.
+- Changing the process's runtime behavior.
 
 ## Decisions
 
-### 1. Имя workflow и status check
+### 1. Workflow name and status check
 
-- Файл: `.github/workflows/ci.yml`.
+- File: `.github/workflows/ci.yml`.
 - `on.pull_request.branches: [main]`.
-- Один job с именем `checks` (отображаемое имя status check — `checks`, либо полное `ci / checks` в зависимости от того, как GitHub именует check из `jobs.<id>` и имени workflow). Финальное имя check для ruleset фиксируется после первого успешного прогона на ветке изменения и записывается в задачу ruleset.
-- `actions/setup-node@v4` с `node-version: '22'`, `cache: npm`.
-- Шаги: `npm ci`; `npm run typecheck`; `npm run lint`; `npm run format:check`; `npm test`; `npm run build`.
-- Permissions по минимуму (`contents: read`).
+- One job named `checks` (the displayed status-check name is `checks`, or the full `ci / checks`, depending on how GitHub names a check from `jobs.<id>` and the workflow name). The final check name for the ruleset is fixed after the first successful run on the change branch and recorded in the ruleset task.
+- `actions/setup-node@v4` with `node-version: '22'`, `cache: npm`.
+- Steps: `npm ci`; `npm run typecheck`; `npm run lint`; `npm run format:check`; `npm test`; `npm run build`.
+- Permissions at the minimum (`contents: read`).
 
-**Альтернатива:** отдельные jobs на lint/test — отклонена: один required check проще для ruleset и агентов.
+**Alternative:** separate jobs for lint/test — rejected: one required check is simpler for the ruleset and the agents.
 
-### 2. ESLint: один корневой flat config
+### 2. ESLint: one root flat config
 
-- Зависимости в корневом `package.json` (devDependencies): `eslint`, `typescript-eslint`, `eslint-config-prettier`, `eslint-plugin-react-hooks`, при необходимости `@eslint/js`.
-- Файл `eslint.config.js` (или `.mjs`) в корне: `typescript-eslint` configs с `strictTypeChecked` (или эквивалент type-checked strict), parserOptions.projectService / project на tsconfig `server` и `web`.
-- Правило `@typescript-eslint/no-explicit-any`: `error` везде, включая тесты. Не отключать и не ослаблять в overrides для `**/*.test.*`.
-- Семейство unsafe-any из strict type-checked оставить включённым (`no-unsafe-argument`, `no-unsafe-assignment`, `no-unsafe-call`, `no-unsafe-member-access`, `no-unsafe-return`).
-- Для файлов под `web/`: добавить `eslint-plugin-react-hooks` recommended.
-- Последний элемент цепочки: `eslint-config-prettier`.
-- Ignores: `**/dist/**`, `**/node_modules/**`, coverage, lockfile при необходимости.
-- Скрипт `"lint": "eslint ."` (или явные пути `server` `web`), один вход для CI и агентов.
-- Apply доводит текущий скелет до lint-clean; это отдельная задача, не «оставить долг».
+- Dependencies in the root `package.json` (devDependencies): `eslint`, `typescript-eslint`, `eslint-config-prettier`, `eslint-plugin-react-hooks`, and `@eslint/js` if needed.
+- File `eslint.config.js` (or `.mjs`) at the root: `typescript-eslint` configs with `strictTypeChecked` (or an equivalent type-checked strict), parserOptions.projectService / project pointing at the `server` and `web` tsconfigs.
+- Rule `@typescript-eslint/no-explicit-any`: `error` everywhere, including tests. Do not disable or weaken it in overrides for `**/*.test.*`.
+- Keep the unsafe-any family from strict type-checked enabled (`no-unsafe-argument`, `no-unsafe-assignment`, `no-unsafe-call`, `no-unsafe-member-access`, `no-unsafe-return`).
+- For files under `web/`: add `eslint-plugin-react-hooks` recommended.
+- Last item in the chain: `eslint-config-prettier`.
+- Ignores: `**/dist/**`, `**/node_modules/**`, coverage, and the lockfile if needed.
+- Script `"lint": "eslint ."` (or explicit paths `server` `web`), one entry for CI and agents.
+- Apply brings the current skeleton to lint-clean; that is a separate task, not "leave the debt".
 
-**Альтернатива:** два конфига в packages — отклонена; человек предпочёл один корневой.
+**Alternative:** two configs in the packages — rejected; the person preferred one root config.
 
 ### 3. Prettier
 
-- Зависимость `prettier` в корне.
-- Конфиг: `.prettierrc` / `prettier.config.*` с разумными дефолтами проекта (без спора о стиле Markdown — Markdown вне scope).
-- Ignore: `.prettierignore` — `package-lock.json`, `dist`, `node_modules`, `docs/**`, `openspec/**`, `mcp-gateway-spec.md`, прочие генерируемые артефакты.
-- Include: `server/**/*.{ts,tsx,css,json}`, `web/**/*.{ts,tsx,css,json}`, `.github/workflows/*.{yml,yaml}`, корневые конфиги которые Prettier должен владеть (`package.json`, eslint/prettier/tsconfig по необходимости).
-- Скрипты: `"format": "prettier --write …"`, `"format:check": "prettier --check …"`.
-- Не включать Husky.
+- Dependency `prettier` at the root.
+- Config: `.prettierrc` / `prettier.config.*` with reasonable project defaults (no argument about Markdown style — Markdown is out of scope).
+- Ignore: `.prettierignore` — `package-lock.json`, `dist`, `node_modules`, `docs/**`, `openspec/**`, `mcp-gateway-spec.md`, and other generated artifacts.
+- Include: `server/**/*.{ts,tsx,css,json}`, `web/**/*.{ts,tsx,css,json}`, `.github/workflows/*.{yml,yaml}`, and root configs Prettier should own (`package.json`, eslint/prettier/tsconfig as needed).
+- Scripts: `"format": "prettier --write …"`, `"format:check": "prettier --check …"`.
+- Do not add Husky.
 
-### 4. Автотесты сценариев (без GitHub)
+### 4. Scenario automated tests (no GitHub)
 
-Размещение: предпочтительно `server/test/` (уже есть Vitest) или небольшой корневой/server набор — решение при apply: если тесты читают файлы репозитория и вызывают ESLint/Prettier API, логично держать их в `server/test/ci/` или аналогично, чтобы `npm test -w server` их подхватил. Альтернатива — отдельный корневой vitest только если workspaces мешают; по умолчанию не плодить третий runner.
+Placement: preferably `server/test/` (Vitest is already there) or a small root/server set — decided at apply: if the tests read repository files and call the ESLint/Prettier API, keep them in `server/test/ci/` or similar so `npm test -w server` picks them up. An alternative is a separate root vitest only if workspaces get in the way; by default do not add a third runner.
 
-- Workflow: читать `.github/workflows/ci.yml` (yaml parse), assert triggers, node 22, наличие команд скриптов.
-- ESLint: временный файл/snippet через ESLint API или `spawn` eslint с конфигом проекта; assert rule id.
-- Prettier: temp snippet + `format:check` / prettier check; assert exit codes.
+- Workflow: read `.github/workflows/ci.yml` (yaml parse), assert triggers, node 22, and that the script commands are present.
+- ESLint: a temp file/snippet through the ESLint API or `spawn` eslint with the project config; assert the rule id.
+- Prettier: a temp snippet plus `format:check` / prettier check; assert exit codes.
 
-Не писать сценарий «merge blocked on GitHub».
+Do not write a scenario "merge blocked on GitHub".
 
-### 5. Repository ruleset через `gh api` (не в git)
+### 5. Repository ruleset through `gh api` (not in git)
 
-Workflow сам по себе merge не блокирует. На apply developer:
+The workflow by itself does not block a merge. During apply the developer:
 
-1. Убеждается, что на ветке изменения хотя бы раз успешно отработал check (или использует известное имя job после merge workflow в ветку и push для пробного PR / `workflow_dispatch` не требуется — достаточно имени из YAML: для ruleset GitHub принимает имя check, которое появится на PR; зафиксировать в задаче ожидаемое имя `checks` / `ci / checks` и сверить через `gh`).
-2. Создаёт ruleset на ветку `main` через GitHub API (`gh api` REST: repository rulesets), параметры:
+1. Makes sure the check has succeeded at least once on the change branch (or uses the known job name after the workflow is on the branch and pushed for a trial PR / `workflow_dispatch` is not required — the name from YAML is enough: a ruleset accepts the check name that will appear on the PR; record the expected name `checks` / `ci / checks` in the task and confirm it through `gh`).
+2. Creates a ruleset on the branch `main` through the GitHub API (`gh api` REST: repository rulesets), with:
    - target: branch `main` (include `refs/heads/main`);
    - enforcement: `active`;
-   - required status checks: тот check из workflow;
-   - `strict_required_status_checks_policy`: true (ветка актуальна относительно base, если применимо);
-   - **нет обхода админом**: `bypass_actors` пустой / не включать organization admin bypass; в UI-терминах — «Do not allow bypassing» / отсутствие bypass для admins.
-3. Кто выполняет: **developer-агент на шаге apply** (задача в `tasks.md`), с `gh` авторизованным под владельцем/админом репо с правом править rulesets. Если `gh api` возвращает 403/404 или ruleset не создаётся — **apply останавливается и сообщает человеку**: нужны права на rulesets и повтор задачи; не оставлять «нажмите в UI» единственным планом без указания, что UI — запасной путь только если человек сам выполнит тот же контракт ruleset, а агент зафиксировал блокер.
-4. Validator после apply подтверждает наличие active ruleset и required check через `gh api`/`gh ruleset` (не через Vitest).
+   - required status checks: that check from the workflow;
+   - `strict_required_status_checks_policy`: true (the branch is up to date with the base, where that applies);
+   - **no admin bypass**: `bypass_actors` empty / do not include an organization admin bypass; in UI terms, "Do not allow bypassing" / no bypass for admins.
+3. Who does it: **the developer agent at the apply step** (a task in `tasks.md`), with `gh` authorized as the repo owner/admin who can edit rulesets. If `gh api` returns 403/404 or the ruleset is not created — **apply stops and tells the person**: ruleset rights are required and the task must be retried; do not leave "click in the UI" as the only plan without stating that the UI is a fallback only if the person carries out the same ruleset contract, and the agent has recorded the blocker.
+4. After apply, the validator confirms an active ruleset and the required check through `gh api`/`gh ruleset` (not through Vitest).
 
-Ruleset не коммитится. Delta-сценария на «live merge» нет.
+The ruleset is not committed. There is no delta scenario for a "live merge".
 
-**Альтернатива:** классический branch protection API — допустима, если rulesets недоступны на плане репо; prefer rulesets. При невозможности обоих — стоп и отчёт человеку.
+**Alternative:** the classic branch protection API is acceptable if rulesets are unavailable on the repo plan; prefer rulesets. If neither is possible — stop and report to the person.
 
-### 6. Обновление агентов и скиллов (только apply)
+### 6. Agent and skill updates (apply only)
 
-Точечно, где уже есть чеклист или агент иначе пропустит lint/format:
+Only where a checklist already exists, or an agent would otherwise skip lint/format:
 
-| Путь | Что добавить |
+| Path | What to add |
 | --- | --- |
-| `.cursor/skills/backend/SKILL.md` | команды lint/format check для `server/`; правило no explicit `any` |
-| `.cursor/skills/frontend/SKILL.md` | то же для `web/` |
-| `.cursor/agents/developer.md` | в apply: lint и format check рядом с tests/typecheck/build |
-| `.cursor/agents/validator.md` | запуск lint и format check; строки в шаблоне Checks |
-| `docs/workflow.md` | bullet apply называет lint и format check |
-| `.cursor/skills/code-review/SKILL.md` | blocker: новый/изменённый файл с explicit `any` или нарушением ESLint/Prettier контракта; обычные style notes — не blockers |
-| `openspec/config.yaml` | apply guidance: lint и format check рядом с tests/typecheck/build |
+| `.cursor/skills/backend/SKILL.md` | lint/format check commands for `server/`; the no explicit `any` rule |
+| `.cursor/skills/frontend/SKILL.md` | the same for `web/` |
+| `.cursor/agents/developer.md` | in apply: lint and format check next to tests/typecheck/build |
+| `.cursor/agents/validator.md` | run lint and format check; lines in the Checks template |
+| `docs/workflow.md` | the apply bullet names lint and format check |
+| `.cursor/skills/code-review/SKILL.md` | blocker: a new or changed file with explicit `any` or a break of the ESLint/Prettier contract; ordinary style notes are not blockers |
+| `openspec/config.yaml` | apply guidance: lint and format check next to tests/typecheck/build |
 
-Не трогать сгенерированные `openspec-*` skills, `mcp-gateway-spec.md`, `openspec/specs/` до archive.
+Do not touch the generated `openspec-*` skills, `mcp-gateway-spec.md`, or `openspec/specs/` before archive.
 
 ## Risks / Trade-offs
 
-- [Имя status check в UI ≠ `jobs.<id>`] → Mitigation: после первого прогона сверить через `gh` и прописать точное имя в ruleset; задача ruleset после workflow.
-- [Строгий type-checked ESLint ломает скелет] → Mitigation: отдельная задача «lint-clean»; не ослаблять `any`/unsafe.
-- [Нет прав на ruleset у токена агента] → Mitigation: apply стоп + отчёт; человек выдаёт права или создаёт эквивалентный ruleset сам по контракту из design; validator проверяет факт.
-- [Тесты ESLint/Prettier хрупки к путям temp] → Mitigation: писать snippet под `server/`/`web` ignore-исключениями для temp или `overrideConfig` с теми же rules.
+- [The status check name in the UI is not `jobs.<id>`] → Mitigation: after the first run, confirm through `gh` and write the exact name into the ruleset; the ruleset task comes after the workflow.
+- [Strict type-checked ESLint breaks the skeleton] → Mitigation: a separate "lint-clean" task; do not weaken `any`/unsafe.
+- [The agent token has no rights to the ruleset] → Mitigation: apply stops and reports; the person grants rights or creates an equivalent ruleset from the contract in this design; the validator checks the fact.
+- [ESLint/Prettier tests are fragile around temp paths] → Mitigation: write the snippet under `server/`/`web` with ignore exceptions for temp files, or `overrideConfig` with the same rules.
 
 ## Migration Plan
 
-Чистое добавление tooling и workflow. Откат: revert коммитов изменения + удаление ruleset через `gh api` (задача человека/агента при откате). Данных продукта нет.
+A pure addition of tooling and the workflow. Rollback: revert the change's commits and delete the ruleset through `gh api` (a task for the person or the agent on rollback). There is no product data.
 
 ## Open Questions
 
-- Точное отображаемое имя required check (`checks` vs `ci / checks`) — закрывается на apply после первого run Actions; на specs не влияет.
-- Если GitHub Free/права организации запрещают rulesets без bypass — зафиксировать blocker человеку; обход «только UI без `gh`» не считается выполненной задачей агента.
+- The exact displayed name of the required check (`checks` vs `ci / checks`) is closed at apply after the first Actions run; it does not affect the specs.
+- If GitHub Free or organization rights forbid rulesets without a bypass, record a blocker for the person; a workaround of "UI only, no `gh`" does not count as the agent having finished the task.

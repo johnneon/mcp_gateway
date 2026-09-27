@@ -3,7 +3,7 @@ schema: spec-driven
 context: |
   Read AGENTS.md and docs/workflow.md before writing artifacts.
   MCP Gateway is one Node.js process. It stores account credentials for connectors defined in code and exposes their tools over MCP Streamable HTTP. A configuration's bearer token authenticates the MCP client and selects the accounts it sees. Account secrets stay inside the process. State is one encrypted JSON file. The admin UI has no login and runs on its own port.
-  Write change artifacts in Russian. MCP tool names, descriptions, error text, and admin UI copy stay in English.
+  Write change artifacts in English. MCP tool names, descriptions, error text, and admin UI copy stay in English.
   Product vision is mcp-gateway-spec.md. Current behavior is openspec/specs. The contract for this change is its own delta specs.
   A new connector is a new change plus code. Do not add a runtime catalog of tools.
 

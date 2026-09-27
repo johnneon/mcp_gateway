@@ -1,29 +1,29 @@
 # Tasks
 
-## 1. Prettier и корневые скрипты format
+## 1. Prettier and root format scripts
 
-- [x] 1.1 Добавить Prettier в корневые devDependencies, конфиг и `.prettierignore` (исключить `package-lock.json`, `dist`, `node_modules`, `docs/**`, `openspec/**`, `mcp-gateway-spec.md`; форматировать TS/TSX/CSS/JSON под `server/` и `web/`, workflow YAML и корневые конфиги по design). Корневые скрипты `format` и `format:check`. Проверка: `npm run format:check` завершается кодом 0 после первичного `format` по включённым путям (без переписывания Markdown docs/openspec).
+- [x] 1.1 Add Prettier to the root devDependencies, a config, and `.prettierignore` (exclude `package-lock.json`, `dist`, `node_modules`, `docs/**`, `openspec/**`, `mcp-gateway-spec.md`; format TS/TSX/CSS/JSON under `server/` and `web/`, workflow YAML, and root configs per design). Root scripts `format` and `format:check`. Check: `npm run format:check` exits 0 after an initial `format` of the included paths (without rewriting Markdown under docs/openspec).
 
 ## 2. ESLint
 
-- [x] 2.1 Добавить ESLint 9 flat config в корне (typescript-eslint `strictTypeChecked` или эквивалент, `@typescript-eslint/no-explicit-any` error везде включая тесты, unsafe-any семейство включено, для `web/` — `eslint-plugin-react-hooks` recommended, последним — `eslint-config-prettier`; ignores `dist`/`node_modules`/coverage). Корневой скрипт `lint`. Проверка: `npm run lint` запускается (может падать на скелете до задачи 2.2).
+- [x] 2.1 Add an ESLint 9 flat config at the root (typescript-eslint `strictTypeChecked` or equivalent, `@typescript-eslint/no-explicit-any` as an error everywhere including tests, the unsafe-any family enabled, `eslint-plugin-react-hooks` recommended for `web/`, and `eslint-config-prettier` last; ignore `dist`/`node_modules`/coverage). Root script `lint`. Check: `npm run lint` runs (it may fail on the skeleton until task 2.2).
 
-- [x] 2.2 Довести существующий код `server/` и `web/` до lint-clean и format-clean без ослабления `any`/unsafe и без escape hatch на тесты. Проверка: `npm run lint` и `npm run format:check` завершаются кодом 0; `npm run typecheck` проходит.
+- [x] 2.2 Bring the existing `server/` and `web/` code to lint-clean and format-clean without weakening `any`/unsafe and without an escape hatch for tests. Check: `npm run lint` and `npm run format:check` exit 0; `npm run typecheck` passes.
 
 ## 3. GitHub Actions workflow
 
-- [x] 3.1 Добавить `.github/workflows/ci.yml`: `pull_request` → `main`, Node.js 22, `npm ci`, затем `typecheck`, `lint`, `format:check`, `test`, `build`; job id согласован с design (`checks`). Проверка: файл существует; автотест сценария «Workflow объявляет Node 22 и все проверки» из delta проходит (чтение YAML без GitHub API).
+- [x] 3.1 Add `.github/workflows/ci.yml`: `pull_request` → `main`, Node.js 22, `npm ci`, then `typecheck`, `lint`, `format:check`, `test`, `build`; job id aligned with design (`checks`). Check: the file exists; the automated test of the delta scenario "Workflow declares Node 22 and every check" passes (read the YAML without the GitHub API).
 
-## 4. Автотесты delta
+## 4. Delta automated tests
 
-- [x] 4.1 Автотесты сценариев ESLint: explicit `any` в temp-фрагментах под путями как у `server/` и `web/` даёт ошибку `@typescript-eslint/no-explicit-any` (ESLint API или spawn). Имена тестов включают id требования и имя сценария. Проверка: тесты проходят в `npm test` (workspace по design).
+- [x] 4.1 Automated tests of the ESLint scenarios: explicit `any` in temp snippets on paths like `server/` and `web/` produces an `@typescript-eslint/no-explicit-any` error (ESLint API or spawn). Test names include the requirement id and the scenario name. Check: the tests pass under `npm test` (the workspace from design).
 
-- [x] 4.2 Автотесты сценариев `format:check`: ненулевой exit на сломанном фрагменте, нулевой — на отформатированном. Проверка: тесты проходят; полный `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` с корня — код 0.
+- [x] 4.2 Automated tests of the `format:check` scenarios: non-zero exit on a broken snippet, zero on a formatted one. Check: the tests pass; full `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, and `npm run build` from the root exit 0.
 
-## 5. Агенты и скиллы
+## 5. Agents and skills
 
-- [x] 5.1 Обновить только перечисленные файлы: `.cursor/skills/backend/SKILL.md`, `.cursor/skills/frontend/SKILL.md`, `.cursor/agents/developer.md`, `.cursor/agents/validator.md`, `docs/workflow.md`, `.cursor/skills/code-review/SKILL.md`, apply guidance в `openspec/config.yaml` — команды lint/format check, правило no explicit `any`, blocker в code-review, строки Checks у validator. Не трогать `openspec-*` skills, `mcp-gateway-spec.md`, `openspec/specs/`. Проверка: в каждом файле есть упоминание lint и format check (и any/blockers где указано в proposal).
+- [x] 5.1 Update only the listed files: `.cursor/skills/backend/SKILL.md`, `.cursor/skills/frontend/SKILL.md`, `.cursor/agents/developer.md`, `.cursor/agents/validator.md`, `docs/workflow.md`, `.cursor/skills/code-review/SKILL.md`, and apply guidance in `openspec/config.yaml` — lint/format check commands, the no explicit `any` rule, a blocker in code-review, and the validator Checks lines. Do not touch `openspec-*` skills, `mcp-gateway-spec.md`, or `openspec/specs/`. Check: each file mentions lint and format check (and any/blockers where the proposal says so).
 
-## 6. Repository ruleset (не в git)
+## 6. Repository ruleset (not in git)
 
-- [x] 6.1 Developer на apply создаёт (или обновляет) active repository ruleset на `main` через `gh api`: required status check = check из workflow (`checks` / уточнённое имя после первого run), без bypass для админов (`bypass_actors` пустой). Если `gh` не авторизован или API отклоняет (403 и т.п.) — **остановиться и сообщить человеку** (нужны права admin/rulesets); не считать задачу выполненной по совету «только клик в UI» без того, кто выполняет эквивалент. Проверка: `gh api` показывает active ruleset на `main` с required check и без admin bypass; validator позже подтверждает тем же способом. Vitest-сценария на live merge нет.
+- [x] 6.1 During apply the developer creates (or updates) an active repository ruleset on `main` through `gh api`: the required status check is the check from the workflow (`checks` / the name confirmed after the first run), with no bypass for admins (`bypass_actors` empty). If `gh` is not authorized or the API rejects the call (403 and similar) — **stop and tell the person** (admin/ruleset rights are required); do not treat the task as done on the advice of "just click in the UI" without someone carrying out the equivalent. Check: `gh api` shows an active ruleset on `main` with the required check and no admin bypass; the validator later confirms the same way. There is no Vitest scenario for a live merge.

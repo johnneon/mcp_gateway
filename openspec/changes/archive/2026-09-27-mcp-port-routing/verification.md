@@ -4,10 +4,10 @@
 blockers: 0
 
 ## Spec
-- GET /health на порту MCP без аутентификации: met
-- /mcp на порту MCP возвращает 501: met
-- Чужой путь на порту MCP — 404: met
-- Порт admin не обслуживает /mcp: met
+- GET /health on the MCP port without authentication: met
+- /mcp on the MCP port returns 501: met
+- A foreign path on the MCP port is 404: met
+- The admin port does not serve /mcp: met
 
 ## Checks
 - tests: passed — 53 server + 2 web tests, including 13 mcp-port-routing scenarios
@@ -21,19 +21,19 @@ blockers: 0
 - note: tree was clean on `change/mcp-port-routing`; `mcp-gateway-spec.md` and `openspec/specs/` unchanged; no secrets in the branch diff
 
 ## E2E
-- GET /health без Authorization: passed — MCP `127.0.0.1:18765` returned 200, `application/json`, body `{"status":"ok"}`
-- GET /health с Authorization не меняет ответ: passed — same 200 JSON body; bearer absent from body
-- GET /health с query string: passed — `GET /health?x=1` returned 200 `{"status":"ok"}`
-- GET /mcp — 501 без секретов: passed — status 501, body `Not Implemented`, no canaries
-- POST /mcp — 501 без секретов: passed — status 501, body `Not Implemented`
-- Неизвестный путь — 404: passed — `GET /unknown` status 404, body `Not Found`
+- GET /health without Authorization: passed — MCP `127.0.0.1:18765` returned 200, `application/json`, body `{"status":"ok"}`
+- GET /health with Authorization does not change the response: passed — same 200 JSON body; bearer absent from body
+- GET /health with a query string: passed — `GET /health?x=1` returned 200 `{"status":"ok"}`
+- GET /mcp — 501 without secrets: passed — status 501, body `Not Implemented`, no canaries
+- POST /mcp — 501 without secrets: passed — status 501, body `Not Implemented`
+- Unknown path — 404: passed — `GET /unknown` status 404, body `Not Found`
 - POST /health — 404: passed — status 404, body `Not Found`
 - PUT /health — 404: passed — status 404, body `Not Found`
 - DELETE /health — 404: passed — status 404, body `Not Found`
 - GET /health/ — 404: passed — status 404, body `Not Found`
-- GET /mcp на admin — 404 до статики: passed — admin `127.0.0.1:18766/mcp` HTTP 404, body `Not Found` (Playwright and fetch)
-- POST /mcp на admin — 404: passed — status 404, body `Not Found`
-- GET / на admin по-прежнему HTML: passed — Playwright showed heading "MCP Gateway" and "Admin shell"; HTTP 200 HTML shell
+- GET /mcp on admin — 404 before static files: passed — admin `127.0.0.1:18766/mcp` HTTP 404, body `Not Found` (Playwright and fetch)
+- POST /mcp on admin — 404: passed — status 404, body `Not Found`
+- GET / on admin still returns HTML: passed — Playwright showed heading "MCP Gateway" and "Admin shell"; HTTP 200 HTML shell
 
 ## Leaks
 - MCP /health, /mcp, /unknown, /health method variants: clean

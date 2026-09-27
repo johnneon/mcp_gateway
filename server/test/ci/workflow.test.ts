@@ -122,8 +122,8 @@ function findNodeVersion(workflow: WorkflowFile): string | undefined {
   return undefined;
 }
 
-describe('pull-request-checks: Workflow на pull_request в main', () => {
-  it('Workflow объявляет Node 22 и все проверки', () => {
+describe('pull-request-checks: Workflow on pull_request into main', () => {
+  it('Workflow declares Node 22 and every check', () => {
     const workflow = parseWorkflow(readFileSync(workflowPath, 'utf8'));
 
     expect(workflow.pullRequestBranches).toContain('main');

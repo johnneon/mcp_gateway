@@ -2,40 +2,40 @@
 
 ## Why
 
-После каркаса процесса слияние в `main` ничем не защищено: на GitHub нет обязательных проверок, а локально нет единого lint/format-контракта. Этап 2 дорожной карты (`docs/roadmap.md`) и расширение человека закрывают этот зазор до следующих продуктовых изменений.
+After the process skeleton, merging into `main` is unprotected: GitHub has no required checks, and locally there is no single lint/format contract. Stage 2 of the former roadmap (`docs/roadmap.md`) and the person's extension close that gap before the next product changes.
 
 ## What Changes
 
-- На каждый pull request в `main` GitHub Actions на Node.js 22 запускает корневые `typecheck`, `lint`, `format:check`, `test` и `build` для workspaces `server` и `web`.
-- Repository ruleset (или эквивалент) делает этот status check обязательным для слияния в `main` без обхода администратором; создаётся через `gh api` на apply, не лежит в git.
-- ESLint 9 flat config с typescript-eslint type-checked strict (включая запрет explicit `any` и unsafe-any семейство), для `web` — react-hooks recommended; в конце цепочки `eslint-config-prettier`. Корневой скрипт `lint`. Существующий скелет доводится до lint-clean в apply.
-- Prettier: корневые `format` и `format:check` для TS/TSX/CSS/JSON под `server/` и `web/`, workflow YAML и корневых конфигов, которыми владеет Prettier. Markdown под `docs/`, `openspec/` и `mcp-gateway-spec.md` не переформатируется.
-- Скиллы и агенты (`backend`, `frontend`, `developer`, `validator`, `code-review`, `docs/workflow.md`, guidance apply в `openspec/config.yaml`) узнают lint/format check и правило «no explicit any».
+- On every pull request into `main`, GitHub Actions on Node.js 22 runs the root `typecheck`, `lint`, `format:check`, `test`, and `build` for the `server` and `web` workspaces.
+- A repository ruleset (or equivalent) makes that status check required to merge into `main`, with no administrator bypass. It is created through `gh api` during apply and is not stored in git.
+- ESLint 9 flat config with typescript-eslint type-checked strict (including a ban on explicit `any` and the unsafe-any family); for `web`, react-hooks recommended; `eslint-config-prettier` last in the chain. Root script `lint`. The existing skeleton is brought to lint-clean during apply.
+- Prettier: root `format` and `format:check` for TS/TSX/CSS/JSON under `server/` and `web/`, workflow YAML, and root configs that Prettier owns. Markdown under `docs/`, `openspec/`, and `mcp-gateway-spec.md` is not reformatted.
+- Skills and agents (`backend`, `frontend`, `developer`, `validator`, `code-review`, `docs/workflow.md`, apply guidance in `openspec/config.yaml`) learn the lint/format check and the "no explicit any" rule.
 
-Расширение относительно текста этапа 2 в roadmap: ESLint, Prettier, обновление агентов/скиллов и явный план ruleset через `gh` (не только workflow-файл).
+Extension beyond the stage 2 roadmap text: ESLint, Prettier, agent/skill updates, and an explicit ruleset plan through `gh` (not only the workflow file).
 
 ## Non-goals
 
-- Deploy / CD, релизы, Dependabot, пороги coverage, обязательные pre-commit/Husky (CI — единственный обязательный gate).
-- Переформатирование Markdown в `docs/`, `openspec/` и `mcp-gateway-spec.md`.
-- Поведение продукта шлюза (маршруты, коннекторы, UI).
-- Правки `mcp-gateway-spec.md` и `openspec/specs/` вне archive этого изменения.
-- Правки сгенерированных скиллов `openspec-*`.
+- Deploy / CD, releases, Dependabot, coverage thresholds, and required pre-commit/Husky (CI is the only required gate).
+- Reformatting Markdown in `docs/`, `openspec/`, and `mcp-gateway-spec.md`.
+- Gateway product behavior (routes, connectors, UI).
+- Edits to `mcp-gateway-spec.md` and `openspec/specs/` outside this change's archive.
+- Edits to the generated `openspec-*` skills.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `pull-request-checks`: контракт репозиторных проверок — workflow на PR в `main` (Node 22, typecheck/lint/format check/test/build), отказ ESLint на explicit `any` в `server` и `web`, поведение `format:check` на отформатированном и сломанном фрагменте. Обязательный ruleset на GitHub — в design/tasks, не в delta-сценариях.
+- `pull-request-checks`: the repository check contract — a workflow on a PR into `main` (Node 22, typecheck/lint/format check/test/build), ESLint rejecting explicit `any` in `server` and `web`, and `format:check` behavior on a formatted snippet and a broken one. The required GitHub ruleset is in design/tasks, not in delta scenarios.
 
 ### Modified Capabilities
 
-- (нет — `process-startup` не меняется; стартовое поведение процесса то же)
+- (none — `process-startup` does not change; process startup behavior stays the same)
 
 ## Impact
 
-- Новый `.github/workflows/*.yml`, корневые зависимости и скрипты ESLint/Prettier, конфиги ignore.
-- Правки скелета `server/` / `web/` только чтобы пройти lint/format (apply).
-- Автотесты Vitest на содержимое workflow и на контракт ESLint/Prettier без вызовов GitHub API.
-- Обновление проектных скиллов/агентов и `docs/workflow.md` / `openspec/config.yaml` (apply guidance).
-- Вне git: repository ruleset на GitHub (создаёт developer через `gh api` на apply; validator подтверждает через `gh`).
+- A new `.github/workflows/*.yml`, root ESLint/Prettier dependencies and scripts, and ignore configs.
+- Skeleton edits in `server/` / `web/` only so lint/format pass (apply).
+- Vitest tests of the workflow contents and of the ESLint/Prettier contract, with no GitHub API calls.
+- Updates to project skills/agents and `docs/workflow.md` / `openspec/config.yaml` (apply guidance).
+- Outside git: a repository ruleset on GitHub (the developer creates it through `gh api` during apply; the validator confirms it through `gh`).

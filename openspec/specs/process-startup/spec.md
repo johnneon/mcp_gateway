@@ -2,153 +2,153 @@
 
 ## Purpose
 
-Задаёт старт одного Node-процесса шлюза: проверка переменных окружения без утечки значений и два HTTP-слушателя (MCP и admin), включая раздачу production-сборки интерфейса.
+Defines startup of the single Node process: environment checks that do not leak values, and two HTTP listeners (MCP and admin), including serving the production build of the UI.
 
 ## Requirements
 
-### Requirement: Обязательные переменные окружения при старте
+### Requirement: Required environment variables at startup
 
-Процесс SHALL требовать при старте переменные `MCP_HOST`, `MCP_PORT`, `ADMIN_PORT`, `DATA_DIR` и `ENCRYPTION_KEY`. Если хотя бы одна из них отсутствует или пуста, процесс SHALL завершиться с ненулевым кодом выхода и SHALL написать в stdout или stderr имя недостающей переменной. Сообщение SHALL NOT содержать значение любой переменной окружения, в том числе значение `ENCRYPTION_KEY` или иной секретный образец из окружения теста.
+The process SHALL require `MCP_HOST`, `MCP_PORT`, `ADMIN_PORT`, `DATA_DIR`, and `ENCRYPTION_KEY` at startup. If any one of them is missing or empty, the process SHALL exit with a non-zero status and SHALL write the missing variable's name to stdout or stderr. The message SHALL NOT contain the value of any environment variable, including `ENCRYPTION_KEY` or any other secret sample from the test environment.
 
-#### Scenario: Нет MCP_HOST
+#### Scenario: Missing MCP_HOST
 
-- **GIVEN** в окружении заданы все обязательные переменные, кроме `MCP_HOST`
-- **WHEN** процесс запускается
-- **THEN** код выхода ненулевой
-- **AND** stdout или stderr содержит строку `MCP_HOST`
-- **AND** stdout и stderr не содержат значения остальных заданных переменных
+- **GIVEN** every required variable is set except `MCP_HOST`
+- **WHEN** the process starts
+- **THEN** the exit code is non-zero
+- **AND** stdout or stderr contains the string `MCP_HOST`
+- **AND** stdout and stderr do not contain the values of the other variables that were set
 
-#### Scenario: Нет MCP_PORT
+#### Scenario: Missing MCP_PORT
 
-- **GIVEN** в окружении заданы все обязательные переменные, кроме `MCP_PORT`
-- **WHEN** процесс запускается
-- **THEN** код выхода ненулевой
-- **AND** stdout или stderr содержит строку `MCP_PORT`
-- **AND** stdout и stderr не содержат значения остальных заданных переменных
+- **GIVEN** every required variable is set except `MCP_PORT`
+- **WHEN** the process starts
+- **THEN** the exit code is non-zero
+- **AND** stdout or stderr contains the string `MCP_PORT`
+- **AND** stdout and stderr do not contain the values of the other variables that were set
 
-#### Scenario: Нет ADMIN_PORT
+#### Scenario: Missing ADMIN_PORT
 
-- **GIVEN** в окружении заданы все обязательные переменные, кроме `ADMIN_PORT`
-- **WHEN** процесс запускается
-- **THEN** код выхода ненулевой
-- **AND** stdout или stderr содержит строку `ADMIN_PORT`
-- **AND** stdout и stderr не содержат значения остальных заданных переменных
+- **GIVEN** every required variable is set except `ADMIN_PORT`
+- **WHEN** the process starts
+- **THEN** the exit code is non-zero
+- **AND** stdout or stderr contains the string `ADMIN_PORT`
+- **AND** stdout and stderr do not contain the values of the other variables that were set
 
-#### Scenario: Нет DATA_DIR
+#### Scenario: Missing DATA_DIR
 
-- **GIVEN** в окружении заданы все обязательные переменные, кроме `DATA_DIR`
-- **WHEN** процесс запускается
-- **THEN** код выхода ненулевой
-- **AND** stdout или stderr содержит строку `DATA_DIR`
-- **AND** stdout и stderr не содержат значения остальных заданных переменных
+- **GIVEN** every required variable is set except `DATA_DIR`
+- **WHEN** the process starts
+- **THEN** the exit code is non-zero
+- **AND** stdout or stderr contains the string `DATA_DIR`
+- **AND** stdout and stderr do not contain the values of the other variables that were set
 
-#### Scenario: Нет ENCRYPTION_KEY
+#### Scenario: Missing ENCRYPTION_KEY
 
-- **GIVEN** в окружении заданы все обязательные переменные и образец значения `ENCRYPTION_KEY` известен тесту, но сама `ENCRYPTION_KEY` не задана
-- **WHEN** процесс запускается
-- **THEN** код выхода ненулевой
-- **AND** stdout или stderr содержит строку `ENCRYPTION_KEY`
-- **AND** stdout и stderr не содержат образец секретного значения, использованный в других сценариях этого требования
+- **GIVEN** every required variable is set and a sample `ENCRYPTION_KEY` value is known to the test, but `ENCRYPTION_KEY` itself is unset
+- **WHEN** the process starts
+- **THEN** the exit code is non-zero
+- **AND** stdout or stderr contains the string `ENCRYPTION_KEY`
+- **AND** stdout and stderr do not contain the secret sample used in the other scenarios of this requirement
 
-### Requirement: ADMIN_HOST по умолчанию 127.0.0.1
+### Requirement: ADMIN_HOST defaults to 127.0.0.1
 
-Если `ADMIN_HOST` отсутствует или пуста, процесс SHALL считать её равной `127.0.0.1` и SHALL NOT завершаться из‑за отсутствия `ADMIN_HOST`. Если `ADMIN_HOST` задана непустым значением, процесс SHALL слушать интерфейс на этом адресе.
+If `ADMIN_HOST` is missing or empty, the process SHALL treat it as `127.0.0.1` and SHALL NOT exit because `ADMIN_HOST` is absent. If `ADMIN_HOST` is set to a non-empty value, the process SHALL listen for the UI on that address.
 
-#### Scenario: ADMIN_HOST не задана
+#### Scenario: ADMIN_HOST is unset
 
-- **GIVEN** заданы `MCP_HOST`, `MCP_PORT`, `ADMIN_PORT`, `DATA_DIR` и `ENCRYPTION_KEY`, а `ADMIN_HOST` не задана
-- **WHEN** процесс запускается
-- **THEN** код выхода нулевой (процесс остаётся работать)
-- **AND** слушатель admin принимает соединение на `127.0.0.1` и порту из `ADMIN_PORT`
+- **GIVEN** `MCP_HOST`, `MCP_PORT`, `ADMIN_PORT`, `DATA_DIR`, and `ENCRYPTION_KEY` are set, and `ADMIN_HOST` is unset
+- **WHEN** the process starts
+- **THEN** the exit code is zero (the process stays up)
+- **AND** the admin listener accepts a connection on `127.0.0.1` and the port from `ADMIN_PORT`
 
-#### Scenario: ADMIN_HOST задана явно
+#### Scenario: ADMIN_HOST is set explicitly
 
-- **GIVEN** заданы все переменные, включая непустой `ADMIN_HOST` (например `127.0.0.1`)
-- **WHEN** процесс запускается
-- **THEN** слушатель admin принимает соединение на хосте из `ADMIN_HOST` и порту из `ADMIN_PORT`
+- **GIVEN** every variable is set, including a non-empty `ADMIN_HOST` (for example `127.0.0.1`)
+- **WHEN** the process starts
+- **THEN** the admin listener accepts a connection on the host from `ADMIN_HOST` and the port from `ADMIN_PORT`
 
-### Requirement: ENCRYPTION_KEY — base64 ровно 32 байта
+### Requirement: ENCRYPTION_KEY is base64 of exactly 32 bytes
 
-При разборе окружения процесс SHALL принимать `ENCRYPTION_KEY` только как стандартный base64, который декодируется ровно в 32 байта (ключ AES-256). Если строка отсутствует, пуста, содержит недопустимый base64-алфавит или декодированная длина не равна 32, процесс SHALL завершиться с кодом выхода 1 и SHALL написать в stderr имя `ENCRYPTION_KEY` без значения. Успешный разбор SHALL передавать дальше 32-байтовый ключ, а не исходную строку окружения. Существующие автотесты старта, которые ранее подставляли произвольную plaintext-строку в `ENCRYPTION_KEY`, SHALL использовать валидный 32-байтный base64-ключ; проверка утечки по-прежнему SHALL утверждать, что значение ключа (строка окружения) отсутствует в stdout и stderr.
+When parsing the environment, the process SHALL accept `ENCRYPTION_KEY` only as standard base64 that decodes to exactly 32 bytes (an AES-256 key). If the string is missing, empty, uses an alphabet outside standard base64, or decodes to a length other than 32, the process SHALL exit with status 1 and SHALL write the name `ENCRYPTION_KEY` to stderr without the value. A successful parse SHALL pass on the 32-byte key, not the original environment string. Existing startup tests that used to place an arbitrary plaintext string in `ENCRYPTION_KEY` SHALL use a valid 32-byte base64 key; the leak check SHALL still assert that the key value (the environment string) is absent from stdout and stderr.
 
-#### Scenario: Неверная длина после base64 — имя ENCRYPTION_KEY
+#### Scenario: Wrong length after base64 — the name ENCRYPTION_KEY
 
-- **GIVEN** заданы все обязательные переменные, а `ENCRYPTION_KEY` — валидный base64, декодирующийся не в 32 байта; значение этой строки известно тесту
-- **WHEN** процесс запускается (или вызывается разбор окружения в том же контракте ошибок старта)
-- **THEN** код выхода ненулевой (или разбор завершается отказом старта)
-- **AND** stderr (или канал ошибки старта) содержит строку `ENCRYPTION_KEY`
-- **AND** stderr и stdout не содержат значения подставленного `ENCRYPTION_KEY`
+- **GIVEN** every required variable is set, and `ENCRYPTION_KEY` is valid base64 that does not decode to 32 bytes; the test knows that string
+- **WHEN** the process starts (or environment parsing is invoked under the same startup-error contract)
+- **THEN** the exit code is non-zero (or parsing fails startup)
+- **AND** stderr (or the startup error channel) contains the string `ENCRYPTION_KEY`
+- **AND** stderr and stdout do not contain the supplied `ENCRYPTION_KEY` value
 
-#### Scenario: Недопустимый base64 — имя ENCRYPTION_KEY
+#### Scenario: Invalid base64 — the name ENCRYPTION_KEY
 
-- **GIVEN** заданы все обязательные переменные, а `ENCRYPTION_KEY` содержит символы вне стандартного base64; значение известно тесту
-- **WHEN** процесс запускается (или вызывается разбор окружения в том же контракте)
-- **THEN** код выхода ненулевой (или разбор завершается отказом старта)
-- **AND** stderr (или канал ошибки старта) содержит строку `ENCRYPTION_KEY`
-- **AND** stderr и stdout не содержат значения подставленного `ENCRYPTION_KEY`
+- **GIVEN** every required variable is set, and `ENCRYPTION_KEY` contains characters outside standard base64; the test knows that value
+- **WHEN** the process starts (or environment parsing is invoked under the same contract)
+- **THEN** the exit code is non-zero (or parsing fails startup)
+- **AND** stderr (or the startup error channel) contains the string `ENCRYPTION_KEY`
+- **AND** stderr and stdout do not contain the supplied `ENCRYPTION_KEY` value
 
-#### Scenario: Фикстуры старта используют валидный ключ без утечки
+#### Scenario: Startup fixtures use a valid key and do not leak it
 
-- **GIVEN** сценарий успешного старта или проверки отсутствия переменной из `process-startup` подставляет `ENCRYPTION_KEY` как валидный base64 ровно 32 байт после декодирования
-- **WHEN** процесс проходит свой сценарий
-- **THEN** значение этой строки `ENCRYPTION_KEY` отсутствует в stdout и stderr
+- **GIVEN** a successful-start scenario, or a missing-variable check from `process-startup`, supplies `ENCRYPTION_KEY` as valid base64 of exactly 32 bytes after decoding
+- **WHEN** the process runs that scenario
+- **THEN** that `ENCRYPTION_KEY` string is absent from stdout and stderr
 
-### Requirement: Старт с валидным или отсутствующим файлом состояния
+### Requirement: Startup with a valid or missing state file
 
-Если обязательные переменные заданы корректно и файл `DATA_DIR/state.bin` отсутствует либо успешно расшифровывается текущим ключом в JSON-объект, процесс SHALL завершить загрузку хранилища и SHALL открыть оба HTTP-слушателя как в требовании о двух слушателях. `DATA_DIR` SHALL оставаться обязательной переменной; для работающего шлюза она указывает на проектный каталог `data`, а автотесты MAY использовать подкаталог внутри `data/`.
+If the required variables are valid and `DATA_DIR/state.bin` is missing or decrypts with the current key into a JSON object, the process SHALL finish loading the store and SHALL open both HTTP listeners as in the two-listener requirement. `DATA_DIR` SHALL stay required; for a running gateway it points at the project `data` directory, and automated tests MAY use a subdirectory inside `data/`.
 
-#### Scenario: Нет state.bin — процесс слушает
+#### Scenario: No state.bin — the process listens
 
-- **GIVEN** заданы валидные обязательные переменные, включая валидный `ENCRYPTION_KEY`, каталог `DATA_DIR` существует и в нём нет `state.bin`
-- **WHEN** процесс запускается
-- **THEN** оба TCP-слушателя принимают соединение
-- **AND** файл `state.bin` не создан одним лишь фактом старта
+- **GIVEN** the required variables are valid, including a valid `ENCRYPTION_KEY`, the `DATA_DIR` directory exists, and it has no `state.bin`
+- **WHEN** the process starts
+- **THEN** both TCP listeners accept a connection
+- **AND** `state.bin` is not created merely because the process started
 
-#### Scenario: Валидный state.bin — процесс слушает
+#### Scenario: Valid state.bin — the process listens
 
-- **GIVEN** заданы валидные обязательные переменные и в `DATA_DIR` лежит `state.bin`, записанный тем же ключом с JSON-объектом
-- **WHEN** процесс запускается
-- **THEN** оба TCP-слушателя принимают соединение
+- **GIVEN** the required variables are valid and `DATA_DIR` contains a `state.bin` written with the same key and a JSON object
+- **WHEN** the process starts
+- **THEN** both TCP listeners accept a connection
 
-### Requirement: Отказ хранилища не открывает порты
+### Requirement: A store failure does not open the ports
 
-Если при старте открытие хранилища завершается ошибкой чужого ключа или битого файла (тексты `state file cannot be decrypted` или `state file is corrupt`), процесс SHALL завершиться с кодом выхода 1 до открытия HTTP-слушателей. stdout и stderr SHALL NOT содержать значение `ENCRYPTION_KEY` и SHALL NOT содержать содержимое файла состояния.
+If opening the store at startup fails because of a wrong key or a corrupt file (the texts `state file cannot be decrypted` or `state file is corrupt`), the process SHALL exit with status 1 before opening the HTTP listeners. stdout and stderr SHALL NOT contain the `ENCRYPTION_KEY` value and SHALL NOT contain the state file contents.
 
-#### Scenario: Чужой ключ — порты закрыты
+#### Scenario: Wrong key — ports stay closed
 
-- **GIVEN** в `DATA_DIR` лежит `state.bin` от другого ключа; текущий `ENCRYPTION_KEY` валиден по формату и известен тесту; canary из документа известен тесту
-- **WHEN** процесс запускается
-- **THEN** код выхода равен 1
-- **AND** ни `MCP_PORT`, ни `ADMIN_PORT` не принимают TCP-соединение
-- **AND** stdout и stderr содержат `state file cannot be decrypted` и не содержат значения ключа и canary
+- **GIVEN** `DATA_DIR` contains a `state.bin` from another key; the current `ENCRYPTION_KEY` is valid in format and known to the test; a canary from the document is known to the test
+- **WHEN** the process starts
+- **THEN** the exit code is 1
+- **AND** neither `MCP_PORT` nor `ADMIN_PORT` accepts a TCP connection
+- **AND** stdout and stderr contain `state file cannot be decrypted` and do not contain the key value or the canary
 
-#### Scenario: Битый файл — порты закрыты
+#### Scenario: Corrupt file — ports stay closed
 
-- **GIVEN** в `DATA_DIR` лежит усечённый или иначе битый `state.bin` (ошибка формата/JSON, не auth tag); `ENCRYPTION_KEY` валиден и известен тесту
-- **WHEN** процесс запускается
-- **THEN** код выхода равен 1
-- **AND** ни `MCP_PORT`, ни `ADMIN_PORT` не принимают TCP-соединение
-- **AND** stdout и stderr содержат `state file is corrupt` и не содержат значения ключа и байт/plaintext содержимого файла
+- **GIVEN** `DATA_DIR` contains a truncated or otherwise corrupt `state.bin` (a format or JSON error, not an auth-tag failure); `ENCRYPTION_KEY` is valid and known to the test
+- **WHEN** the process starts
+- **THEN** the exit code is 1
+- **AND** neither `MCP_PORT` nor `ADMIN_PORT` accepts a TCP connection
+- **AND** stdout and stderr contain `state file is corrupt` and do not contain the key value or the file's bytes or plaintext
 
-### Requirement: Два HTTP-слушателя при полном окружении
+### Requirement: Two HTTP listeners with a complete environment
 
-При заданных обязательных переменных (и при необходимости `ADMIN_HOST`) и после успешной загрузки зашифрованного хранилища процесс SHALL открыть два TCP-слушателя: один на `MCP_HOST`:`MCP_PORT`, второй на эффективном admin-хосте и `ADMIN_PORT`. Оба SHALL принимать входящее TCP-соединение. Значения `DATA_DIR` и `ENCRYPTION_KEY` SHALL NOT попадать в stdout или stderr при успешном старте.
+When the required variables are set (and `ADMIN_HOST` when needed) and the encrypted store has loaded, the process SHALL open two TCP listeners: one on `MCP_HOST`:`MCP_PORT`, the other on the effective admin host and `ADMIN_PORT`. Both SHALL accept an incoming TCP connection. The values of `DATA_DIR` and `ENCRYPTION_KEY` SHALL NOT appear in stdout or stderr on a successful start.
 
-#### Scenario: Оба слушателя принимают соединение
+#### Scenario: Both listeners accept a connection
 
-- **GIVEN** заданы `MCP_HOST`, `MCP_PORT`, `ADMIN_HOST`, `ADMIN_PORT`, `DATA_DIR` и валидный base64 `ENCRYPTION_KEY` (ровно 32 байта после декодирования) с тестовыми адресами loopback и свободными портами; файл состояния отсутствует или валиден для этого ключа
-- **WHEN** процесс запускается
-- **THEN** TCP-клиент успешно соединяется с `MCP_HOST`:`MCP_PORT`
-- **AND** TCP-клиент успешно соединяется с `ADMIN_HOST`:`ADMIN_PORT`
-- **AND** stdout и stderr не содержат значения `ENCRYPTION_KEY` и `DATA_DIR`
+- **GIVEN** `MCP_HOST`, `MCP_PORT`, `ADMIN_HOST`, `ADMIN_PORT`, `DATA_DIR`, and a valid base64 `ENCRYPTION_KEY` (exactly 32 bytes after decoding) are set, with loopback test addresses and free ports; the state file is missing or valid for this key
+- **WHEN** the process starts
+- **THEN** a TCP client connects to `MCP_HOST`:`MCP_PORT`
+- **AND** a TCP client connects to `ADMIN_HOST`:`ADMIN_PORT`
+- **AND** stdout and stderr do not contain the `ENCRYPTION_KEY` or `DATA_DIR` values
 
-### Requirement: Admin раздаёт production-сборку web
+### Requirement: Admin serves the web production build
 
-Слушатель admin SHALL отдавать статическую production-сборку пакета `web` так, чтобы HTTP GET корневого пути возвращал успешный ответ с HTML приложения-оболочки. Оболочка SHALL быть на английском. Экраны Configurations и Connectors в этом изменении не требуются.
+The admin listener SHALL serve the static production build of the `web` package so that HTTP GET of the root path returns a successful response with the shell application's HTML. The shell SHALL be in English. The Configurations and Connectors screens are not required in this change.
 
-#### Scenario: Корень admin отдаёт HTML оболочки
+#### Scenario: Admin root returns the shell HTML
 
-- **GIVEN** процесс запущен с полным набором переменных и собранным пакетом `web`
-- **WHEN** клиент выполняет HTTP GET `/` на admin-хосте и `ADMIN_PORT`
-- **THEN** ответ имеет успешный статус
-- **AND** тело ответа содержит HTML оболочку admin UI
+- **GIVEN** the process is running with the full set of variables and a built `web` package
+- **WHEN** the client performs HTTP GET `/` on the admin host and `ADMIN_PORT`
+- **THEN** the response status is successful
+- **AND** the response body contains the admin UI shell HTML

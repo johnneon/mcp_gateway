@@ -220,8 +220,8 @@ afterEach(async () => {
   }
 });
 
-describe('process-startup: Два HTTP-слушателя при полном окружении', () => {
-  it('Оба слушателя принимают соединение', async () => {
+describe('process-startup: Two HTTP listeners with a complete environment', () => {
+  it('Both listeners accept a connection', async () => {
     const dataDir = await makeDataDir();
     const proc = await startGateway({ ADMIN_HOST: '127.0.0.1' }, dataDir);
 
@@ -234,8 +234,8 @@ describe('process-startup: Два HTTP-слушателя при полном о
   });
 });
 
-describe('process-startup: ENCRYPTION_KEY — base64 ровно 32 байта', () => {
-  it('Фикстуры старта используют валидный ключ без утечки', async () => {
+describe('process-startup: ENCRYPTION_KEY is base64 of exactly 32 bytes', () => {
+  it('Startup fixtures use a valid key and do not leak it', async () => {
     const dataDir = await makeDataDir();
     const proc = await startGateway({ ADMIN_HOST: '127.0.0.1' }, dataDir);
     const combined = `${proc.stdout}${proc.stderr}`;
@@ -244,21 +244,21 @@ describe('process-startup: ENCRYPTION_KEY — base64 ровно 32 байта', 
   });
 });
 
-describe('process-startup: ADMIN_HOST по умолчанию 127.0.0.1', () => {
-  it('ADMIN_HOST не задана — listens on 127.0.0.1', async () => {
+describe('process-startup: ADMIN_HOST defaults to 127.0.0.1', () => {
+  it('ADMIN_HOST is unset — listens on 127.0.0.1', async () => {
     const proc = await startGateway({ ADMIN_HOST: undefined });
     expect(await canConnect('127.0.0.1', proc.adminPort)).toBe(true);
     expect(proc.child.exitCode).toBeNull();
   });
 
-  it('ADMIN_HOST задана явно — listens on that host', async () => {
+  it('ADMIN_HOST is set explicitly — listens on that host', async () => {
     const proc = await startGateway({ ADMIN_HOST: '127.0.0.1' });
     expect(await canConnect('127.0.0.1', proc.adminPort)).toBe(true);
   });
 });
 
-describe('process-startup: Admin раздаёт production-сборку web', () => {
-  it('Корень admin отдаёт HTML оболочки', async () => {
+describe('process-startup: Admin serves the web production build', () => {
+  it('Admin root returns the shell HTML', async () => {
     const proc = await startGateway({ ADMIN_HOST: '127.0.0.1' });
     const response = await fetch(`http://${proc.adminHost}:${String(proc.adminPort)}/`);
     expect(response.ok).toBe(true);
@@ -268,8 +268,8 @@ describe('process-startup: Admin раздаёт production-сборку web', ()
   });
 });
 
-describe('process-startup: Старт с валидным или отсутствующим файлом состояния', () => {
-  it('Нет state.bin — процесс слушает', async () => {
+describe('process-startup: Startup with a valid or missing state file', () => {
+  it('No state.bin — the process listens', async () => {
     const dataDir = await makeDataDir();
     const statePath = path.join(dataDir, 'state.bin');
     const proc = await startGateway({ ADMIN_HOST: '127.0.0.1' }, dataDir);
@@ -278,7 +278,7 @@ describe('process-startup: Старт с валидным или отсутст�
     await expect(access(statePath)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('Валидный state.bin — процесс слушает', async () => {
+  it('Valid state.bin — the process listens', async () => {
     const dataDir = await makeDataDir();
     await writeFile(
       path.join(dataDir, 'state.bin'),
@@ -290,8 +290,8 @@ describe('process-startup: Старт с валидным или отсутст�
   });
 });
 
-describe('process-startup: Отказ хранилища не открывает порты', () => {
-  it('Чужой ключ — порты закрыты', async () => {
+describe('process-startup: A store failure does not open the ports', () => {
+  it('Wrong key — ports stay closed', async () => {
     const dataDir = await makeDataDir();
     await writeFile(
       path.join(dataDir, 'state.bin'),
@@ -320,7 +320,7 @@ describe('process-startup: Отказ хранилища не открывает
     expect(combined).not.toContain(CANARY);
   });
 
-  it('Битый файл — порты закрыты', async () => {
+  it('Corrupt file — ports stay closed', async () => {
     const dataDir = await makeDataDir();
     const truncated = Buffer.from([1, 2, 3, 4, 5]);
     await writeFile(path.join(dataDir, 'state.bin'), truncated);

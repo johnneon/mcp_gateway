@@ -2,39 +2,39 @@
 
 ## Why
 
-В репозитории есть только корневой `package.json` с OpenSpec и нет запускаемого приложения. Без каркаса workspaces, объявленных зависимостей и процесса на двух адресах нельзя реализовать эпик «процесс и хранилище» и проверять последующие изменения.
+The repository has only a root `package.json` with OpenSpec and no runnable application. Without a workspace skeleton, declared dependencies, and a process on two addresses, the process-and-store epic and later changes cannot be built or checked.
 
 ## What Changes
 
-- Репозиторий становится npm-workspaces приложением: пакеты `server/` и `web/`, корневые скрипты typecheck, test и build.
-- В `server/` появляется точка входа: разбор окружения, два Express-приложения (MCP и admin) и `listen` на обоих адресах.
-- Имена переменных окружения фиксируются: `MCP_HOST`, `MCP_PORT`, `ADMIN_HOST`, `ADMIN_PORT`, `DATA_DIR`, `ENCRYPTION_KEY`. При отсутствии обязательной переменной процесс завершается с ненулевым кодом и печатает только имя переменной.
-- `ADMIN_HOST` при отсутствии значения по умолчанию `127.0.0.1` (как в спецификации); остальные пять переменных обязательны при старте, включая `DATA_DIR` и `ENCRYPTION_KEY` (хранилище в этом изменении не реализуется).
-- В `web/` — минимальный Vite + React + TypeScript shell, чтобы admin-процесс мог раздавать production-сборку.
-- Зависимости из «Стек» и «Сборка репозитория» (`mcp-gateway-spec.md`) объявляются: Express 5, `@modelcontextprotocol/sdk`, zod, Vitest, React, Vite; Radix — только если нужен для shell.
+- The repository becomes an npm-workspaces application: packages `server/` and `web/`, and root scripts for typecheck, test, and build.
+- `server/` gains an entry point: environment parsing, two Express apps (MCP and admin), and `listen` on both addresses.
+- Environment variable names are fixed: `MCP_HOST`, `MCP_PORT`, `ADMIN_HOST`, `ADMIN_PORT`, `DATA_DIR`, `ENCRYPTION_KEY`. If a required variable is missing, the process exits non-zero and prints only the variable name.
+- When `ADMIN_HOST` is unset it defaults to `127.0.0.1` (as in the specification); the other five variables are required at startup, including `DATA_DIR` and `ENCRYPTION_KEY` (this change does not implement the store).
+- `web/` is a minimal Vite + React + TypeScript shell so the admin process can serve the production build.
+- Dependencies from "Stack" and "Repository build" in `mcp-gateway-spec.md` are declared: Express 5, `@modelcontextprotocol/sdk`, zod, Vitest, React, Vite. Radix is added only if the shell needs it.
 
 ## Non-goals
 
-- Зашифрованное JSON-хранилище, запись через временный файл, поведение при ошибке расшифровки (`implementation.md` 1.2).
-- Тело ответа `GET /health` (1.3).
-- Ограничение порта MCP только `/mcp` и `/health`, запрет MCP на admin-порте (1.4).
-- API конфигураций, MCP `tools/list` / `tools/call`, экраны Configurations и Connectors, контракт коннектора, proxy, журнал вызовов.
-- Dockerfile, compose, вход (login) в admin UI.
-- Каталоги `store/`, `configurations/`, `accounts/`, `connectors/`, `mcp/` (маршрутизация инструментов) — в следующих изменениях.
+- The encrypted JSON store, writing through a temp file, and decrypt-error behavior (former `implementation.md` section 1.2).
+- The `GET /health` response body (1.3).
+- Limiting the MCP port to `/mcp` and `/health`, and refusing MCP on the admin port (1.4).
+- The configurations API, MCP `tools/list` / `tools/call`, the Configurations and Connectors screens, the connector contract, proxy, and the call log.
+- Dockerfile, compose, and a login in the admin UI.
+- Directories `store/`, `configurations/`, `accounts/`, `connectors/`, and `mcp/` (tool routing) — later changes.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `process-startup`: разбор обязательных переменных окружения, выход с именем недостающей переменной без значений, два HTTP-слушателя (MCP и admin), значение `ADMIN_HOST` по умолчанию `127.0.0.1`, раздача статики admin-сборки.
+- `process-startup`: parsing required environment variables, exiting with the missing variable's name and no values, two HTTP listeners (MCP and admin), `ADMIN_HOST` defaulting to `127.0.0.1`, and serving the admin build's static files.
 
 ### Modified Capabilities
 
-- (нет — `openspec/specs/` пуст)
+- (none — `openspec/specs/` is empty)
 
 ## Impact
 
-- Корневой `package.json` (workspaces, скрипты), новые пакеты `server/` и `web/`.
-- Новые зависимости runtime и dev (см. design).
-- Точка входа процесса: `server/src/main.ts`; единственное чтение `process.env`.
-- Автотесты сценариев окружения и слушателей на Vitest без внешних сервисов.
+- Root `package.json` (workspaces, scripts) and new packages `server/` and `web/`.
+- New runtime and dev dependencies (see design).
+- Process entry point: `server/src/main.ts`; the only read of `process.env`.
+- Vitest tests of environment and listener scenarios, with no external services.
