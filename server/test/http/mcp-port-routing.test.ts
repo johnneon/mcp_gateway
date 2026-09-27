@@ -38,9 +38,13 @@ function assertNoSecrets(body: string): void {
   }
 }
 
+function mcpApp(): ReturnType<typeof createMcpApp> {
+  return createMcpApp({ store: createMemoryStore() });
+}
+
 describe('mcp-port-routing: GET /health on the MCP port without authentication', () => {
   it('GET /health without Authorization', async () => {
-    const app = createMcpApp();
+    const app = mcpApp();
     const response = await request(app).get('/health');
 
     expect(response.status).toBe(200);
@@ -50,7 +54,7 @@ describe('mcp-port-routing: GET /health on the MCP port without authentication',
   });
 
   it('GET /health with Authorization does not change the response', async () => {
-    const app = createMcpApp();
+    const app = mcpApp();
     const response = await request(app).get('/health').set('Authorization', BEARER);
 
     expect(response.status).toBe(200);
@@ -61,7 +65,7 @@ describe('mcp-port-routing: GET /health on the MCP port without authentication',
   });
 
   it('GET /health with a query string', async () => {
-    const app = createMcpApp();
+    const app = mcpApp();
     const response = await request(app).get('/health?x=1');
 
     expect(response.status).toBe(200);
@@ -69,30 +73,47 @@ describe('mcp-port-routing: GET /health on the MCP port without authentication',
   });
 });
 
-describe('mcp-port-routing: /mcp on the MCP port returns 501', () => {
-  it('GET /mcp — 501 without secrets', async () => {
-    const app = createMcpApp();
+describe('mcp-port-routing: /mcp on the MCP port serves Streamable HTTP after auth', () => {
+  it('GET /mcp — 405 without secrets and without SSE', async () => {
+    const app = mcpApp();
     const response = await request(app).get('/mcp');
 
-    expect(response.status).toBe(501);
+    expect(response.status).toBe(405);
     expect(response.headers['content-type']).toMatch(/text\/plain/);
-    expect(response.text).toBe('Not Implemented');
+    expect(response.text.length).toBeGreaterThan(0);
+    expect(response.text.length).toBeLessThan(100);
+    expect(response.text).toMatch(/^[A-Za-z ]+$/);
+    assertNoSecrets(response.text);
+    expect(response.headers['content-type']).not.toMatch(/text\/event-stream/);
+  });
+
+  it('DELETE /mcp — 405 without secrets', async () => {
+    const app = mcpApp();
+    const response = await request(app).delete('/mcp');
+
+    expect(response.status).toBe(405);
+    expect(response.headers['content-type']).toMatch(/text\/plain/);
+    expect(response.text.length).toBeGreaterThan(0);
+    expect(response.text.length).toBeLessThan(100);
+    expect(response.text).toMatch(/^[A-Za-z ]+$/);
     assertNoSecrets(response.text);
   });
 
-  it('POST /mcp — 501 without secrets', async () => {
-    const app = createMcpApp();
+  it('POST /mcp without Authorization — 401 not 501', async () => {
+    const app = mcpApp();
     const response = await request(app).post('/mcp').send({ anything: true });
 
-    expect(response.status).toBe(501);
-    expect(response.text).toBe('Not Implemented');
+    expect(response.status).toBe(401);
+    expect(response.status).not.toBe(501);
+    expect(response.headers['content-type']).toMatch(/text\/plain/);
+    expect(response.text).toBe('Unauthorized');
     assertNoSecrets(response.text);
   });
 });
 
 describe('mcp-port-routing: A foreign path on the MCP port is 404', () => {
   it('Unknown path — 404', async () => {
-    const app = createMcpApp();
+    const app = mcpApp();
     const response = await request(app).get('/unknown');
 
     expect(response.status).toBe(404);
@@ -102,7 +123,7 @@ describe('mcp-port-routing: A foreign path on the MCP port is 404', () => {
   });
 
   it('POST /health — 404', async () => {
-    const app = createMcpApp();
+    const app = mcpApp();
     const response = await request(app).post('/health');
 
     expect(response.status).toBe(404);
@@ -110,7 +131,7 @@ describe('mcp-port-routing: A foreign path on the MCP port is 404', () => {
   });
 
   it('PUT /health — 404', async () => {
-    const app = createMcpApp();
+    const app = mcpApp();
     const response = await request(app).put('/health');
 
     expect(response.status).toBe(404);
@@ -118,7 +139,7 @@ describe('mcp-port-routing: A foreign path on the MCP port is 404', () => {
   });
 
   it('DELETE /health — 404', async () => {
-    const app = createMcpApp();
+    const app = mcpApp();
     const response = await request(app).delete('/health');
 
     expect(response.status).toBe(404);
@@ -126,7 +147,7 @@ describe('mcp-port-routing: A foreign path on the MCP port is 404', () => {
   });
 
   it('GET /health/ — 404', async () => {
-    const app = createMcpApp();
+    const app = mcpApp();
     const response = await request(app).get('/health/');
 
     expect(response.status).toBe(404);

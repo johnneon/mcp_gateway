@@ -7,7 +7,6 @@ import type { Express } from 'express';
 import request from 'supertest';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createAdminApp } from '../../src/http/createAdminApp.js';
-import { createMcpApp } from '../../src/http/createMcpApp.js';
 import type { JsonObject } from '../../src/store/codec.js';
 import { open, type EncryptedStore } from '../../src/store/store.js';
 import { hashToken } from '../../src/token/token.js';
@@ -449,13 +448,5 @@ describe('configurations-api: Token absent from plaintext on disk after create',
 
     const fileBytes = await readFile(path.join(dataDir, 'state.bin'));
     expect(fileBytes.includes(Buffer.from(created.token, 'utf8'))).toBe(false);
-  });
-});
-
-describe('configurations-api: MCP port stays unchanged', () => {
-  it('GET /mcp remains 501', async () => {
-    const app = createMcpApp();
-    const response = await request(app).get('/mcp');
-    expect(response.status).toBe(501);
   });
 });

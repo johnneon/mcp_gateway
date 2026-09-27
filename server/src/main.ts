@@ -31,7 +31,7 @@ async function start(): Promise<void> {
     throw error;
   }
 
-  const mcpApp = createMcpApp();
+  const mcpApp = createMcpApp({ store });
   const adminApp = createAdminApp({ store });
 
   mcpApp.listen(config.mcpPort, config.mcpHost);

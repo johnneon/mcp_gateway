@@ -2,7 +2,7 @@
 
 ## 1. Wire store into MCP app and method gates
 
-- [ ] 1.1 Change `createMcpApp` to accept the encrypted store (same pattern as `createAdminApp`). In `main.ts`, pass the opened store into `createMcpApp`. On `/mcp`, return 405 with short English `text/plain` for `GET`, `DELETE`, and any method other than `POST` before any Streamable HTTP transport (no SSE). Update existing mcp-port-routing and configurations-api tests that assert `/mcp` → 501 so they expect 405 for GET/DELETE and 401 for unauthenticated POST (body exactly `Unauthorized`). Check: those updated routing tests pass; `npm run typecheck -w server` exits 0.
+- [x] 1.1 Change `createMcpApp` to accept the encrypted store (same pattern as `createAdminApp`). In `main.ts`, pass the opened store into `createMcpApp`. On `/mcp`, return 405 with short English `text/plain` for `GET`, `DELETE`, and any method other than `POST` before any Streamable HTTP transport (no SSE). Update existing mcp-port-routing and configurations-api tests that assert `/mcp` → 501 so they expect 405 for GET/DELETE and 401 for unauthenticated POST (body exactly `Unauthorized`). Check: those updated routing tests pass; `npm run typecheck -w server` exits 0.
 
 ## 2. Bearer auth gate
 
