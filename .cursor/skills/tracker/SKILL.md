@@ -13,9 +13,11 @@ Every change starts from one issue on the project board. One issue is one change
 | Repository | `johnneon/mcp_gateway` |
 | Status | Backlog, Ready, In progress, In review, Done |
 
-`gh` needs the `project` scope; `gh auth status` shows it. If `gh` is not on `PATH`, call `& "$env:ProgramFiles\GitHub CLI\gh.exe"`.
+`gh` needs the `project` scope; `gh auth status` shows it. On Windows, if `gh` is not on `PATH`, call `& "$env:ProgramFiles\GitHub CLI\gh.exe"`. That `ProgramFiles` path is Windows-only; on macOS and Linux use `gh` from `PATH` (`command -v gh`).
 
-Windows PowerShell breaks native arguments that contain double quotes. Parse `--format json` output with `ConvertFrom-Json` instead of `--jq` filters with quotes. Pass every issue, comment, and pull request body through a file:
+Windows PowerShell breaks native arguments that contain double quotes. Parse `--format json` output with `ConvertFrom-Json` instead of `--jq` filters with quotes. Pass every issue, comment, and pull request body through a file.
+
+PowerShell (Windows):
 
 ```powershell
 $bodyFile = New-TemporaryFile
@@ -24,6 +26,17 @@ $bodyFile = New-TemporaryFile
 "@)
 gh <command> --body-file $bodyFile
 Remove-Item $bodyFile
+```
+
+POSIX shell (macOS / Linux): write the body to a temp file (heredoc is fine), pass `--body-file`, then remove the file. Do not use a PowerShell here-string.
+
+```bash
+bodyFile=$(mktemp)
+cat >"$bodyFile" <<'EOF'
+<body>
+EOF
+gh <command> --body-file "$bodyFile"
+rm -f "$bodyFile"
 ```
 
 ## Status by step
@@ -74,10 +87,20 @@ Body:
 **Verification**: <check>
 ```
 
-Then move the card to Backlog with `set-status.ps1 -Status "Backlog"`, set Iteration to the current iteration, and report the issue link to the person.
+Then move the card to Backlog with Status `Backlog`, set Iteration to the current iteration, and report the issue link to the person.
+
+If `powershell` or `pwsh` is on `PATH`, run the `.ps1` scripts:
 
 ```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/skills/tracker/scripts/set-status.ps1 -Issue <n> -Status "Backlog"
 powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/skills/tracker/scripts/set-iteration.ps1 -Issue <n>
+```
+
+Otherwise run the bash scripts:
+
+```bash
+bash .cursor/skills/tracker/scripts/set-status.sh <n> "Backlog"
+bash .cursor/skills/tracker/scripts/set-iteration.sh <n>
 ```
 
 The script selects the iteration whose start date is today or earlier and whose end (start plus duration in days) is after today. If no iteration covers today, it fails with a message. Report that failure to the person. It does not undo the issue.
@@ -91,8 +114,16 @@ Kebab-case, the same string for the change, the branch, and the commit body.
 
 ## Move the card
 
+If `powershell` or `pwsh` is on `PATH`:
+
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/skills/tracker/scripts/set-status.ps1 -Issue <n> -Status "In progress"
+```
+
+Otherwise:
+
+```bash
+bash .cursor/skills/tracker/scripts/set-status.sh <n> "In progress"
 ```
 
 The script resolves the project, the Status field, and the card by name, and fails with a message if the issue is not on the board. A failure to move the card is reported to the person; it does not undo the git step.

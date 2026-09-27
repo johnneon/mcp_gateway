@@ -53,7 +53,7 @@ Issue: #7
 Task: 1.2
 ```
 
-PowerShell:
+PowerShell (Windows):
 
 ```powershell
 git commit -m @"
@@ -63,6 +63,21 @@ Change: <name>
 Issue: #<n>
 Task: <id>
 "@
+```
+
+POSIX shell (macOS / Linux): write the message to a temp or message file (heredoc is fine), then `git commit -F`:
+
+```bash
+msgFile=$(mktemp)
+cat >"$msgFile" <<'EOF'
+<type>: <why>
+
+Change: <name>
+Issue: #<n>
+Task: <id>
+EOF
+git commit -F "$msgFile"
+rm -f "$msgFile"
 ```
 
 Keep double quotes out of the message; Windows PowerShell breaks native arguments that contain them.
@@ -81,8 +96,24 @@ Only after `verification.md` says `blockers: 0` and the change is archived.
 2. `git push -u origin change/<name>`.
 3. Create the pull request into `main`. Write the body to a file as `tracker` shows; an inline `--body` breaks on double quotes in Windows PowerShell.
 
+PowerShell (Windows): write the body with `New-TemporaryFile` / a here-string, then:
+
 ```powershell
 gh pr create --base main --head change/<name> --title "<prefix>: <outcome>" --body-file $bodyFile
+```
+
+POSIX shell: write the body to a temp file (heredoc is fine), then `--body-file`:
+
+```bash
+bodyFile=$(mktemp)
+cat >"$bodyFile" <<'EOF'
+Closes #<n>
+
+## Outcome
+<one or two sentences>
+EOF
+gh pr create --base main --head change/<name> --title "<prefix>: <outcome>" --body-file "$bodyFile"
+rm -f "$bodyFile"
 ```
 
 Body:
