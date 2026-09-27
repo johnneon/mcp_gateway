@@ -6,7 +6,7 @@
 
 ## 2. Bearer auth gate
 
-- [ ] 2.1 On `POST /mcp`, parse `Authorization` (scheme case-insensitive, exactly one space, token = exact remainder with no trim). Scan every configuration from `store.read()` with `tokenMatchesHash`; do not return before the full scan; accept only if at least one match is `enabled`. On failure (missing header, empty bearer, unknown token, disabled-only match), respond 401, `Content-Type` text/plain, body exactly `Unauthorized`, before JSON-RPC. Automated tests cover all four refusal cases with identical status and body, and assert no configuration names leak. Check: the new auth refusal tests pass.
+- [x] 2.1 On `POST /mcp`, parse `Authorization` (scheme case-insensitive, exactly one space, token = exact remainder with no trim). Scan every configuration from `store.read()` with `tokenMatchesHash`; do not return before the full scan; accept only if at least one match is `enabled`. On failure (missing header, empty bearer, unknown token, disabled-only match), respond 401, `Content-Type` text/plain, body exactly `Unauthorized`, before JSON-RPC. Automated tests cover all four refusal cases with identical status and body, and assert no configuration names leak. Check: the new auth refusal tests pass.
 
 ## 3. Stateless Streamable HTTP and empty tools/list
 
