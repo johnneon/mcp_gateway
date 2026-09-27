@@ -65,13 +65,13 @@ gh issue create --repo johnneon/mcp_gateway --title "<name>" --assignee "@me" --
 Body:
 
 ```markdown
-**Исход.** <outcome>
+**What / where**: <outcome>
 
-**Входит**
+**Todo**:
 
 - <item>
 
-**Проверка.** <check>
+**Verification**: <check>
 ```
 
 Then move the card to Backlog with the script below and report the issue link to the person.
