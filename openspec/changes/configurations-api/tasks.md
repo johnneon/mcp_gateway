@@ -10,7 +10,7 @@
 
 ## 3. Admin /api wiring
 
-- [ ] 3.1 Add `/api` Content-Type middleware (non-GET under `/api` without media type `application/json` → 415, no state change; `application/json; charset=utf-8` accepted) and ensure no CORS headers are set. Mount configurations routes with zod validation: `POST /api/configurations`, `GET /api/configurations`, `POST .../rotate`, `PATCH .../:id`, `DELETE .../:id`. Change `createAdminApp` to require `store`; wire `main.ts` to keep the opened store and pass it in. Update existing admin factory call sites (mcp-port-routing tests) to pass a fake store without weakening their assertions. Check: `npm run typecheck -w server` exits 0; existing mcp-port-routing tests still pass.
+- [x] 3.1 Add `/api` Content-Type middleware (non-GET under `/api` without media type `application/json` → 415, no state change; `application/json; charset=utf-8` accepted) and ensure no CORS headers are set. Mount configurations routes with zod validation: `POST /api/configurations`, `GET /api/configurations`, `POST .../rotate`, `PATCH .../:id`, `DELETE .../:id`. Change `createAdminApp` to require `store`; wire `main.ts` to keep the opened store and pass it in. Update existing admin factory call sites (mcp-port-routing tests) to pass a fake store without weakening their assertions. Check: `npm run typecheck -w server` exits 0; existing mcp-port-routing tests still pass.
 
 ## 4. HTTP scenario tests
 

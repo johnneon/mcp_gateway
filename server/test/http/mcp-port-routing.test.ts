@@ -5,6 +5,8 @@ import request from 'supertest';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createAdminApp } from '../../src/http/createAdminApp.js';
 import { createMcpApp } from '../../src/http/createMcpApp.js';
+import type { JsonObject } from '../../src/store/codec.js';
+import type { EncryptedStore } from '../../src/store/store.js';
 
 /** Test canaries that must never appear in MCP responses. */
 const DATA_DIR = 'C:\\fake-data-dir-mcp-port-routing-UNIQUE';
@@ -16,6 +18,19 @@ const ADMIN_PORT = '18766';
 const BEARER = 'Bearer secret-token-canary-7e2c-UNIQUE';
 
 const SECRET_CANARIES = [DATA_DIR, ENCRYPTION_KEY, MCP_HOST, MCP_PORT, ADMIN_HOST, ADMIN_PORT];
+
+function createMemoryStore(initial: JsonObject = {}): EncryptedStore {
+  let document: JsonObject = structuredClone(initial);
+  return {
+    read(): JsonObject {
+      return structuredClone(document);
+    },
+    replace(next: JsonObject): Promise<void> {
+      document = structuredClone(next);
+      return Promise.resolve();
+    },
+  };
+}
 
 function assertNoSecrets(body: string): void {
   for (const canary of SECRET_CANARIES) {
@@ -148,7 +163,7 @@ describe('mcp-port-routing: The admin port does not serve /mcp', () => {
   it('GET /mcp on admin — 404 before static files', async () => {
     const collisionContent = 'STATIC-MCP-COLLISION-CANARY-UNIQUE';
     const webRoot = await makeAdminWebRoot({ mcpFileContent: collisionContent });
-    const app = createAdminApp({ webRoot });
+    const app = createAdminApp({ store: createMemoryStore(), webRoot });
     const response = await request(app).get('/mcp');
 
     expect(response.status).toBe(404);
@@ -160,7 +175,7 @@ describe('mcp-port-routing: The admin port does not serve /mcp', () => {
 
   it('POST /mcp on admin — 404', async () => {
     const webRoot = await makeAdminWebRoot({});
-    const app = createAdminApp({ webRoot });
+    const app = createAdminApp({ store: createMemoryStore(), webRoot });
     const response = await request(app).post('/mcp');
 
     expect(response.status).toBe(404);
@@ -169,7 +184,7 @@ describe('mcp-port-routing: The admin port does not serve /mcp', () => {
 
   it('GET / on admin still returns HTML', async () => {
     const webRoot = await makeAdminWebRoot({});
-    const app = createAdminApp({ webRoot });
+    const app = createAdminApp({ store: createMemoryStore(), webRoot });
     const response = await request(app).get('/');
 
     expect(response.status).toBeGreaterThanOrEqual(200);
