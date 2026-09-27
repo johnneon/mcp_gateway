@@ -14,7 +14,7 @@
 
 ## 4. HTTP scenario tests
 
-- [ ] 4.1 Supertest against `createAdminApp` with a fake store (and one real encrypted file for the disk canary): create 201 with token once; list without token/hash; rotate; patch enable/disable; delete 204; empty name → 400; unknown id → 404; form body and missing Content-Type → 415 with no state change; charset=utf-8 create succeeds; no CORS headers on success and on 415; create token absent from `state.bin` plaintext; `GET /mcp` on MCP still 501. Check: all new configurations-api HTTP tests pass; test names cover every delta scenario.
+- [x] 4.1 Supertest against `createAdminApp` with a fake store (and one real encrypted file for the disk canary): create 201 with token once; list without token/hash; rotate; patch enable/disable; delete 204; empty name → 400; unknown id → 404; form body and missing Content-Type → 415 with no state change; charset=utf-8 create succeeds; no CORS headers on success and on 415; create token absent from `state.bin` plaintext; `GET /mcp` on MCP still 501. Check: all new configurations-api HTTP tests pass; test names cover every delta scenario.
 
 ## 5. Full package check
 
