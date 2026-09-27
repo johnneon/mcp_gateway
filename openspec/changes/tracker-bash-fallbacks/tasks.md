@@ -14,6 +14,6 @@
 
 ## 3. Delta automated tests
 
-- [ ] 3.1 Add automated tests (fake `gh` on `PATH`, no live Projects API) for set-status failure scenarios: missing board membership and unknown Status — non-zero exit and clear error messages. Check: tests pass under `npm test`; scenario names reference the requirement.
+- [x] 3.1 Add automated tests (fake `gh` on `PATH`, no live Projects API) for set-status failure scenarios: missing board membership and unknown Status — non-zero exit and clear error messages. Check: tests pass under `npm test`; scenario names reference the requirement.
 
 - [ ] 3.2 Add automated tests (fake `gh`) for set-iteration: no covering iteration fails with a clear message; overlapping iterations pick the latest start and print `#<n> -> <title>`. Check: those tests pass; full root `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, and `npm run build` exit 0.
