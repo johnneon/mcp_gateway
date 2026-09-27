@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines HTTP routing for the MCP and admin ports: the allowed paths, responses that contain no secrets, and rejection of foreign requests, until Streamable HTTP is mounted.
+Defines HTTP routing for the MCP and admin ports: the allowed paths, responses that contain no secrets, rejection of foreign requests, and mounting authenticated Streamable HTTP on `/mcp`.
 
 ## Requirements
 
@@ -34,24 +34,33 @@ The MCP listener SHALL answer `GET /health` without requiring an `Authorization`
 - **THEN** the response status is 200
 - **AND** the body parsed as JSON deep-equals `{ "status": "ok" }`
 
-### Requirement: /mcp on the MCP port returns 501
+### Requirement: /mcp on the MCP port serves Streamable HTTP after auth
 
-The MCP listener SHALL register the path `/mcp` for every HTTP method the handler reaches. The response SHALL have status 501 and a short English text body with no secrets, no data directory, no encryption key, and no host or port values. This change SHALL NOT run Streamable HTTP or check a bearer.
+The MCP listener SHALL register the path `/mcp`. `POST /mcp` SHALL authenticate the bearer as specified by the `mcp-endpoint` capability and, on success, SHALL handle the request as MCP Streamable HTTP. `GET /mcp`, `DELETE /mcp`, and any other HTTP method on `/mcp` other than `POST` SHALL return status 405 with a short English text body and no secrets, and SHALL NOT open an SSE stream. This change SHALL NOT return status 501 for `/mcp`.
 
-#### Scenario: GET /mcp — 501 without secrets
+#### Scenario: GET /mcp — 405 without secrets and without SSE
 
 - **GIVEN** the MCP app is created through the factory without `listen`
 - **WHEN** the client performs `GET /mcp`
-- **THEN** the response status is 501
+- **THEN** the response status is 405
 - **AND** the response body is short English text
 - **AND** the body does not contain the data directory, the encryption key, or hosts and ports from the test environment
+- **AND** the response is not an open SSE stream (no `text/event-stream` content type for a lasting stream)
 
-#### Scenario: POST /mcp — 501 without secrets
+#### Scenario: DELETE /mcp — 405 without secrets
 
 - **GIVEN** the MCP app is created through the factory without `listen`
-- **WHEN** the client performs `POST /mcp` with an arbitrary body
-- **THEN** the response status is 501
+- **WHEN** the client performs `DELETE /mcp`
+- **THEN** the response status is 405
 - **AND** the response body is short English text with no secrets
+
+#### Scenario: POST /mcp without Authorization — 401 not 501
+
+- **GIVEN** the MCP app is created with a store (empty configurations list is enough)
+- **WHEN** the client performs `POST /mcp` without an `Authorization` header
+- **THEN** the response status is 401
+- **AND** the body is exactly `Unauthorized`
+- **AND** the response status is not 501
 
 ### Requirement: A foreign path on the MCP port is 404
 
