@@ -2,90 +2,90 @@
 
 ## Purpose
 
-Задаёт старт одного Node-процесса шлюза: проверка переменных окружения без утечки значений и два HTTP-слушателя (MCP и admin), включая раздачу production-сборки интерфейса.
+Defines startup of the single Node process: environment checks that do not leak values, and two HTTP listeners (MCP and admin), including serving the production build of the UI.
 
 ## ADDED Requirements
 
-### Requirement: Обязательные переменные окружения при старте
+### Requirement: Required environment variables at startup
 
-Процесс SHALL требовать при старте переменные `MCP_HOST`, `MCP_PORT`, `ADMIN_PORT`, `DATA_DIR` и `ENCRYPTION_KEY`. Если хотя бы одна из них отсутствует или пуста, процесс SHALL завершиться с ненулевым кодом выхода и SHALL написать в stdout или stderr имя недостающей переменной. Сообщение SHALL NOT содержать значение любой переменной окружения, в том числе значение `ENCRYPTION_KEY` или иной секретный образец из окружения теста.
+The process SHALL require `MCP_HOST`, `MCP_PORT`, `ADMIN_PORT`, `DATA_DIR`, and `ENCRYPTION_KEY` at startup. If any one of them is missing or empty, the process SHALL exit with a non-zero status and SHALL write the missing variable's name to stdout or stderr. The message SHALL NOT contain the value of any environment variable, including `ENCRYPTION_KEY` or any other secret sample from the test environment.
 
-#### Scenario: Нет MCP_HOST
+#### Scenario: Missing MCP_HOST
 
-- **GIVEN** в окружении заданы все обязательные переменные, кроме `MCP_HOST`
-- **WHEN** процесс запускается
-- **THEN** код выхода ненулевой
-- **AND** stdout или stderr содержит строку `MCP_HOST`
-- **AND** stdout и stderr не содержат значения остальных заданных переменных
+- **GIVEN** every required variable is set except `MCP_HOST`
+- **WHEN** the process starts
+- **THEN** the exit code is non-zero
+- **AND** stdout or stderr contains the string `MCP_HOST`
+- **AND** stdout and stderr do not contain the values of the other variables that were set
 
-#### Scenario: Нет MCP_PORT
+#### Scenario: Missing MCP_PORT
 
-- **GIVEN** в окружении заданы все обязательные переменные, кроме `MCP_PORT`
-- **WHEN** процесс запускается
-- **THEN** код выхода ненулевой
-- **AND** stdout или stderr содержит строку `MCP_PORT`
-- **AND** stdout и stderr не содержат значения остальных заданных переменных
+- **GIVEN** every required variable is set except `MCP_PORT`
+- **WHEN** the process starts
+- **THEN** the exit code is non-zero
+- **AND** stdout or stderr contains the string `MCP_PORT`
+- **AND** stdout and stderr do not contain the values of the other variables that were set
 
-#### Scenario: Нет ADMIN_PORT
+#### Scenario: Missing ADMIN_PORT
 
-- **GIVEN** в окружении заданы все обязательные переменные, кроме `ADMIN_PORT`
-- **WHEN** процесс запускается
-- **THEN** код выхода ненулевой
-- **AND** stdout или stderr содержит строку `ADMIN_PORT`
-- **AND** stdout и stderr не содержат значения остальных заданных переменных
+- **GIVEN** every required variable is set except `ADMIN_PORT`
+- **WHEN** the process starts
+- **THEN** the exit code is non-zero
+- **AND** stdout or stderr contains the string `ADMIN_PORT`
+- **AND** stdout and stderr do not contain the values of the other variables that were set
 
-#### Scenario: Нет DATA_DIR
+#### Scenario: Missing DATA_DIR
 
-- **GIVEN** в окружении заданы все обязательные переменные, кроме `DATA_DIR`
-- **WHEN** процесс запускается
-- **THEN** код выхода ненулевой
-- **AND** stdout или stderr содержит строку `DATA_DIR`
-- **AND** stdout и stderr не содержат значения остальных заданных переменных
+- **GIVEN** every required variable is set except `DATA_DIR`
+- **WHEN** the process starts
+- **THEN** the exit code is non-zero
+- **AND** stdout or stderr contains the string `DATA_DIR`
+- **AND** stdout and stderr do not contain the values of the other variables that were set
 
-#### Scenario: Нет ENCRYPTION_KEY
+#### Scenario: Missing ENCRYPTION_KEY
 
-- **GIVEN** в окружении заданы все обязательные переменные и образец значения `ENCRYPTION_KEY` известен тесту, но сама `ENCRYPTION_KEY` не задана
-- **WHEN** процесс запускается
-- **THEN** код выхода ненулевой
-- **AND** stdout или stderr содержит строку `ENCRYPTION_KEY`
-- **AND** stdout и stderr не содержат образец секретного значения, использованный в других сценариях этого требования
+- **GIVEN** every required variable is set and a sample `ENCRYPTION_KEY` value is known to the test, but `ENCRYPTION_KEY` itself is unset
+- **WHEN** the process starts
+- **THEN** the exit code is non-zero
+- **AND** stdout or stderr contains the string `ENCRYPTION_KEY`
+- **AND** stdout and stderr do not contain the secret sample used in the other scenarios of this requirement
 
-### Requirement: ADMIN_HOST по умолчанию 127.0.0.1
+### Requirement: ADMIN_HOST defaults to 127.0.0.1
 
-Если `ADMIN_HOST` отсутствует или пуста, процесс SHALL считать её равной `127.0.0.1` и SHALL NOT завершаться из‑за отсутствия `ADMIN_HOST`. Если `ADMIN_HOST` задана непустым значением, процесс SHALL слушать интерфейс на этом адресе.
+If `ADMIN_HOST` is missing or empty, the process SHALL treat it as `127.0.0.1` and SHALL NOT exit because `ADMIN_HOST` is absent. If `ADMIN_HOST` is set to a non-empty value, the process SHALL listen for the UI on that address.
 
-#### Scenario: ADMIN_HOST не задана
+#### Scenario: ADMIN_HOST is unset
 
-- **GIVEN** заданы `MCP_HOST`, `MCP_PORT`, `ADMIN_PORT`, `DATA_DIR` и `ENCRYPTION_KEY`, а `ADMIN_HOST` не задана
-- **WHEN** процесс запускается
-- **THEN** код выхода нулевой (процесс остаётся работать)
-- **AND** слушатель admin принимает соединение на `127.0.0.1` и порту из `ADMIN_PORT`
+- **GIVEN** `MCP_HOST`, `MCP_PORT`, `ADMIN_PORT`, `DATA_DIR`, and `ENCRYPTION_KEY` are set, and `ADMIN_HOST` is unset
+- **WHEN** the process starts
+- **THEN** the exit code is zero (the process stays up)
+- **AND** the admin listener accepts a connection on `127.0.0.1` and the port from `ADMIN_PORT`
 
-#### Scenario: ADMIN_HOST задана явно
+#### Scenario: ADMIN_HOST is set explicitly
 
-- **GIVEN** заданы все переменные, включая непустой `ADMIN_HOST` (например `127.0.0.1`)
-- **WHEN** процесс запускается
-- **THEN** слушатель admin принимает соединение на хосте из `ADMIN_HOST` и порту из `ADMIN_PORT`
+- **GIVEN** every variable is set, including a non-empty `ADMIN_HOST` (for example `127.0.0.1`)
+- **WHEN** the process starts
+- **THEN** the admin listener accepts a connection on the host from `ADMIN_HOST` and the port from `ADMIN_PORT`
 
-### Requirement: Два HTTP-слушателя при полном окружении
+### Requirement: Two HTTP listeners with a complete environment
 
-При заданных обязательных переменных (и при необходимости `ADMIN_HOST`) процесс SHALL открыть два TCP-слушателя: один на `MCP_HOST`:`MCP_PORT`, второй на эффективном admin-хосте и `ADMIN_PORT`. Оба SHALL принимать входящее TCP-соединение. Переменные `DATA_DIR` и `ENCRYPTION_KEY` SHALL приниматься при старте даже если хранилище ещё не реализовано; их значения SHALL NOT попадать в stdout или stderr при успешном старте.
+When the required variables are set (and `ADMIN_HOST` when needed), the process SHALL open two TCP listeners: one on `MCP_HOST`:`MCP_PORT`, the other on the effective admin host and `ADMIN_PORT`. Both SHALL accept an incoming TCP connection. `DATA_DIR` and `ENCRYPTION_KEY` SHALL be accepted at startup even if the store is not implemented yet; their values SHALL NOT appear in stdout or stderr on a successful start.
 
-#### Scenario: Оба слушателя принимают соединение
+#### Scenario: Both listeners accept a connection
 
-- **GIVEN** заданы `MCP_HOST`, `MCP_PORT`, `ADMIN_HOST`, `ADMIN_PORT`, `DATA_DIR` и `ENCRYPTION_KEY` с тестовыми адресами loopback и свободными портами
-- **WHEN** процесс запускается
-- **THEN** TCP-клиент успешно соединяется с `MCP_HOST`:`MCP_PORT`
-- **AND** TCP-клиент успешно соединяется с `ADMIN_HOST`:`ADMIN_PORT`
-- **AND** stdout и stderr не содержат значения `ENCRYPTION_KEY` и `DATA_DIR`
+- **GIVEN** `MCP_HOST`, `MCP_PORT`, `ADMIN_HOST`, `ADMIN_PORT`, `DATA_DIR`, and `ENCRYPTION_KEY` are set, with loopback test addresses and free ports
+- **WHEN** the process starts
+- **THEN** a TCP client connects to `MCP_HOST`:`MCP_PORT`
+- **AND** a TCP client connects to `ADMIN_HOST`:`ADMIN_PORT`
+- **AND** stdout and stderr do not contain the `ENCRYPTION_KEY` or `DATA_DIR` values
 
-### Requirement: Admin раздаёт production-сборку web
+### Requirement: Admin serves the web production build
 
-Слушатель admin SHALL отдавать статическую production-сборку пакета `web` так, чтобы HTTP GET корневого пути возвращал успешный ответ с HTML приложения-оболочки. Оболочка SHALL быть на английском. Экраны Configurations и Connectors в этом изменении не требуются.
+The admin listener SHALL serve the static production build of the `web` package so that HTTP GET of the root path returns a successful response with the shell application's HTML. The shell SHALL be in English. The Configurations and Connectors screens are not required in this change.
 
-#### Scenario: Корень admin отдаёт HTML оболочки
+#### Scenario: Admin root returns the shell HTML
 
-- **GIVEN** процесс запущен с полным набором переменных и собранным пакетом `web`
-- **WHEN** клиент выполняет HTTP GET `/` на admin-хосте и `ADMIN_PORT`
-- **THEN** ответ имеет успешный статус
-- **AND** тело ответа содержит HTML оболочку admin UI
+- **GIVEN** the process is running with the full set of variables and a built `web` package
+- **WHEN** the client performs HTTP GET `/` on the admin host and `ADMIN_PORT`
+- **THEN** the response status is successful
+- **AND** the response body contains the admin UI shell HTML

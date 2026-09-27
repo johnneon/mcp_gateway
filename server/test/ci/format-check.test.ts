@@ -51,8 +51,8 @@ async function runPrettierWrite(filePath: string): Promise<number> {
   });
 }
 
-describe('pull-request-checks: format:check различает сломанный и нормальный фрагмент', () => {
-  it('format:check падает на сломанном фрагменте', async () => {
+describe('pull-request-checks: format:check distinguishes a broken snippet from a formatted one', () => {
+  it('format:check fails on a broken snippet', async () => {
     await mkdir(fixtureDir, { recursive: true });
     await writeFile(fixtureFile, BADLY_FORMATTED, 'utf8');
 
@@ -60,7 +60,7 @@ describe('pull-request-checks: format:check различает сломанны�
     expect(exitCode).not.toBe(0);
   });
 
-  it('format:check проходит на отформатированном фрагменте', async () => {
+  it('format:check passes on a formatted snippet', async () => {
     await mkdir(fixtureDir, { recursive: true });
     await writeFile(fixtureFile, BADLY_FORMATTED, 'utf8');
 

@@ -2,49 +2,49 @@
 
 ## Context
 
-См. `proposal.md` — Why. Сейчас в репозитории только корневой `package.json` (devDependency openspec), `openspec/`, документация и скиллы. Каталогов `server/` и `web/` нет. `openspec/specs/` пуст. Vision: `mcp-gateway-spec.md` («Стек», «Окружение», «Сборка репозитория»), порядок базы — `docs/implementation.md` §1 задача 1.1. Layout сервера и фронта — скиллы `backend` и `frontend`: создавать папки только когда изменение их требует.
+See `proposal.md` — Why. Right now the repository has only a root `package.json` (devDependency openspec), `openspec/`, documentation, and skills. There are no `server/` or `web/` directories. `openspec/specs/` is empty. Vision: `mcp-gateway-spec.md` ("Stack", "Environment", "Repository build"). The base order was task 1.1 in the former `docs/implementation.md`. Server and frontend layout follow the `backend` and `frontend` skills: create a folder only when a change needs it.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- npm workspaces: `server` и `web`, ES modules, TypeScript strict.
-- Единый процесс: `env` → apps → два `listen`.
-- Зафиксированные имена переменных и правило «имя, не значение».
-- Минимальный admin shell + раздача `web` dist с admin-порта.
-- Скрипты typecheck / test / build на корне и в workspaces.
-- Каждый сценарий delta — автотест на Vitest без внешних сервисов.
+- npm workspaces: `server` and `web`, ES modules, TypeScript strict.
+- One process: `env` → apps → two `listen` calls.
+- Fixed variable names and the rule "the name, not the value".
+- A minimal admin shell plus serving `web` dist from the admin port.
+- typecheck / test / build scripts at the root and in the workspaces.
+- Every delta scenario is a Vitest test with no external services.
 
-**Non-Goals (уровень дизайна):**
+**Non-Goals (design level):**
 
-- Реализация store, `/health` body, жёсткое разделение маршрутов MCP/admin (1.2–1.4).
-- Монтирование Streamable HTTP `/mcp` можно отложить, если исход изменения — «процесс слушает»; пакет `@modelcontextprotocol/sdk` всё равно объявить в зависимостях.
-- Radix и `shared/ui` — только если оболочке реально нужен примитив; иначе не тянуть.
+- Implementing the store, the `/health` body, and a hard split of MCP/admin routes (1.2–1.4).
+- Mounting Streamable HTTP `/mcp` can wait if the outcome of this change is "the process listens"; the package `@modelcontextprotocol/sdk` is still declared as a dependency.
+- Radix and `shared/ui` only if the shell actually needs a primitive; otherwise do not pull them in.
 
 ## Decisions
 
-### 1. Имена переменных окружения (закрытие [ПОД ВОПРОСОМ] из implementation.md)
+### 1. Environment variable names (closes the open question from the former implementation notes)
 
-| Имя | Роль | Обязательность |
+| Name | Role | Required |
 | --- | --- | --- |
-| `MCP_HOST` | bind MCP | обязательна |
-| `MCP_PORT` | порт MCP | обязательна (число) |
-| `ADMIN_HOST` | bind admin UI/API | опциональна; по умолчанию `127.0.0.1` |
-| `ADMIN_PORT` | порт admin | обязательна (число) |
-| `DATA_DIR` | каталог данных | обязательна (даже без store) |
-| `ENCRYPTION_KEY` | ключ AES-GCM | обязательна (даже без store) |
+| `MCP_HOST` | MCP bind | required |
+| `MCP_PORT` | MCP port | required (number) |
+| `ADMIN_HOST` | admin UI/API bind | optional; default `127.0.0.1` |
+| `ADMIN_PORT` | admin port | required (number) |
+| `DATA_DIR` | data directory | required (even without a store) |
+| `ENCRYPTION_KEY` | AES-GCM key | required (even without a store) |
 
-**Решение по `ADMIN_HOST`:** если переменная отсутствует или пустая строка — использовать `127.0.0.1`. В списке «недостающая обязательная переменная» её нет. Это следует спецификации («адрес по умолчанию `127.0.0.1`»), а не варианту «всегда задавать явно».
+**Decision on `ADMIN_HOST`:** if the variable is missing or an empty string, use `127.0.0.1`. It is not in the list of missing required variables. This follows the specification ("default address `127.0.0.1`"), not the option "always set it explicitly".
 
-**Альтернатива:** требовать все шесть явно — отклонена: противоречит defaults в vision.
+**Alternative:** require all six explicitly — rejected, because it contradicts the defaults in the vision.
 
-Пустая строка у обязательной переменной = отсутствие. Сообщение об ошибке: только имя (например `MCP_HOST`), без значений и без дампа окружения. Код выхода ≠ 0.
+An empty string on a required variable counts as missing. The error message is only the name (for example `MCP_HOST`), with no values and no environment dump. Exit code is not 0.
 
-### 2. Кто читает `process.env`
+### 2. Who reads `process.env`
 
-Только `server/src/main.ts` читает `process.env` и передаёт сырой объект (или его срез) в `parseEnv` из `server/src/env.ts`. Остальной код получает уже разобранный конфиг через аргументы фабрик. Тесты вызывают `parseEnv` с подставным объектом и поднимают apps без реального `process.env`, где это возможно; сценарии «запуск процесса» — через spawn с контролируемым env.
+Only `server/src/main.ts` reads `process.env` and passes the raw object (or a slice of it) to `parseEnv` in `server/src/env.ts`. The rest of the code receives an already parsed config through factory arguments. Tests call `parseEnv` with a stand-in object and start the apps without the real `process.env` where that is possible. "Process start" scenarios use spawn with a controlled env.
 
-### 3. Структура пакетов
+### 3. Package structure
 
 ```text
 package.json          workspaces: ["server", "web"]
@@ -58,7 +58,7 @@ server/
     http/
       createMcpApp.ts
       createAdminApp.ts
-  test/               зеркало сценариев
+  test/               mirrors the scenarios
 web/
   package.json
   tsconfig.json
@@ -66,44 +66,44 @@ web/
   vitest.config.ts
   index.html
   src/
-    app/              entry, минимальный layout, tokens/reset при необходимости
+    app/              entry, minimal layout, tokens/reset if needed
 ```
 
-Не создавать в этом изменении: `store/`, `configurations/`, `accounts/`, `connectors/`, `mcp/`, экраны Configurations/Connectors.
+Do not create in this change: `store/`, `configurations/`, `accounts/`, `connectors/`, `mcp/`, or the Configurations/Connectors screens.
 
-`createMcpApp` / `createAdminApp` возвращают Express apps **без** `listen`. `main.ts` вызывает `listen` на обоих.
+`createMcpApp` / `createAdminApp` return Express apps **without** `listen`. `main.ts` calls `listen` on both.
 
-Admin app: `express.static` на каталог production-сборки `web` (путь фиксируется относительно layout монорепо / `import.meta.url`). MCP app в этом изменении может быть пустым Express (или минимальным stub); ограничение маршрутов — задача 1.4.
+Admin app: `express.static` on the `web` production build directory (the path is fixed relative to the monorepo layout / `import.meta.url`). The MCP app in this change may be an empty Express app (or a minimal stub); route limits are task 1.4.
 
-### 4. Workspaces, модули, скрипты
+### 4. Workspaces, modules, scripts
 
-- `"type": "module"` в корне и/или в пакетах.
-- Корневые скрипты делегируют: `typecheck`, `test`, `build` (и при необходимости `start` → `server`).
-- `server`: Express 5, zod (для портов/строк env), `@modelcontextprotocol/sdk` в dependencies (использование mount — по мере нужды), Vitest, TypeScript.
-- `web`: React, React DOM, Vite, TypeScript, Vitest; CSS modules. Radix — не добавлять, пока shell обходится без него.
-- Сборка: сначала `web` (vite build), затем `server` (tsc или согласованный способ), чтобы admin мог раздавать dist.
+- `"type": "module"` at the root and/or in the packages.
+- Root scripts delegate: `typecheck`, `test`, `build` (and `start` → `server` if needed).
+- `server`: Express 5, zod (for ports/env strings), `@modelcontextprotocol/sdk` in dependencies (mounting it as needed), Vitest, TypeScript.
+- `web`: React, React DOM, Vite, TypeScript, Vitest; CSS modules. Do not add Radix while the shell can do without it.
+- Build: `web` first (vite build), then `server` (tsc or an agreed method), so admin can serve dist.
 
-### 5. Тестирование сценариев
+### 5. Testing the scenarios
 
-- Юнит: `parseEnv` — отсутствие каждой обязательной переменной; default `ADMIN_HOST`; значения не попадают в сообщение об ошибке (в тест подставляется узнаваемый секрет и проверяется отсутствие в тексте ошибки).
-- Интеграция: spawn `node` на собранный/tsx entry с temp env и свободными портами; TCP connect к обоим слушателям; HTTP GET `/` на admin → HTML.
-- Без живых внешних сервисов и без реального ключа шифрования вне тестового образца.
+- Unit: `parseEnv` — each required variable missing; default `ADMIN_HOST`; values do not appear in the error message (the test supplies a recognizable secret and checks it is absent from the error text).
+- Integration: spawn `node` on the built/tsx entry with a temp env and free ports; TCP connect to both listeners; HTTP GET `/` on admin → HTML.
+- No live external services and no real encryption key beyond the test sample.
 
-### 6. Зависимость от DATA_DIR / ENCRYPTION_KEY без store
+### 6. Depending on DATA_DIR / ENCRYPTION_KEY without a store
 
-`parseEnv` проверяет наличие и сохраняет в конфиге. Store не открывается. Каталог может не существовать — создание файла состояния не входит в изменение. Цель: контракт окружения зафиксирован до задачи 1.2.
+`parseEnv` checks that they are present and keeps them in the config. The store is not opened. The directory may not exist — creating the state file is not part of this change. The goal is to fix the environment contract before task 1.2.
 
 ## Risks / Trade-offs
 
-- [Пустой MCP app до mount `/mcp`] → Mitigation: зависимость sdk объявлена; delta не требует MCP protocol в этом изменении, только слушатель.
-- [Путь к `web/dist` хрупкий в monorepo] → Mitigation: один согласованный путь в design/tasks, проверка в тесте GET `/`.
-- [Тесты через spawn медленнее юнитов] → Mitigation: логика env в юнитах; spawn — на сценарии слушателей и HTML.
-- [ADMIN_HOST optional vs «все шесть имён»] → Mitigation: все шесть имён зафиксированы в таблице; обязательны пять плюс default для admin host — явно в spec и здесь.
+- [Empty MCP app until `/mcp` is mounted] → Mitigation: the sdk dependency is declared; the delta does not require the MCP protocol in this change, only the listener.
+- [The path to `web/dist` is fragile in the monorepo] → Mitigation: one agreed path in design/tasks, checked by the GET `/` test.
+- [Spawn tests are slower than units] → Mitigation: env logic stays in units; spawn covers listener and HTML scenarios.
+- [ADMIN_HOST optional vs "all six names"] → Mitigation: all six names are fixed in the table; five are required plus a default for the admin host — stated in the spec and here.
 
 ## Migration Plan
 
-Чистое добавление каркаса. Откат — удаление ветки / revert коммитов изменения. Миграции данных нет.
+A pure addition of the skeleton. Rollback is deleting the branch / reverting the change's commits. There is no data migration.
 
 ## Open Questions
 
-Нет блокирующих. Открытые ранее имена переменных закрыты решением 1.
+None blocking. The environment names that were open earlier are closed by decision 1.

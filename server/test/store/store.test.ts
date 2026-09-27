@@ -35,8 +35,8 @@ afterEach(async () => {
   }
 });
 
-describe('encrypted-store: Отсутствие файла даёт пустое состояние без создания файла', () => {
-  it('Нет файла — память {} и файл не создан', async () => {
+describe('encrypted-store: A missing file yields an empty state and does not create the file', () => {
+  it('No file — memory is {} and the file is not created', async () => {
     const dataDir = await makeDataDir();
     const store = await open(dataDir, KEY_A);
     expect(store.read()).toEqual({});
@@ -46,8 +46,8 @@ describe('encrypted-store: Отсутствие файла даёт пустое
   });
 });
 
-describe('encrypted-store: Чужой ключ и битый файл отвергаются без утечки', () => {
-  it('Чужой ключ — cannot be decrypted', async () => {
+describe('encrypted-store: A wrong key and a corrupt file are rejected without a leak', () => {
+  it('Wrong key — cannot be decrypted', async () => {
     const dataDir = await makeDataDir();
     const filePath = path.join(dataDir, 'state.bin');
     const bytes = encryptDocument(KEY_A, { secret: CANARY });
@@ -70,7 +70,7 @@ describe('encrypted-store: Чужой ключ и битый файл отвер
     expect(message).not.toContain(KEY_B.toString('utf8'));
   });
 
-  it('Усечённый или повреждённый файл — corrupt', async () => {
+  it('Truncated or damaged file — corrupt', async () => {
     const dataDir = await makeDataDir();
     const filePath = path.join(dataDir, 'state.bin');
     const truncated = Buffer.from([1, 2, 3, 4, 5]);
@@ -91,7 +91,7 @@ describe('encrypted-store: Чужой ключ и битый файл отвер
     expect(message).not.toContain(truncated.toString('utf8'));
   });
 
-  it('Версия не 1 — corrupt без утечки', async () => {
+  it('Version is not 1 — corrupt without a leak', async () => {
     const dataDir = await makeDataDir();
     const filePath = path.join(dataDir, 'state.bin');
     const valid = encryptDocument(KEY_A, { note: CANARY });
@@ -112,7 +112,7 @@ describe('encrypted-store: Чужой ключ и битый файл отвер
     expect(message).not.toContain(KEY_A_B64);
   });
 
-  it('Расшифрованный не-объект JSON — corrupt', async () => {
+  it('Decrypted non-object JSON — corrupt', async () => {
     const { createCipheriv, randomBytes } = await import('node:crypto');
     const dataDir = await makeDataDir();
     const filePath = path.join(dataDir, 'state.bin');
@@ -142,8 +142,8 @@ describe('encrypted-store: Чужой ключ и битый файл отвер
   });
 });
 
-describe('encrypted-store: Путь и формат файла состояния', () => {
-  it('Файл лежит по согласованному пути', async () => {
+describe('encrypted-store: State file path and format', () => {
+  it('The file is at the agreed path', async () => {
     const dataDir = await makeDataDir();
     const filePath = path.join(dataDir, 'state.bin');
     const store = await open(dataDir, KEY_A);
@@ -155,8 +155,8 @@ describe('encrypted-store: Путь и формат файла состояни�
   });
 });
 
-describe('encrypted-store: Replace сохраняет документ для повторного открытия', () => {
-  it('Запись и повторное открытие тем же ключом', async () => {
+describe('encrypted-store: Replace keeps the document for a later open', () => {
+  it('Write and reopen with the same key', async () => {
     const dataDir = await makeDataDir();
     const doc = { alpha: 1, nested: { canary: CANARY } };
     const store = await open(dataDir, KEY_A);
@@ -166,8 +166,8 @@ describe('encrypted-store: Replace сохраняет документ для п
   });
 });
 
-describe('encrypted-store: Ciphertext не содержит открытый текст документа', () => {
-  it('Canary отсутствует в байтах файла', async () => {
+describe('encrypted-store: Ciphertext does not contain the document plaintext', () => {
+  it('Canary is absent from the file bytes', async () => {
     const dataDir = await makeDataDir();
     const store = await open(dataDir, KEY_A);
     await store.replace({ note: CANARY });
@@ -176,8 +176,8 @@ describe('encrypted-store: Ciphertext не содержит открытый т�
   });
 });
 
-describe('encrypted-store: Перекрывающиеся replace сериализованы', () => {
-  it('Два перекрывающихся replace не портят файл', async () => {
+describe('encrypted-store: Overlapping replace calls are serialized', () => {
+  it('Two overlapping replace calls do not corrupt the file', async () => {
     const dataDir = await makeDataDir();
     const store = await open(dataDir, KEY_A);
     const first = store.replace({ n: 1, mark: 'first' });
@@ -191,8 +191,8 @@ describe('encrypted-store: Перекрывающиеся replace сериали
   });
 });
 
-describe('encrypted-store: Программный API хранилища', () => {
-  it('Open, read и replace доступны без доменной модели', async () => {
+describe('encrypted-store: Store programmatic API', () => {
+  it('Open, read, and replace are available without a domain model', async () => {
     const dataDir = await makeDataDir();
     const store = await open(dataDir, KEY_A);
     expect(store.read()).toEqual({});
@@ -201,8 +201,8 @@ describe('encrypted-store: Программный API хранилища', () =>
   });
 });
 
-describe('encrypted-store: Каталог состояния в проекте и gitignore', () => {
-  it('тестовый DATA_DIR — подкаталог внутри data/', async () => {
+describe('encrypted-store: Project state directory and gitignore', () => {
+  it('test DATA_DIR is a subdirectory inside data/', async () => {
     const dataDir = await makeDataDir();
     expect(dataDir.startsWith(dataRoot + path.sep) || dataDir.startsWith(dataRoot + '/')).toBe(
       true,
@@ -211,7 +211,7 @@ describe('encrypted-store: Каталог состояния в проекте �
     expect(relative.startsWith('data')).toBe(true);
   });
 
-  it('Путь файла в проектном data', async () => {
+  it('State file path is the project data directory', async () => {
     const projectData = path.join(repoRoot, 'data');
     await mkdir(projectData, { recursive: true });
     const isolated = await mkdtemp(path.join(projectData, 'project-path-'));
@@ -223,7 +223,7 @@ describe('encrypted-store: Каталог состояния в проекте �
     expect(path.relative(projectData, expected).includes('..')).toBe(false);
   });
 
-  it('data/ в .gitignore', async () => {
+  it('data/ is in .gitignore', async () => {
     const gitignore = await readFile(path.join(repoRoot, '.gitignore'), 'utf8');
     const lines = gitignore.split(/\r?\n/);
     expect(lines).toContain('data/');

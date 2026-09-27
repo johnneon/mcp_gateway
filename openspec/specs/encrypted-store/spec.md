@@ -2,105 +2,105 @@
 
 ## Purpose
 
-Задаёт единое зашифрованное хранилище состояния шлюза: один файл под `DATA_DIR` (для работающего процесса — проектный каталог `data`), загрузка в память при старте, атомарная перезапись через очередь и отказ без утечки ключа или содержимого файла.
+Defines the single encrypted state store: one file under `DATA_DIR` (for a running process, the project `data` directory), loaded into memory at startup, rewritten atomically through a queue, and rejected without leaking the key or the file contents.
 
 ## Requirements
 
-### Requirement: Каталог состояния в проекте и gitignore
+### Requirement: Project state directory and gitignore
 
-Для работающего шлюза каталог состояния SHALL быть проектным каталогом `data` в корне репозитория (рядом с `server/` и `web/`). Переменная `DATA_DIR` SHALL оставаться обязательной; для работающего процесса она SHALL указывать на этот каталог `data`. Файл состояния SHALL быть `state.bin` внутри `DATA_DIR`; временный файл записи SHALL быть `state.bin.tmp` в том же каталоге. В корневом `.gitignore` SHALL присутствовать строка `data/`, чтобы `state.bin` и временный файл не попадали в git; второй паттерн ignore для того же каталога SHALL NOT добавляться. Автотесты MAY задавать `DATA_DIR` подкаталогом внутри `data/`, чтобы не перезаписывать локальный `data/state.bin`.
+For a running gateway the state directory SHALL be the project directory `data` at the repository root (next to `server/` and `web/`). `DATA_DIR` SHALL stay required; for a running process it SHALL point at that `data` directory. The state file SHALL be `state.bin` inside `DATA_DIR`; the write temp file SHALL be `state.bin.tmp` in the same directory. The root `.gitignore` SHALL contain the line `data/`, so `state.bin` and the temp file are not committed; a second ignore pattern for the same directory SHALL NOT be added. Automated tests MAY set `DATA_DIR` to a subdirectory inside `data/` so they do not overwrite a local `data/state.bin`.
 
-#### Scenario: Путь файла в проектном data
+#### Scenario: State file path is the project data directory
 
-- **GIVEN** работающий шлюз с `DATA_DIR`, указывающим на проектный каталог `data`
-- **WHEN** хранилище успешно записало документ
-- **THEN** файл существует по пути `data/state.bin` относительно корня репозитория
+- **GIVEN** a running gateway whose `DATA_DIR` points at the project `data` directory
+- **WHEN** the store has successfully written a document
+- **THEN** the file exists at `data/state.bin` relative to the repository root
 
-#### Scenario: data/ в .gitignore
+#### Scenario: data/ is in .gitignore
 
-- **GIVEN** корневой `.gitignore` репозитория
-- **WHEN** проверяется запись для каталога данных
-- **THEN** в файле есть строка `data/`
+- **GIVEN** the repository root `.gitignore`
+- **WHEN** the data-directory entry is checked
+- **THEN** the file contains the line `data/`
 
-### Requirement: Путь и формат файла состояния
+### Requirement: State file path and format
 
-Состояние шлюза SHALL храниться в одном файле `state.bin` внутри каталога `DATA_DIR`. На диске файл SHALL быть зашифрован AES-256-GCM ключом из окружения. Байт 0 файла SHALL быть версией формата `1`; байты 1–12 SHALL быть IV; далее SHALL следовать ciphertext и 16-байтовый authentication tag. Байт версии SHALL входить в additional authenticated data, так что смена версии без перешифрования SHALL приводить к отказу проверки тега.
+Gateway state SHALL be stored in one file, `state.bin`, inside `DATA_DIR`. On disk the file SHALL be encrypted with AES-256-GCM using the key from the environment. Byte 0 of the file SHALL be format version `1`; bytes 1–12 SHALL be the IV; the ciphertext SHALL follow, then a 16-byte authentication tag. The version byte SHALL be additional authenticated data, so changing the version without re-encrypting SHALL fail the tag check.
 
-#### Scenario: Файл лежит по согласованному пути
+#### Scenario: The file is at the agreed path
 
-- **GIVEN** каталог `DATA_DIR` существует и хранилище уже записало документ
-- **WHEN** тест проверяет путь файла состояния
-- **THEN** файл существует по пути `DATA_DIR/state.bin`
+- **GIVEN** `DATA_DIR` exists and the store has already written a document
+- **WHEN** the test checks the state file path
+- **THEN** the file exists at `DATA_DIR/state.bin`
 
-### Requirement: Отсутствие файла даёт пустое состояние без создания файла
+### Requirement: A missing file yields an empty state and does not create the file
 
-Если файла `DATA_DIR/state.bin` нет, открытие хранилища SHALL установить документ в памяти равным пустому JSON-объекту `{}` и SHALL NOT создавать `state.bin` до первой успешной операции `replace`.
+If `DATA_DIR/state.bin` does not exist, opening the store SHALL set the in-memory document to the empty JSON object `{}` and SHALL NOT create `state.bin` until the first successful `replace`.
 
-#### Scenario: Нет файла — память {} и файл не создан
+#### Scenario: No file — memory is {} and the file is not created
 
-- **GIVEN** каталог `DATA_DIR` существует и в нём нет `state.bin`
-- **WHEN** хранилище открывается с валидным ключом
-- **THEN** документ в памяти равен `{}`
-- **AND** файл `DATA_DIR/state.bin` по-прежнему отсутствует
+- **GIVEN** `DATA_DIR` exists and contains no `state.bin`
+- **WHEN** the store opens with a valid key
+- **THEN** the in-memory document equals `{}`
+- **AND** `DATA_DIR/state.bin` is still absent
 
-### Requirement: Replace сохраняет документ для повторного открытия
+### Requirement: Replace keeps the document for a later open
 
-Операция `replace` SHALL целиком заменить документ в памяти и на диске. После успешного `replace` повторное открытие того же файла тем же ключом SHALL вернуть тот же JSON-документ. Запись SHALL идти во временный файл в том же каталоге, затем атомарное переименование в `state.bin`; при неуспешной записи документ в памяти SHALL остаться прежним.
+`replace` SHALL replace the in-memory document and the on-disk document in full. After a successful `replace`, opening the same file again with the same key SHALL return the same JSON document. The write SHALL go to a temp file in the same directory, then an atomic rename to `state.bin`; if the write fails, the in-memory document SHALL stay as it was.
 
-#### Scenario: Запись и повторное открытие тем же ключом
+#### Scenario: Write and reopen with the same key
 
-- **GIVEN** хранилище открыто без файла или с пустым документом и ключ известен тесту
-- **WHEN** выполняется `replace` с JSON-объектом-документом, затем хранилище открывается снова тем же ключом из того же `DATA_DIR`
-- **THEN** прочитанный документ глубоко равен записанному
+- **GIVEN** the store is open with no file or with an empty document, and the test knows the key
+- **WHEN** `replace` runs with a JSON object document, then the store opens again with the same key from the same `DATA_DIR`
+- **THEN** the document read back deep-equals the document that was written
 
-### Requirement: Ciphertext не содержит открытый текст документа
+### Requirement: Ciphertext does not contain the document plaintext
 
-После успешного `replace` байты файла `state.bin` SHALL NOT содержать узнаваемую plaintext-строку-canary, которая присутствует в сохранённом JSON-документе.
+After a successful `replace`, the bytes of `state.bin` SHALL NOT contain a recognizable plaintext canary string that is present in the saved JSON document.
 
-#### Scenario: Canary отсутствует в байтах файла
+#### Scenario: Canary is absent from the file bytes
 
-- **GIVEN** хранилище открыто с валидным ключом
-- **WHEN** выполняется `replace` документа, содержащего уникальную plaintext-строку-canary, известную тесту
-- **THEN** содержимое `DATA_DIR/state.bin` как последовательность байт не содержит эту canary-строку в открытом виде
+- **GIVEN** the store is open with a valid key
+- **WHEN** `replace` runs with a document that contains a unique plaintext canary string known to the test
+- **THEN** the contents of `DATA_DIR/state.bin` as a byte sequence do not contain that canary string in the clear
 
-### Requirement: Перекрывающиеся replace сериализованы
+### Requirement: Overlapping replace calls are serialized
 
-В одном процессе одновременные (перекрывающиеся) вызовы `replace` SHALL завершаться без повреждения файла: оба вызова SHALL завершиться успешно или с явной ошибкой записи, а итоговый `state.bin` SHALL успешно расшифровываться тем же ключом в валидный JSON-объект. Межпроцессная блокировка файла в этом требовании не требуется.
+In one process, overlapping `replace` calls SHALL finish without corrupting the file: both calls SHALL finish successfully or with an explicit write error, and the resulting `state.bin` SHALL decrypt with the same key into a valid JSON object. A cross-process file lock is not required by this requirement.
 
-#### Scenario: Два перекрывающихся replace не портят файл
+#### Scenario: Two overlapping replace calls do not corrupt the file
 
-- **GIVEN** хранилище открыто с валидным ключом
-- **WHEN** два вызова `replace` с разными документами запускаются так, что их выполнение перекрывается
-- **THEN** оба вызова завершаются (успехом или ошибкой записи) без зависания
-- **AND** после их завершения `state.bin` расшифровывается тем же ключом в JSON-объект
-- **AND** документ в памяти совпадает с последним успешно записанным значением по правилам очереди
+- **GIVEN** the store is open with a valid key
+- **WHEN** two `replace` calls with different documents are started so that their execution overlaps
+- **THEN** both calls finish (with success or a write error) without hanging
+- **AND** after they finish, `state.bin` decrypts with the same key into a JSON object
+- **AND** the in-memory document matches the last successfully written value under the queue rules
 
-### Requirement: Чужой ключ и битый файл отвергаются без утечки
+### Requirement: A wrong key and a corrupt file are rejected without a leak
 
-Если файл `state.bin` существует, но authentication tag не сходится (чужой ключ или подмена ciphertext), открытие SHALL завершиться ошибкой с фиксированным английским текстом `state file cannot be decrypted`. Если файл короче заголовка, байт версии не равен `1`, или расшифрованные байты не являются JSON-объектом, открытие SHALL завершиться ошибкой с фиксированным английским текстом `state file is corrupt`. Текст ошибки и вывод процесса SHALL NOT содержать значение ключа и SHALL NOT содержать байты или plaintext содержимого файла.
+If `state.bin` exists but the authentication tag does not match (wrong key or tampered ciphertext), open SHALL fail with the fixed English text `state file cannot be decrypted`. If the file is shorter than the header, the version byte is not `1`, or the decrypted bytes are not a JSON object, open SHALL fail with the fixed English text `state file is corrupt`. The error text and the process output SHALL NOT contain the key value and SHALL NOT contain the file's bytes or plaintext.
 
-#### Scenario: Чужой ключ — cannot be decrypted
+#### Scenario: Wrong key — cannot be decrypted
 
-- **GIVEN** `state.bin` записан одним валидным ключом, а открытие выполняется другим валидным 32-байтным ключом; оба значения ключей и canary из документа известны тесту
-- **WHEN** хранилище открывается вторым ключом
-- **THEN** операция завершается ошибкой
-- **AND** текст ошибки равен `state file cannot be decrypted`
-- **AND** текст ошибки не содержит ни одного из двух значений ключей и не содержит canary из документа
+- **GIVEN** `state.bin` was written with one valid key, and open uses a different valid 32-byte key; the test knows both key values and a canary from the document
+- **WHEN** the store opens with the second key
+- **THEN** the operation fails
+- **AND** the error text equals `state file cannot be decrypted`
+- **AND** the error text contains neither key value and does not contain the canary from the document
 
-#### Scenario: Усечённый или повреждённый файл — corrupt
+#### Scenario: Truncated or damaged file — corrupt
 
-- **GIVEN** в `DATA_DIR` лежит файл `state.bin`, который короче заголовка или иначе повреждён так, что не проходит проверки формата/JSON (не случай auth tag failure); значение ключа и исходное содержимое (если было) известны тесту
-- **WHEN** хранилище открывается валидным ключом
-- **THEN** операция завершается ошибкой
-- **AND** текст ошибки равен `state file is corrupt`
-- **AND** текст ошибки не содержит значения ключа и не содержит исходного содержимого файла
+- **GIVEN** `DATA_DIR` contains a `state.bin` that is shorter than the header or otherwise damaged so that it fails format or JSON checks (not an auth-tag failure); the test knows the key value and the original contents, if any
+- **WHEN** the store opens with a valid key
+- **THEN** the operation fails
+- **AND** the error text equals `state file is corrupt`
+- **AND** the error text does not contain the key value and does not contain the original file contents
 
-### Requirement: Программный API хранилища
+### Requirement: Store programmatic API
 
-Хранилище SHALL предоставлять операциям следующих этапов возможность открыть файл (`open`), прочитать текущий документ в памяти и заменить документ целиком (`replace`). API этого изменения SHALL NOT включать конфигурации, аккаунты, HTTP-маршруты или UI.
+The store SHALL let later stages open the file (`open`), read the current in-memory document, and replace the document in full (`replace`). The API of this change SHALL NOT include configurations, accounts, HTTP routes, or UI.
 
-#### Scenario: Open, read и replace доступны без доменной модели
+#### Scenario: Open, read, and replace are available without a domain model
 
-- **GIVEN** валидный ключ и каталог `DATA_DIR`
-- **WHEN** вызываются `open`, чтение документа и `replace` произвольного JSON-объекта
-- **THEN** операции выполняются без обращения к API конфигураций, аккаунтов, HTTP или UI
+- **GIVEN** a valid key and a `DATA_DIR` directory
+- **WHEN** `open`, a document read, and `replace` of an arbitrary JSON object are called
+- **THEN** the operations run without calling the configurations API, accounts API, HTTP, or UI

@@ -2,52 +2,52 @@
 
 ## Purpose
 
-Задаёт репозиторный контракт проверок перед слиянием в `main`: содержимое GitHub Actions workflow, отказ ESLint на explicit `any` и поведение Prettier `format:check` — всё проверяемое локально без вызовов GitHub API.
+Defines the repository contract for checks before a merge into `main`: the GitHub Actions workflow contents, ESLint rejecting explicit `any`, and Prettier `format:check` behavior — all verifiable locally without calling the GitHub API.
 
 ## ADDED Requirements
 
-### Requirement: Workflow на pull_request в main
+### Requirement: Workflow on pull_request into main
 
-Репозиторий SHALL содержать файл GitHub Actions workflow, который запускается на событии `pull_request` с целевой веткой `main`. Job SHALL использовать Node.js версии 22. После установки зависимостей job SHALL выполнить корневые скрипты `typecheck`, `lint`, `format:check`, `test` и `build` (в любом порядке, согласованном с design). Workflow-файл SHALL лежать под `.github/workflows/`.
+The repository SHALL contain a GitHub Actions workflow file that runs on the `pull_request` event targeting `main`. The job SHALL use Node.js 22. After installing dependencies, the job SHALL run the root scripts `typecheck`, `lint`, `format:check`, `test`, and `build` (in any order agreed in the design). The workflow file SHALL live under `.github/workflows/`.
 
-#### Scenario: Workflow объявляет Node 22 и все проверки
+#### Scenario: Workflow declares Node 22 and every check
 
-- **GIVEN** в репозитории есть workflow-файл под `.github/workflows/` для pull request в `main`
-- **WHEN** тест читает этот файл (без вызова GitHub API)
-- **THEN** триггер включает `pull_request` на ветку `main`
-- **AND** в job указана версия Node.js `22`
-- **AND** шаги включают выполнение корневых скриптов `typecheck`, `lint`, `format:check`, `test` и `build`
+- **GIVEN** the repository has a workflow file under `.github/workflows/` for a pull request into `main`
+- **WHEN** the test reads that file (without calling the GitHub API)
+- **THEN** the trigger includes `pull_request` to the branch `main`
+- **AND** the job specifies Node.js version `22`
+- **AND** the steps include running the root scripts `typecheck`, `lint`, `format:check`, `test`, and `build`
 
-### Requirement: ESLint отвергает explicit any в server и web
+### Requirement: ESLint rejects explicit any in server and web
 
-Корневая конфигурация ESLint SHALL считать `@typescript-eslint/no-explicit-any` ошибкой для исходников и тестов под `server/` и под `web/`. Запуск ESLint (CLI или API) на фрагменте TypeScript с явным типом `any` SHALL завершаться с ошибкой по этому правилу. Escape hatch, отключающий запрет `any` для всего проекта или для тестов по умолчанию, SHALL NOT быть частью конфигурации.
+The root ESLint configuration SHALL treat `@typescript-eslint/no-explicit-any` as an error for sources and tests under `server/` and under `web/`. Running ESLint (CLI or API) on a TypeScript snippet with an explicit `any` type SHALL fail on that rule. An escape hatch that disables the `any` ban for the whole project or for tests by default SHALL NOT be part of the configuration.
 
-#### Scenario: Explicit any в server-фрагменте — ошибка
+#### Scenario: Explicit any in a server snippet is an error
 
-- **GIVEN** корневая ESLint-конфигурация проекта загружена
-- **WHEN** ESLint проверяет временный TypeScript-фрагмент с путём как у `server/` (например под `server/`) и с явным типом `any`
-- **THEN** результат содержит ошибку правила `@typescript-eslint/no-explicit-any`
-- **AND** код выхода проверки ненулевой (или API сообщает failure)
+- **GIVEN** the project's root ESLint configuration is loaded
+- **WHEN** ESLint checks a temporary TypeScript snippet with a path like `server/` (for example under `server/`) and an explicit `any` type
+- **THEN** the result contains an error for the rule `@typescript-eslint/no-explicit-any`
+- **AND** the check's exit code is non-zero (or the API reports failure)
 
-#### Scenario: Explicit any в web-фрагменте — ошибка
+#### Scenario: Explicit any in a web snippet is an error
 
-- **GIVEN** корневая ESLint-конфигурация проекта загружена
-- **WHEN** ESLint проверяет временный TypeScript-фрагмент с путём как у `web/` (например под `web/`) и с явным типом `any`
-- **THEN** результат содержит ошибку правила `@typescript-eslint/no-explicit-any`
-- **AND** код выхода проверки ненулевой (или API сообщает failure)
+- **GIVEN** the project's root ESLint configuration is loaded
+- **WHEN** ESLint checks a temporary TypeScript snippet with a path like `web/` (for example under `web/`) and an explicit `any` type
+- **THEN** the result contains an error for the rule `@typescript-eslint/no-explicit-any`
+- **AND** the check's exit code is non-zero (or the API reports failure)
 
-### Requirement: format:check различает сломанный и нормальный фрагмент
+### Requirement: format:check distinguishes a broken snippet from a formatted one
 
-Корневой скрипт `format:check` SHALL завершаться с ненулевым кодом на фрагменте TypeScript (или ином включённом в Prettier типе файла под `server/` / `web/`), который нарушает правила форматирования Prettier проекта, и SHALL завершаться с нулевым кодом на том же фрагменте после форматирования по тем же правилам. Проверка SHALL выполняться локально через Prettier/npm-скрипт без вызова GitHub.
+The root script `format:check` SHALL exit non-zero on a TypeScript snippet (or another file type Prettier includes under `server/` / `web/`) that breaks the project's Prettier rules, and SHALL exit zero on the same snippet after it is formatted with those rules. The check SHALL run locally through Prettier or the npm script, without calling GitHub.
 
-#### Scenario: format:check падает на сломанном фрагменте
+#### Scenario: format:check fails on a broken snippet
 
-- **GIVEN** во временном каталоге под путём, который покрывает Prettier проекта (например под `server/` или `web/`), лежит файл с намеренно сломанным форматированием
-- **WHEN** запускается корневой `format:check` (или эквивалентный вызов Prettier check с конфигом проекта) на этом фрагменте
-- **THEN** код выхода ненулевой
+- **GIVEN** a temp directory on a path the project's Prettier covers (for example under `server/` or `web/`) contains a file with intentionally broken formatting
+- **WHEN** the root `format:check` runs (or the equivalent Prettier check with the project config) on that snippet
+- **THEN** the exit code is non-zero
 
-#### Scenario: format:check проходит на отформатированном фрагменте
+#### Scenario: format:check passes on a formatted snippet
 
-- **GIVEN** тот же фрагмент отформатирован правилами Prettier проекта (например через `format` / Prettier write)
-- **WHEN** снова запускается `format:check` (или эквивалентный Prettier check) на этом фрагменте
-- **THEN** код выхода нулевой
+- **GIVEN** the same snippet has been formatted with the project's Prettier rules (for example via `format` or Prettier write)
+- **WHEN** `format:check` (or the equivalent Prettier check) runs again on that snippet
+- **THEN** the exit code is zero

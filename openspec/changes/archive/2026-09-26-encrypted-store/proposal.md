@@ -4,37 +4,37 @@ Issue: #7
 
 ## Why
 
-Каркас процесса уже требует `DATA_DIR` и `ENCRYPTION_KEY`, но состояние на диске ещё не защищено. Без единого зашифрованного файла нельзя хранить конфигурации и аккаунты так, чтобы на диске не было открытого текста, а модель никогда не видела секреты.
+The process skeleton already requires `DATA_DIR` and `ENCRYPTION_KEY`, but state on disk is not protected yet. Without one encrypted file, configurations and accounts cannot be stored so that the disk has no plaintext and the model never sees secrets.
 
 ## What Changes
 
-- Появляется модуль зашифрованного хранилища: один файл `DATA_DIR/state.bin`, AES-256-GCM, документ в памяти как JSON.
-- Каталог данных для работающего шлюза — проектный `data` в корне репозитория (рядом с `server/` и `web/`). `DATA_DIR` остаётся обязательной переменной и указывает на этот каталог; процесс по-прежнему собирает путь как `path.join(DATA_DIR, 'state.bin')`. Временный файл записи — `state.bin.tmp` в том же каталоге. В корневом `.gitignore` уже есть строка `data/`, поэтому `state.bin` и temp не коммитятся; второй паттерн не добавляется. Автотесты могут задавать `DATA_DIR` подкаталогом внутри `data/`, чтобы не перезаписывать локальный `data/state.bin`.
-- При старте процесс открывает хранилище до `listen`. Нет файла — пустое состояние `{}` без создания файла. Чужой ключ или битый файл — выход с кодом 1 и фиксированной английской причиной без ключа и без содержимого.
-- `ENCRYPTION_KEY` в окружении — стандартный base64 ровно 32 байт после декодирования; в `EnvConfig` хранится `Buffer`, не исходная строка. Неверный алфавит или длина — выход с именем `ENCRYPTION_KEY` на stderr.
-- API хранилища для следующих этапов: `open`, чтение документа, `replace` всего документа. Записи сериализованы очередью; запись через temp + rename.
-- **BREAKING** для тестов старта: фикстуры `ENCRYPTION_KEY` перестают быть произвольной строкой и становятся валидным 32-байтным base64-ключом; проверка утечки по-прежнему ищет отсутствие значения ключа в stdout/stderr.
+- An encrypted store module: one file `DATA_DIR/state.bin`, AES-256-GCM, the document kept in memory as JSON.
+- The data directory for a running gateway is the project `data` directory at the repository root (next to `server/` and `web/`). `DATA_DIR` stays required and points at that directory; the process still builds the path as `path.join(DATA_DIR, 'state.bin')`. The write temp file is `state.bin.tmp` in the same directory. The root `.gitignore` already has the line `data/`, so `state.bin` and the temp file are not committed; a second pattern is not added. Automated tests may set `DATA_DIR` to a subdirectory inside `data/` so they do not overwrite a local `data/state.bin`.
+- At startup the process opens the store before `listen`. No file means an empty state `{}` and no file is created. A wrong key or a corrupt file means exit 1 and a fixed English reason with no key and no contents.
+- `ENCRYPTION_KEY` in the environment is standard base64 of exactly 32 bytes after decoding; `EnvConfig` stores a `Buffer`, not the original string. A bad alphabet or length means exit with the name `ENCRYPTION_KEY` on stderr.
+- The store API for later stages: `open`, read the document, `replace` the whole document. Writes are serialized by a queue; a write goes through temp + rename.
+- **BREAKING** for startup tests: `ENCRYPTION_KEY` fixtures stop being an arbitrary string and become a valid 32-byte base64 key; the leak check still looks for the absence of the key value in stdout/stderr.
 
 ## Non-goals
 
-- Конфигурации, аккаунты, хеши bearer, admin API, admin UI, MCP-инструменты.
-- Межпроцессная блокировка файла, ротация ключа, миграция с plaintext-файла.
-- HTTP-маршруты и экраны, связанные с данными хранилища.
+- Configurations, accounts, bearer hashes, the admin API, the admin UI, and MCP tools.
+- A cross-process file lock, key rotation, and migration from a plaintext file.
+- HTTP routes and screens tied to store data.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `encrypted-store`: единый зашифрованный файл состояния, загрузка при старте, очередь атомарных `replace`, фиксированные ошибки без утечки ключа и содержимого, программный API `open` / read / `replace`.
+- `encrypted-store`: one encrypted state file, load at startup, a queue of atomic `replace` calls, fixed errors with no leak of the key or the contents, and a programmatic API of `open` / read / `replace`.
 
 ### Modified Capabilities
 
-- `process-startup`: формат и проверка `ENCRYPTION_KEY` (base64 → 32 байта); загрузка хранилища до открытия портов; сценарии старта с валидным файлом, без файла, с чужим ключом и с битым файлом; обновление фикстур ключа в существующих сценариях без ослабления проверки утечки.
+- `process-startup`: the format and check of `ENCRYPTION_KEY` (base64 → 32 bytes); loading the store before opening ports; startup scenarios with a valid file, with no file, with a wrong key, and with a corrupt file; updating key fixtures in existing scenarios without weakening the leak check.
 
 ## Impact
 
-- `server/src/env.ts`: тип `encryptionKey` становится `Buffer`; валидация base64/длины при разборе окружения.
-- Новый модуль хранилища под `server/src/` (например `store/`), вызов из `main.ts` до `listen`.
-- Каталог `data/` в корне репозитория как `DATA_DIR` для работающего процесса; проверка, что в `.gitignore` уже есть `data/` (без нового паттерна).
-- Тесты `server/test/env.test.ts`, `server/test/process-startup.test.ts` и новые тесты сценариев хранилища на Vitest без внешних сервисов; тестовый `DATA_DIR` — подкаталог `data/`.
-- Зависимостей runtime сверх Node crypto не требуется.
+- `server/src/env.ts`: `encryptionKey` becomes a `Buffer`; base64 and length are validated while parsing the environment.
+- A new store module under `server/src/` (for example `store/`), called from `main.ts` before `listen`.
+- The `data/` directory at the repository root as `DATA_DIR` for a running process; a check that `.gitignore` already contains `data/` (no new pattern).
+- Tests in `server/test/env.test.ts`, `server/test/process-startup.test.ts`, and new store-scenario tests on Vitest with no external services; the test `DATA_DIR` is a subdirectory of `data/`.
+- No runtime dependency beyond Node crypto is required.

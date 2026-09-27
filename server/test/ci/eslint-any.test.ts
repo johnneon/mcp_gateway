@@ -42,8 +42,8 @@ async function lintExplicitAnySnippet(relativePath: string): Promise<{
   };
 }
 
-describe('pull-request-checks: ESLint отвергает explicit any в server и web', () => {
-  it('Explicit any в server-фрагменте — ошибка', async () => {
+describe('pull-request-checks: ESLint rejects explicit any in server and web', () => {
+  it('Explicit any in a server snippet is an error', async () => {
     const outcome = await lintExplicitAnySnippet(
       path.join('server', 'test', 'ci', 'explicit-any.fixture.ts'),
     );
@@ -52,7 +52,7 @@ describe('pull-request-checks: ESLint отвергает explicit any в server 
     expect(outcome.ruleIds).toContain('@typescript-eslint/no-explicit-any');
   });
 
-  it('Explicit any в web-фрагменте — ошибка', async () => {
+  it('Explicit any in a web snippet is an error', async () => {
     const outcome = await lintExplicitAnySnippet(
       path.join('web', 'src', 'test', 'explicit-any.fixture.ts'),
     );

@@ -1,21 +1,21 @@
 # Tasks
 
-## 1. Формат ENCRYPTION_KEY в env
+## 1. ENCRYPTION_KEY format in env
 
-- [x] 1.1 Изменить `parseEnv` / `EnvConfig`: `ENCRYPTION_KEY` — стандартный base64 ровно 32 байта → `Buffer`; неверный алфавит или длина — отказ с именем `ENCRYPTION_KEY` без значения. Обновить фикстуры в `env.test.ts` и связанных тестах на валидный ключ; добавить сценарии неверной длины и недопустимого base64; сохранить проверку отсутствия значения ключа в тексте ошибки. Проверка: тесты env проходят; `npm run typecheck` в затронутом пакете проходит.
+- [x] 1.1 Change `parseEnv` / `EnvConfig`: `ENCRYPTION_KEY` is standard base64 of exactly 32 bytes → `Buffer`; a bad alphabet or length is a refusal with the name `ENCRYPTION_KEY` and no value. Update fixtures in `env.test.ts` and related tests to a valid key; add scenarios for the wrong length and invalid base64; keep the check that the key value is absent from the error text. Check: the env tests pass; `npm run typecheck` in the affected package passes.
 
-## 2. Модуль encrypted store
+## 2. Encrypted store module
 
-- [x] 2.1 Реализовать codec и `open`: путь `DATA_DIR/state.bin` (для работающего шлюза `DATA_DIR` — проектный каталог `data`), layout version/IV/ciphertext/tag с AAD на версию, пустое состояние `{}` без создания файла, ошибки `state file is corrupt` и `state file cannot be decrypted` без ключа и без содержимого. Автотесты: нет файла → `{}` и файл не создан; чужой ключ → decrypt-текст; усечённый/битый → corrupt-текст; утечка ключа/canary отсутствует; тестовый `DATA_DIR` — подкаталог внутри `data/`. Проверка: новые тесты store проходят.
+- [x] 2.1 Implement the codec and `open`: path `DATA_DIR/state.bin` (for a running gateway `DATA_DIR` is the project `data` directory), layout version/IV/ciphertext/tag with AAD on the version, empty state `{}` without creating a file, errors `state file is corrupt` and `state file cannot be decrypted` with no key and no contents. Automated tests: no file → `{}` and the file is not created; wrong key → decrypt text; truncated/corrupt → corrupt text; no leak of the key/canary; the test `DATA_DIR` is a subdirectory inside `data/`. Check: the new store tests pass.
 
-- [x] 2.2 Реализовать `replace` с очередью: temp `state.bin.tmp`, fsync, rename, затем смена документа в памяти; неуспех оставляет прежний документ. Автотесты: write + повторный open тем же ключом → тот же документ; canary нет в байтах файла; два перекрывающихся replace завершаются и файл расшифровывается. Проверка: тесты store проходят; `npm test` для server по этим файлам — код 0.
+- [x] 2.2 Implement `replace` with a queue: temp `state.bin.tmp`, fsync, rename, then swap the in-memory document; a failure leaves the previous document. Automated tests: write + reopen with the same key → the same document; the canary is not in the file bytes; two overlapping replace calls finish and the file decrypts. Check: the store tests pass; `npm test` for server on these files exits 0.
 
-- [x] 2.3 Проверить, что в корневом `.gitignore` уже есть строка `data/` (она уже присутствует). Не добавлять второй паттерн и не вводить другое имя каталога вместо `data`. Проверка: в `.gitignore` есть `data/`; продуктовый код не правит `.gitignore`, если строка на месте.
+- [x] 2.3 Check that the root `.gitignore` already contains the line `data/` (it is already there). Do not add a second pattern and do not introduce another directory name instead of `data`. Check: `.gitignore` contains `data/`; product code does not edit `.gitignore` if the line is present.
 
-## 3. Старт процесса и process-startup
+## 3. Process startup and process-startup
 
-- [x] 3.1 В `main.ts`: после `parseEnv` открыть store до `listen`; при ошибке store — stderr с фиксированным английским текстом, exit 1, порты не открывать. Обновить spawn/фикстуры `process-startup` на валидный base64-ключ; `DATA_DIR` в тестах — подкаталог `data/`; добавить сценарии: нет файла — слушает и не создаёт `state.bin`; валидный файл — слушает; чужой ключ / битый файл — exit 1, порты закрыты, без утечки ключа и содержимого. Проверка: тесты process-startup и store проходят.
+- [x] 3.1 In `main.ts`: after `parseEnv`, open the store before `listen`; on a store error, write the fixed English text to stderr, exit 1, and do not open ports. Update `process-startup` spawn fixtures to a valid base64 key; test `DATA_DIR` is a subdirectory of `data/`; add scenarios: no file — listens and does not create `state.bin`; valid file — listens; wrong key / corrupt file — exit 1, ports closed, no leak of the key or the contents. Check: the process-startup and store tests pass.
 
-## 4. Полная проверка пакета
+## 4. Full package check
 
-- [x] 4.1 С корня: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` — код 0. Имена тестов покрывают сценарии delta `encrypted-store` (включая каталог `data` и gitignore) и добавленные/изменённые сценарии `process-startup`. Проверка: все команды завершаются нулевым кодом.
+- [x] 4.1 From the root: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` exit 0. Test names cover the `encrypted-store` delta scenarios (including the `data` directory and gitignore) and the added or changed `process-startup` scenarios. Check: every command exits 0.

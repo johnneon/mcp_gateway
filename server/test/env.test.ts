@@ -47,8 +47,8 @@ function expectMissingVariable(
   }
 }
 
-describe('process-startup: Обязательные переменные окружения при старте', () => {
-  it('Нет MCP_HOST — MissingEnvError with name only', () => {
+describe('process-startup: Required environment variables at startup', () => {
+  it('Missing MCP_HOST — MissingEnvError with name only', () => {
     expectMissingVariable(fullEnv({ MCP_HOST: undefined }), 'MCP_HOST', [
       SECRET_KEY,
       DATA_DIR_VALUE,
@@ -57,11 +57,11 @@ describe('process-startup: Обязательные переменные окр�
     ]);
   });
 
-  it('Нет MCP_HOST — empty string treated as missing', () => {
+  it('Missing MCP_HOST — empty string treated as missing', () => {
     expectMissingVariable(fullEnv({ MCP_HOST: '' }), 'MCP_HOST', [SECRET_KEY, DATA_DIR_VALUE]);
   });
 
-  it('Нет MCP_PORT — MissingEnvError with name only', () => {
+  it('Missing MCP_PORT — MissingEnvError with name only', () => {
     expectMissingVariable(fullEnv({ MCP_PORT: undefined }), 'MCP_PORT', [
       SECRET_KEY,
       DATA_DIR_VALUE,
@@ -70,7 +70,7 @@ describe('process-startup: Обязательные переменные окр�
     ]);
   });
 
-  it('Нет ADMIN_PORT — MissingEnvError with name only', () => {
+  it('Missing ADMIN_PORT — MissingEnvError with name only', () => {
     expectMissingVariable(fullEnv({ ADMIN_PORT: undefined }), 'ADMIN_PORT', [
       SECRET_KEY,
       DATA_DIR_VALUE,
@@ -79,7 +79,7 @@ describe('process-startup: Обязательные переменные окр�
     ]);
   });
 
-  it('Нет DATA_DIR — MissingEnvError with name only', () => {
+  it('Missing DATA_DIR — MissingEnvError with name only', () => {
     expectMissingVariable(fullEnv({ DATA_DIR: undefined }), 'DATA_DIR', [
       SECRET_KEY,
       MCP_HOST_VALUE,
@@ -88,7 +88,7 @@ describe('process-startup: Обязательные переменные окр�
     ]);
   });
 
-  it('Нет ENCRYPTION_KEY — MissingEnvError with name only', () => {
+  it('Missing ENCRYPTION_KEY — MissingEnvError with name only', () => {
     expectMissingVariable(fullEnv({ ENCRYPTION_KEY: undefined }), 'ENCRYPTION_KEY', [
       SECRET_KEY,
       DATA_DIR_VALUE,
@@ -99,8 +99,8 @@ describe('process-startup: Обязательные переменные окр�
   });
 });
 
-describe('process-startup: ENCRYPTION_KEY — base64 ровно 32 байта', () => {
-  it('Неверная длина после base64 — имя ENCRYPTION_KEY', () => {
+describe('process-startup: ENCRYPTION_KEY is base64 of exactly 32 bytes', () => {
+  it('Wrong length after base64 — the name ENCRYPTION_KEY', () => {
     expectMissingVariable(fullEnv({ ENCRYPTION_KEY: WRONG_LENGTH_KEY }), 'ENCRYPTION_KEY', [
       WRONG_LENGTH_KEY,
       SECRET_KEY,
@@ -108,7 +108,7 @@ describe('process-startup: ENCRYPTION_KEY — base64 ровно 32 байта', 
     ]);
   });
 
-  it('Недопустимый base64 — имя ENCRYPTION_KEY', () => {
+  it('Invalid base64 — the name ENCRYPTION_KEY', () => {
     expectMissingVariable(fullEnv({ ENCRYPTION_KEY: INVALID_ALPHABET_KEY }), 'ENCRYPTION_KEY', [
       INVALID_ALPHABET_KEY,
       SECRET_KEY,
@@ -116,7 +116,7 @@ describe('process-startup: ENCRYPTION_KEY — base64 ровно 32 байта', 
     ]);
   });
 
-  it('Фикстуры старта используют валидный ключ без утечки', () => {
+  it('Startup fixtures use a valid key and do not leak it', () => {
     const config = parseEnv(fullEnv());
     expect(Buffer.isBuffer(config.encryptionKey)).toBe(true);
     expect(config.encryptionKey).toEqual(SECRET_KEY_BYTES);
@@ -124,18 +124,18 @@ describe('process-startup: ENCRYPTION_KEY — base64 ровно 32 байта', 
   });
 });
 
-describe('process-startup: ADMIN_HOST по умолчанию 127.0.0.1', () => {
-  it('ADMIN_HOST не задана — defaults to 127.0.0.1', () => {
+describe('process-startup: ADMIN_HOST defaults to 127.0.0.1', () => {
+  it('ADMIN_HOST is unset — defaults to 127.0.0.1', () => {
     const config = parseEnv(fullEnv({ ADMIN_HOST: undefined }));
     expect(config.adminHost).toBe('127.0.0.1');
   });
 
-  it('ADMIN_HOST пустая — defaults to 127.0.0.1', () => {
+  it('ADMIN_HOST is empty — defaults to 127.0.0.1', () => {
     const config = parseEnv(fullEnv({ ADMIN_HOST: '' }));
     expect(config.adminHost).toBe('127.0.0.1');
   });
 
-  it('ADMIN_HOST задана явно — uses the provided host', () => {
+  it('ADMIN_HOST is set explicitly — uses the provided host', () => {
     const config = parseEnv(fullEnv({ ADMIN_HOST: '127.0.0.1' }));
     expect(config.adminHost).toBe('127.0.0.1');
   });

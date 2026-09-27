@@ -4,18 +4,18 @@
 blockers: 0
 
 ## Spec
-- Каталог состояния в проекте и gitignore: met
-- Путь и формат файла состояния: met
-- Отсутствие файла даёт пустое состояние без создания файла: met
-- Replace сохраняет документ для повторного открытия: met
-- Ciphertext не содержит открытый текст документа: met
-- Перекрывающиеся replace сериализованы: met
-- Чужой ключ и битый файл отвергаются без утечки: met
-- Программный API хранилища: met
-- ENCRYPTION_KEY — base64 ровно 32 байта: met
-- Старт с валидным или отсутствующим файлом состояния: met
-- Отказ хранилища не открывает порты: met
-- Два HTTP-слушателя при полном окружении (modified): met
+- Project state directory and gitignore: met
+- State file path and format: met
+- A missing file yields an empty state and does not create the file: met
+- Replace keeps the document for a later open: met
+- Ciphertext does not contain the document plaintext: met
+- Overlapping replace calls are serialized: met
+- A wrong key and a corrupt file are rejected without a leak: met
+- Store programmatic API: met
+- ENCRYPTION_KEY is base64 of exactly 32 bytes: met
+- Startup with a valid or missing state file: met
+- A store failure does not open the ports: met
+- Two HTTP listeners with a complete environment (modified): met
 
 ## Checks
 - tests: passed — 40 server + 2 web Vitest tests
@@ -30,10 +30,10 @@ blockers: 0
 - note: `main.ts` opens the store before listen and does not retain the handle afterward — correct for this change (no domain consumers yet)
 
 ## E2E
-- Нет state.bin — процесс слушает: passed — both listeners accepted TCP; `state.bin` absent after start; key absent from stdout/stderr
-- Валидный state.bin — процесс слушает: passed — both listeners accepted TCP; key and canary absent from output
-- Чужой ключ — порты закрыты: passed — exit 1; ports closed; stderr `state file cannot be decrypted`; no key or canary leak
-- Битый файл — порты закрыты: passed — exit 1; ports closed; stderr `state file is corrupt`; no key leak
+- No state.bin — the process listens: passed — both listeners accepted TCP; `state.bin` absent after start; key absent from stdout/stderr
+- Valid state.bin — the process listens: passed — both listeners accepted TCP; key and canary absent from output
+- Wrong key — ports stay closed: passed — exit 1; ports closed; stderr `state file cannot be decrypted`; no key or canary leak
+- Corrupt file — ports stay closed: passed — exit 1; ports closed; stderr `state file is corrupt`; no key leak
 - Admin UI (Playwright): not exercised — this change adds no admin screens
 - MCP tools/client: not exercised — this change adds no MCP tools; store loads before listen only
 
