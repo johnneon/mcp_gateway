@@ -2,7 +2,7 @@
 
 ## 1. Token module
 
-- [ ] 1.1 Add the token module (generate 32 random bytes as base64url without padding, SHA-256 hex of the exact token string, timing-safe compare of hashes). Unit tests: generated token round-trips through hash+compare; compare rejects a different string; hash equals Node `createHash('sha256')` of the token string. Check: the new token tests pass; `npm run typecheck -w server` exits 0.
+- [x] 1.1 Add the token module (generate 32 random bytes as base64url without padding, SHA-256 hex of the exact token string, timing-safe compare of hashes). Unit tests: generated token round-trips through hash+compare; compare rejects a different string; hash equals Node `createHash('sha256')` of the token string. Check: the new token tests pass; `npm run typecheck -w server` exits 0.
 
 ## 2. Configurations service
 
