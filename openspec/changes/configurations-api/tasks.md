@@ -6,7 +6,7 @@
 
 ## 2. Configurations service
 
-- [ ] 2.1 Implement the configurations service on `EncryptedStore` (no Express): empty `{}` → empty list; create / list / rotate / setEnabled / remove; document shape `{ configurations: [{ id, name, tokenHash, enabled }] }` with no `accountIds` and no plaintext token. Unit tests against an in-memory fake store cover empty-document list, create hash persistence, rotate replacing the hash, enable/disable, delete, and not-found errors. Check: the new service tests pass.
+- [x] 2.1 Implement the configurations service on `EncryptedStore` (no Express): empty `{}` → empty list; create / list / rotate / setEnabled / remove; document shape `{ configurations: [{ id, name, tokenHash, enabled }] }` with no `accountIds` and no plaintext token. Unit tests against an in-memory fake store cover empty-document list, create hash persistence, rotate replacing the hash, enable/disable, delete, and not-found errors. Check: the new service tests pass.
 
 ## 3. Admin /api wiring
 
