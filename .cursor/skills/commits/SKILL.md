@@ -12,9 +12,10 @@ Every change lives on its own branch `change/<name>`. Work never lands on `main`
 Create it at the start of propose, before writing artifacts.
 
 1. `git status --short`. If the tree has changes that do not belong to this task, stop and ask.
-2. `git fetch origin`.
-3. If `change/<name>` already exists locally or on `origin`, stop and ask.
-4. `git switch -c change/<name> origin/main`.
+2. `git switch main`.
+3. `git pull --ff-only`. If the pull is not fast-forward, stop and ask. Do not create the branch from a stale `main`.
+4. If `change/<name>` already exists locally or on `origin`, stop and ask.
+5. `git switch -c change/<name>`. The branch starts from the `main` that was just pulled.
 
 Apply and fix continue on the same branch. Before starting, `git switch change/<name>` and check `git status --short` is clean.
 

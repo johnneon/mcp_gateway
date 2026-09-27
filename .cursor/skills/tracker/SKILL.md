@@ -56,7 +56,7 @@ gh issue view <n> --repo johnneon/mcp_gateway --json number,title,body,state,pro
 
 ## Create the issue
 
-When a task arrives without an issue, create one before propose, from the person's words. Title is the change name. Body in the language of the existing cards: outcome, what is included, how it is checked.
+When a task arrives without an issue, create one before propose, from the person's words. Title is the change name. Body in English: outcome, what is included, how it is checked.
 
 ```powershell
 gh issue create --repo johnneon/mcp_gateway --title "<name>" --assignee "@me" --project "Task tracker" --body-file $bodyFile
@@ -74,7 +74,13 @@ Body:
 **Verification**: <check>
 ```
 
-Then move the card to Backlog with the script below and report the issue link to the person.
+Then move the card to Backlog with `set-status.ps1 -Status "Backlog"`, set Iteration to the current iteration, and report the issue link to the person.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/skills/tracker/scripts/set-iteration.ps1 -Issue <n>
+```
+
+The script selects the iteration whose start date is today or earlier and whose end (start plus duration in days) is after today. If no iteration covers today, it fails with a message. Report that failure to the person. It does not undo the issue.
 
 ## Change name
 
@@ -120,5 +126,6 @@ No other comments. The pull request link appears on the issue by itself.
 ## Never
 
 - Close an issue or move a card to Done by hand. Merge does it.
-- Edit fields other than Status. Priority, Size, Iteration, and order belong to the person.
+- Edit Priority, Size, or order. Those belong to the person.
+- Change Iteration except when creating an issue, and then only to the current iteration.
 - Put a secret, a bearer, or a key in an issue, a comment, or a card.

@@ -8,11 +8,15 @@ You are the developer for MCP Gateway. Read `AGENTS.md` and `docs/workflow.md` f
 
 Work in one mode per run. Do not mix modes in one response. All git work follows the `commits` skill: branch `change/<name>`, never `main`. The issue and its board card follow the `tracker` skill.
 
+## Tests
+
+Never edit a test so that it passes. A failing assertion is fixed in product code. If the accepted scenario is wrong, stop and report it. Do not weaken, delete, skip, or rewrite an assertion, and do not change a fixture or an expected value, to match the current behavior.
+
 ## Propose
 
 Use when asked for a new change, a spec, or `/opsx-propose`. The main agent passes the issue number; without one, stop and ask.
 
-1. Create the branch `change/<name>` from `origin/main`.
+1. Switch to `main`, run `git pull --ff-only`, then create `change/<name>` from that `main`. Follow the `commits` skill. Do not branch from a stale `main`.
 2. Move the issue card to In progress.
 3. Read the issue, `mcp-gateway-spec.md`, and `openspec/specs/`.
 4. Follow `openspec-propose`. Write planning artifacts only. `proposal.md` carries `Issue: #<n>` per `tracker`.
@@ -37,6 +41,7 @@ Use when asked to implement an accepted change or `/opsx-apply`.
    - every delta scenario the task touches gets a test per `tests`;
    - tests, type check, lint, format check, and build pass;
    - do not introduce explicit `any` (`@typescript-eslint/no-explicit-any` is an error);
+   - do not edit a test to make it pass; follow the Tests section;
    - check the task in `tasks.md` and commit the task.
 4. Do not edit `mcp-gateway-spec.md` or `openspec/specs/`. If a scenario is wrong, stop and report it.
 5. Finish with what was done, how to start the process, and how to run the tests. Do not declare the change done.
@@ -46,7 +51,7 @@ Use when asked to implement an accepted change or `/opsx-apply`.
 Use when given `openspec/changes/<name>/verification.md` with blockers, or review comments on the pull request.
 
 1. Switch to `change/<name>` with a clean tree.
-2. Fix only the listed blockers or comments, following the same skills as apply. One `fix:` commit per blocker.
+2. Fix only the listed blockers or comments, following the same skills as apply. One `fix:` commit per blocker. Do not edit a test to make a check pass. Fix the product. If the scenario is wrong, stop and report it.
 3. Do not edit `verification.md`. A fresh validator run replaces it.
 4. If a blocker points at the artifacts rather than the code, stop and report it.
 5. If the pull request already exists, push after the next validator round says `blockers: 0`.

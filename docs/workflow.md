@@ -45,6 +45,15 @@
 
 ### 0. Задача
 
+Перед чтением issue основной агент переключается на `main` и подтягивает её. Ветку `change/<name>` создают уже от этой `main`.
+
+```text
+git switch main
+git pull --ff-only
+```
+
+Если рабочее дерево грязное или pull не fast-forward, остановиться и спросить. В `main` не коммитить.
+
 Человек даёт ссылку на issue или номер, например `/task #7`. Основной агент читает issue по скиллу `tracker`, выводит имя изменения и обсуждает решение с человеком. Если задача пришла без issue, основной агент заводит его на доске в Backlog и даёт ссылку.
 
 Если исход неясен, основной агент задаёт вопросы до propose. Для обсуждения без артефактов — `/opsx-explore`.
@@ -55,7 +64,7 @@
 
 `developer` в режиме propose, скиллы `commits`, `tracker` и `openspec-propose`.
 
-- Создаёт ветку `change/<name>` от свежего `origin/main`.
+- Сначала `git switch main` и `git pull --ff-only`, затем `git switch -c change/<name>` от этой `main`.
 - Переводит карточку issue в In progress.
 - Создаёт `openspec/changes/<name>/`: proposal, delta specs, design, tasks. В `proposal.md` под заголовком — строка `Issue: #<n>`.
 - Источник — `mcp-gateway-spec.md` и текущие `openspec/specs/`.
