@@ -10,7 +10,7 @@
 
 - [x] 2.1 Update `.cursor/skills/tracker/SKILL.md`: if `powershell` or `pwsh` is on `PATH`, run the `.ps1` files; otherwise `bash .cursor/skills/tracker/scripts/set-status.sh` and `set-iteration.sh`; keep `ProgramFiles` `gh.exe` Windows-only; do not tell agents to install PowerShell on macOS; document POSIX temp/body-file for issue and comment bodies. Check: automated test for scenario "Skill documents PowerShell-first then bash fallback" passes.
 
-- [ ] 2.2 Update `.cursor/skills/commits/SKILL.md` so a POSIX shell writes commit and pull request bodies to a temp/message file; keep the PowerShell here-string for Windows. Check: automated test for scenario "Tracker and commits skills document POSIX body files" passes.
+- [x] 2.2 Update `.cursor/skills/commits/SKILL.md` so a POSIX shell writes commit and pull request bodies to a temp/message file; keep the PowerShell here-string for Windows. Check: automated test for scenario "Tracker and commits skills document POSIX body files" passes.
 
 ## 3. Delta automated tests
 
