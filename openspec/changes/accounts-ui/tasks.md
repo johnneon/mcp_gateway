@@ -8,7 +8,7 @@
 
 ## 2. Connectors screen with accounts
 
-- [ ] 2.1 Rework `ConnectorsPage` to load connectors and accounts, show empty copy exactly `No connectors yet.`, group accounts under each connector (label, enabled, non-secret values only; no secret field keys), and wire add/edit via `AccountForm` dialog to POST/PATCH. On create/edit failure show API error text (e.g. `Connection check failed`). Rewrite obsolete Connectors tests that asserted no account actions and the old empty-state sentence. RTL scenarios: empty list copy; group accounts; create clears fixture secret; edit omits blank secret; create check-failure shows API text. Check: Connectors tests pass; every ADDED/MODIFIED Connectors-related delta scenario is named in a test.
+- [x] 2.1 Rework `ConnectorsPage` to load connectors and accounts, show empty copy exactly `No connectors yet.`, group accounts under each connector (label, enabled, non-secret values only; no secret field keys), and wire add/edit via `AccountForm` dialog to POST/PATCH. On create/edit failure show API error text (e.g. `Connection check failed`). Rewrite obsolete Connectors tests that asserted no account actions and the old empty-state sentence. RTL scenarios: empty list copy; group accounts; create clears fixture secret; edit omits blank secret; create check-failure shows API text. Check: Connectors tests pass; every ADDED/MODIFIED Connectors-related delta scenario is named in a test.
 
 - [ ] 2.2 Add check connection (`POST .../check`), enabled checkbox (`PATCH { enabled }` only), and delete with confirmation then `DELETE`. RTL scenarios: check calls check route only; disable sends enabled-only PATCH; delete confirm removes row; delete dismiss sends no DELETE. Check: Connectors action tests pass.
 

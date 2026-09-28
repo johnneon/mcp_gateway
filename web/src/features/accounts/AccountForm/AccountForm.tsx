@@ -110,6 +110,8 @@ export function AccountForm({
         }
         return cleared;
       });
+    } catch {
+      // Parent surfaces the error; keep draft values including secrets for retry.
     } finally {
       setSubmitting(false);
     }
