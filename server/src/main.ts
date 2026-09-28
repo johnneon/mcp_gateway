@@ -1,4 +1,5 @@
 import { writeSync } from 'node:fs';
+import { productionConnectorRegistry } from './connectors/registry.js';
 import { MissingEnvError, parseEnv } from './env.js';
 import { createAdminApp } from './http/createAdminApp.js';
 import { createMcpApp } from './http/createMcpApp.js';
@@ -32,7 +33,10 @@ async function start(): Promise<void> {
   }
 
   const mcpApp = createMcpApp({ store });
-  const adminApp = createAdminApp({ store });
+  const adminApp = createAdminApp({
+    store,
+    connectorRegistry: productionConnectorRegistry,
+  });
 
   mcpApp.listen(config.mcpPort, config.mcpHost);
   adminApp.listen(config.adminPort, config.adminHost);

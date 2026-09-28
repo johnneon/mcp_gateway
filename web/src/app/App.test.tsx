@@ -14,6 +14,9 @@ describe('admin-configurations-ui: Admin shell with Configurations and Connector
       if (call.method === 'GET' && url === '/api/configurations') {
         return jsonResponse([]);
       }
+      if (call.method === 'GET' && url === '/api/connectors') {
+        return jsonResponse([]);
+      }
       throw new Error(`unexpected fetch: ${call.method} ${url}`);
     });
 
@@ -34,6 +37,9 @@ describe('admin-configurations-ui: Admin shell with Configurations and Connector
     const pathBefore = window.location.pathname;
     mockFetch((url, _init, call) => {
       if (call.method === 'GET' && url === '/api/configurations') {
+        return jsonResponse([]);
+      }
+      if (call.method === 'GET' && url === '/api/connectors') {
         return jsonResponse([]);
       }
       throw new Error(`unexpected fetch: ${call.method} ${url}`);
