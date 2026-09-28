@@ -3,9 +3,9 @@
  * Does not modify production registry. Prints ADMIN_URL / MCP_URL / FIXTURE_SECRET marker only as length.
  */
 import { createServer } from 'node:http';
-import { buildConnectorRegistry } from '../../../../server/dist/connectors/registry.js';
-import { createAdminApp } from '../../../../server/dist/http/createAdminApp.js';
-import { createMcpApp } from '../../../../server/dist/http/createMcpApp.js';
+import { buildConnectorRegistry } from '../../../../../server/dist/connectors/registry.js';
+import { createAdminApp } from '../../../../../server/dist/http/createAdminApp.js';
+import { createMcpApp } from '../../../../../server/dist/http/createMcpApp.js';
 
 const FIXTURE_SECRET = 'fixture-secret-value';
 
