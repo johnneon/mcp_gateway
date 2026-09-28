@@ -4,7 +4,7 @@
 
 - [x] 1.1 Add `web/src/features/accounts/api.ts` with typed helpers for `GET/POST /api/accounts`, `PATCH /api/accounts/:id`, `POST /api/accounts/:id/check`, and `DELETE /api/accounts/:id`. Extend `web/src/features/configurations/api.ts` so list/create/rotate/patch types include `accountIds` and add `setConfigurationAccounts(id, accountIds)` calling `PUT /api/configurations/:id/accounts`. Unit-test the new helpers with fake `fetch` (method, path, JSON body, Content-Type). Check: accounts and configurations api tests pass; `npm run typecheck -w web` exits 0.
 
-- [ ] 1.2 Add `AccountForm` (dumb) under `features/accounts/AccountForm/`: required label plus controls from connector `fields` (`text`, `secret`, `host`). Create mode submits full values; edit mode starts secrets empty and omits blank secret keys from `values`. Clear secret input state after successful submit (and when the dialog closes after success). Component tests with fake callbacks cover create payload, edit omit-blank-secret, and secret absent from the document after success. Check: AccountForm tests pass.
+- [x] 1.2 Add `AccountForm` (dumb) under `features/accounts/AccountForm/`: required label plus controls from connector `fields` (`text`, `secret`, `host`). Create mode submits full values; edit mode starts secrets empty and omits blank secret keys from `values`. Clear secret input state after successful submit (and when the dialog closes after success). Component tests with fake callbacks cover create payload, edit omit-blank-secret, and secret absent from the document after success. Check: AccountForm tests pass.
 
 ## 2. Connectors screen with accounts
 
