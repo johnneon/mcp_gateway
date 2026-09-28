@@ -7,13 +7,14 @@ import { describe, expect, it } from 'vitest';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..', '..');
-const setIterationSh = path.join(
+const isWin = process.platform === 'win32';
+const setIterationScript = path.join(
   repoRoot,
   '.cursor',
   'skills',
   'tracker',
   'scripts',
-  'set-iteration.sh',
+  isWin ? 'set-iteration.ps1' : 'set-iteration.sh',
 );
 
 const PROJECT_ID = 'PVT_test_project';
@@ -68,6 +69,58 @@ function installFakeGh(iterations: IterationFixture[]): string {
     ],
   });
   const graphqlJson = graphqlPayload(iterations);
+
+  if (isWin) {
+    writeFileSync(path.join(dir, 'items.json'), itemsJson, 'utf8');
+    writeFileSync(path.join(dir, 'graphql.json'), graphqlJson, 'utf8');
+    // Get-Command resolves gh.ps1 as ExternalScript; & $gh @args keeps the
+    // argument array intact (no cmd %* / PATHEXT .cmd splitting).
+    writeFileSync(
+      path.join(dir, 'gh.ps1'),
+      `# Fake gh for tracker set-iteration.ps1 tests
+$ErrorActionPreference = 'Stop'
+if ($args.Count -lt 1) {
+  [Console]::Error.WriteLine('fake gh: missing args')
+  exit 1
+}
+$cmd = $args[0]
+$hereDir = $PSScriptRoot
+if ($cmd -eq 'project') {
+  if ($args.Count -lt 2) {
+    [Console]::Error.WriteLine('fake gh: missing project subcommand')
+    exit 1
+  }
+  $sub = $args[1]
+  switch ($sub) {
+    'view' {
+      Write-Output '{"id":"${PROJECT_ID}"}'
+      exit 0
+    }
+    'item-list' {
+      Write-Output ([IO.File]::ReadAllText((Join-Path $hereDir 'items.json')))
+      exit 0
+    }
+    'item-edit' {
+      exit 0
+    }
+    default {
+      [Console]::Error.WriteLine("fake gh: unsupported project $sub")
+      exit 1
+    }
+  }
+}
+if ($cmd -eq 'api') {
+  Write-Output ([IO.File]::ReadAllText((Join-Path $hereDir 'graphql.json')))
+  exit 0
+}
+[Console]::Error.WriteLine("fake gh: unsupported $cmd")
+exit 1
+`,
+      'utf8',
+    );
+    return dir;
+  }
+
   const script = `#!/usr/bin/env bash
 set -euo pipefail
 if [ "$#" -lt 1 ]; then
@@ -120,13 +173,32 @@ function runSetIteration(fakeGhDir: string): {
   stdout: string;
   stderr: string;
 } {
-  const result = spawnSync('bash', [setIterationSh, String(ISSUE_NUMBER)], {
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      PATH: `${fakeGhDir}${path.delimiter}${process.env.PATH ?? ''}`,
-    },
-  });
+  const result = isWin
+    ? spawnSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          setIterationScript,
+          String(ISSUE_NUMBER),
+        ],
+        {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${fakeGhDir}${path.delimiter}${process.env.PATH ?? ''}`,
+          },
+        },
+      )
+    : spawnSync('bash', [setIterationScript, String(ISSUE_NUMBER)], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${fakeGhDir}${path.delimiter}${process.env.PATH ?? ''}`,
+        },
+      });
   return {
     status: result.status,
     stdout: result.stdout,

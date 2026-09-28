@@ -1,8 +1,6 @@
 param(
     [Parameter(Mandatory = $true)][int]$Issue,
-    [Parameter(Mandatory = $true)]
-    [ValidateSet('Backlog', 'Ready', 'In progress', 'In review', 'Done')]
-    [string]$Status
+    [Parameter(Mandatory = $true)][string]$Status
 )
 
 $ErrorActionPreference = 'Stop'
@@ -10,6 +8,11 @@ $ErrorActionPreference = 'Stop'
 $Owner = 'johnneon'
 $ProjectNumber = 2
 $Repo = 'johnneon/mcp_gateway'
+
+$allowedStatuses = @('Backlog', 'Ready', 'In progress', 'In review', 'Done')
+if ($allowedStatuses -notcontains $Status) {
+    throw "Status '$Status' is not an option of the Status field"
+}
 
 $gh = (Get-Command gh -ErrorAction SilentlyContinue).Source
 if (-not $gh) { $gh = Join-Path $env:ProgramFiles 'GitHub CLI\gh.exe' }
