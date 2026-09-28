@@ -6,7 +6,7 @@
 
 ## 2. Connectors admin API
 
-- [ ] 2.1 Wire an injectable connector registry into `createAdminApp` / `main.ts` (production empty). Add `GET /api/connectors` returning `{ id, name, kind, fields: [{ name, label, type, required }] }[]` without allowed destinations, connection-check, secrets, or account values. Tests: empty registry → 200 `[]`; fake registry → public description only (serialized body has no destination hosts/ports or secret values); GET without Content-Type → 200; no CORS headers on success. Check: connectors-api scenarios pass; existing configurations-api tests still pass; `npm run typecheck -w server` exits 0.
+- [x] 2.1 Wire an injectable connector registry into `createAdminApp` / `main.ts` (production empty). Add `GET /api/connectors` returning `{ id, name, kind, fields: [{ name, label, type, required }] }[]` without allowed destinations, connection-check, secrets, or account values. Tests: empty registry → 200 `[]`; fake registry → public description only (serialized body has no destination hosts/ports or secret values); GET without Content-Type → 200; no CORS headers on success. Check: connectors-api scenarios pass; existing configurations-api tests still pass; `npm run typecheck -w server` exits 0.
 
 ## 3. Connectors admin UI
 
