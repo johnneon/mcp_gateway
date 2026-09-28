@@ -14,7 +14,7 @@
 
 ## 3. Configurations feature
 
-- [ ] 3.1 Add `features/configurations/api.ts` and the Configurations screen: list via `GET /api/configurations` (empty state, name + enabled, never render token/hash); create via `POST` with `{ name }` then one-time reveal dialog; clear token from state when the dialog closes; confirm then `POST .../rotate` and reveal; confirm then `DELETE`; `PATCH` enable/disable; English error on failed list/mutation. RTL tests with fake `fetch` cover: empty list; create shows token then token gone after dialog close; rotate confirm → request → reveal → clear; rotate dismiss sends no request; disable sends PATCH with JSON Content-Type; delete confirm removes row; delete dismiss sends no request; list error shows English message without a token. Check: Configurations tests pass; every delta scenario for Configurations is named in a test.
+- [x] 3.1 Add `features/configurations/api.ts` and the Configurations screen: list via `GET /api/configurations` (empty state, name + enabled, never render token/hash); create via `POST` with `{ name }` then one-time reveal dialog; clear token from state when the dialog closes; confirm then `POST .../rotate` and reveal; confirm then `DELETE`; `PATCH` enable/disable; English error on failed list/mutation. RTL tests with fake `fetch` cover: empty list; create shows token then token gone after dialog close; rotate confirm → request → reveal → clear; rotate dismiss sends no request; disable sends PATCH with JSON Content-Type; delete confirm removes row; delete dismiss sends no request; list error shows English message without a token. Check: Configurations tests pass; every delta scenario for Configurations is named in a test.
 
 ## 4. Full package check
 

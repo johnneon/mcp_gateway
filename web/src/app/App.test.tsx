@@ -1,10 +1,22 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { jsonResponse, mockFetch } from '@/test/mockFetch';
 import { App } from './App';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('admin-configurations-ui: Admin shell with Configurations and Connectors', () => {
   it('Shell shows both navigation items and no login', () => {
+    mockFetch((url, _init, call) => {
+      if (call.method === 'GET' && url === '/api/configurations') {
+        return jsonResponse([]);
+      }
+      throw new Error(`unexpected fetch: ${call.method} ${url}`);
+    });
+
     render(<App />);
 
     expect(screen.getByRole('heading', { name: 'MCP Gateway' })).toBeInTheDocument();
@@ -20,10 +32,16 @@ describe('admin-configurations-ui: Admin shell with Configurations and Connector
   it('Switching screens does not use a client router', async () => {
     const user = userEvent.setup();
     const pathBefore = window.location.pathname;
+    mockFetch((url, _init, call) => {
+      if (call.method === 'GET' && url === '/api/configurations') {
+        return jsonResponse([]);
+      }
+      throw new Error(`unexpected fetch: ${call.method} ${url}`);
+    });
 
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: 'Configurations' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Configurations' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Connectors' }));
 

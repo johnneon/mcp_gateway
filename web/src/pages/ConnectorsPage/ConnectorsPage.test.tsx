@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@/app';
-import { mockFetch } from '@/test/mockFetch';
+import { jsonResponse, mockFetch } from '@/test/mockFetch';
 import { ConnectorsPage } from './ConnectorsPage';
 
 afterEach(() => {
@@ -12,11 +12,15 @@ afterEach(() => {
 describe('admin-configurations-ui: Connectors empty state', () => {
   it('Connectors shows empty state without API calls', async () => {
     const user = userEvent.setup();
-    const { calls } = mockFetch(() => {
-      throw new Error('unexpected fetch');
+    const { calls } = mockFetch((url, _init, call) => {
+      if (call.method === 'GET' && url === '/api/configurations') {
+        return jsonResponse([]);
+      }
+      throw new Error(`unexpected fetch: ${call.method} ${url}`);
     });
 
     render(<App />);
+    await screen.findByRole('heading', { name: 'Configurations' });
     const callsBefore = calls.length;
 
     await user.click(screen.getByRole('button', { name: 'Connectors' }));
