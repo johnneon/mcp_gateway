@@ -4,7 +4,7 @@
 
 - [x] 1.1 Initialize shadcn/ui in `web` when `components.json` is missing (Tailwind, `@` → `web/src`, components in `web/src/components/ui`) and add the dialog with `npx shadcn@latest add dialog`. Do not add `@radix-ui/react-dialog` by hand. Keep the shared API fetch helper and its unit tests in this task (JSON Content-Type on POST/PATCH/DELETE, typed English errors). Extend `web/src/test/setup.ts` only for jsdom gaps the dialog still needs if they are missing. Check: dialog module exists under `components/ui`, shared API tests pass, `npm run typecheck -w web` exits 0.
 
-- [ ] 1.2 Do not build a custom Dialog wrapper. Use the generated shadcn dialog. Component test: open/close by accessible name, content visible while open and gone after close, queried through `screen`. Features must not import `@radix-ui/*`. Check: dialog tests pass.
+- [x] 1.2 Do not build a custom Dialog wrapper. Use the generated shadcn dialog. Component test: open/close by accessible name, content visible while open and gone after close, queried through `screen`. Features must not import `@radix-ui/*`. Check: dialog tests pass.
 
 ## 2. App shell and Connectors
 
