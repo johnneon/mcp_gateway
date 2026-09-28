@@ -2,7 +2,7 @@
 
 ## 1. Configurations accountIds
 
-- [ ] 1.1 Extend the configurations document and service so each configuration has `accountIds: string[]` (missing on read → `[]`; new creates write `[]`). Public create, list, rotate, and patch responses include `accountIds`. Add `setAccountIds` and a helper that removes one account id from every configuration. Update existing configurations unit and HTTP tests that asserted no `accountIds` so they match the delta. Check: configurations service and HTTP tests for the modified scenarios pass; `npm run typecheck -w server` exits 0.
+- [x] 1.1 Extend the configurations document and service so each configuration has `accountIds: string[]` (missing on read → `[]`; new creates write `[]`). Public create, list, rotate, and patch responses include `accountIds`. Add `setAccountIds` and a helper that removes one account id from every configuration. Update existing configurations unit and HTTP tests that asserted no `accountIds` so they match the delta. Check: configurations service and HTTP tests for the modified scenarios pass; `npm run typecheck -w server` exits 0.
 
 ## 2. Accounts service
 
