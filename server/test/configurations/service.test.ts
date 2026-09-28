@@ -57,9 +57,7 @@ describe('configurations-api: Configurations document shape', () => {
       ],
     });
     const service = createConfigurationsService(store);
-    expect(service.list()).toEqual([
-      { id: 'c1', name: 'Legacy', enabled: true, accountIds: [] },
-    ]);
+    expect(service.list()).toEqual([{ id: 'c1', name: 'Legacy', enabled: true, accountIds: [] }]);
   });
 });
 

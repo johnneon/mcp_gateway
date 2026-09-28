@@ -35,6 +35,55 @@ function assertNoCors(headers: Record<string, unknown>): void {
   }
 }
 
+function parseJson(text: string): unknown {
+  return JSON.parse(text) as unknown;
+}
+
+type AccountPublic = {
+  id: string;
+  connector: string;
+  label: string;
+  enabled: boolean;
+  values: Record<string, string>;
+};
+
+type ConfigPublic = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  accountIds: string[];
+};
+
+function asAccountPublic(value: unknown): AccountPublic {
+  expect(value).toEqual(
+    expect.objectContaining({
+      id: expect.any(String) as string,
+      connector: expect.any(String) as string,
+      label: expect.any(String) as string,
+      enabled: expect.any(Boolean) as boolean,
+      values: expect.any(Object) as Record<string, string>,
+    }),
+  );
+  return value as AccountPublic;
+}
+
+function asAccountList(value: unknown): AccountPublic[] {
+  expect(Array.isArray(value)).toBe(true);
+  return (value as unknown[]).map(asAccountPublic);
+}
+
+function asConfigPublic(value: unknown): ConfigPublic {
+  expect(value).toEqual(
+    expect.objectContaining({
+      id: expect.any(String) as string,
+      name: expect.any(String) as string,
+      enabled: expect.any(Boolean) as boolean,
+      accountIds: expect.any(Array) as string[],
+    }),
+  );
+  return value as ConfigPublic;
+}
+
 function createFakeNative(overrides: Partial<ConnectorModule> = {}): ConnectorModule {
   const base: ConnectorModule = {
     id: 'fake',
@@ -85,7 +134,7 @@ function createApp(options: {
 async function createAccount(
   app: Express,
   overrides: { label?: string; values?: Record<string, string> } = {},
-): Promise<{ id: string; body: Record<string, unknown>; response: request.Response }> {
+): Promise<AccountPublic> {
   const response = await request(app)
     .post('/api/accounts')
     .set('Content-Type', 'application/json')
@@ -96,9 +145,7 @@ async function createAccount(
     });
   expect(response.status).toBe(201);
   expect(response.text).not.toContain(FIXTURE_SECRET);
-  const body = response.body as Record<string, unknown>;
-  expect(typeof body.id).toBe('string');
-  return { id: body.id as string, body, response };
+  return asAccountPublic(parseJson(response.text));
 }
 
 describe('accounts-api: Accounts document shape', () => {
@@ -106,7 +153,7 @@ describe('accounts-api: Accounts document shape', () => {
     const { app } = createApp({});
     const response = await request(app).get('/api/accounts');
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([]);
+    expect(parseJson(response.text)).toEqual([]);
   });
 
   it('Stored account keeps id, connector, label, values, and enabled', async () => {
@@ -130,12 +177,13 @@ describe('accounts-api: List accounts without secret values', () => {
     await createAccount(app);
     const response = await request(app).get('/api/accounts');
     expect(response.status).toBe(200);
-    expect(response.body).toHaveLength(1);
-    expect(response.body[0].values).toEqual({
+    const list = asAccountList(parseJson(response.text));
+    expect(list).toHaveLength(1);
+    expect(list[0].values).toEqual({
       user: 'alice',
       mailhost: 'mail.example.test',
     });
-    expect(response.body[0].values).not.toHaveProperty('token');
+    expect(list[0].values).not.toHaveProperty('token');
     expect(response.text).not.toContain(FIXTURE_SECRET);
   });
 });
@@ -153,10 +201,11 @@ describe('accounts-api: Create account after connection check', () => {
         values: validValues(),
       });
     expect(response.status).toBe(201);
-    expect(response.body.enabled).toBe(true);
-    expect(response.body.connector).toBe('fake');
-    expect(response.body.label).toBe('Work');
-    expect(response.body.values).not.toHaveProperty('token');
+    const body = asAccountPublic(parseJson(response.text));
+    expect(body.enabled).toBe(true);
+    expect(body.connector).toBe('fake');
+    expect(body.label).toBe('Work');
+    expect(body.values).not.toHaveProperty('token');
     expect(response.text).not.toContain(FIXTURE_SECRET);
     expect(checkConnection).toHaveBeenCalled();
     const stored = (store.read().accounts as Array<{ values: Record<string, string> }>)[0];
@@ -172,7 +221,7 @@ describe('accounts-api: Create account after connection check', () => {
     expect(response.status).toBe(400);
     expect(response.text).not.toContain(FIXTURE_SECRET);
     const list = await request(app).get('/api/accounts');
-    expect(list.body).toEqual([]);
+    expect(parseJson(list.text)).toEqual([]);
   });
 
   it('Connection check failure does not save', async () => {
@@ -194,7 +243,7 @@ describe('accounts-api: Create account after connection check', () => {
     expect(response.text).not.toContain(FIXTURE_SECRET);
     expect(response.text).not.toContain('provider boom');
     const list = await request(app).get('/api/accounts');
-    expect(list.body).toEqual([]);
+    expect(parseJson(list.text)).toEqual([]);
   });
 
   it('Host value with scheme is rejected', async () => {
@@ -211,7 +260,7 @@ describe('accounts-api: Create account after connection check', () => {
     expect(response.status).toBe(400);
     expect(checkConnection).not.toHaveBeenCalled();
     const list = await request(app).get('/api/accounts');
-    expect(list.body).toEqual([]);
+    expect(parseJson(list.text)).toEqual([]);
   });
 
   it('Unknown values key is rejected', async () => {
@@ -228,7 +277,7 @@ describe('accounts-api: Create account after connection check', () => {
     expect(response.status).toBe(400);
     expect(checkConnection).not.toHaveBeenCalled();
     const list = await request(app).get('/api/accounts');
-    expect(list.body).toEqual([]);
+    expect(parseJson(list.text)).toEqual([]);
   });
 });
 
@@ -239,19 +288,20 @@ describe('accounts-api: Patch account with secret keep semantics', () => {
       seen.push({ ...values });
     });
     const { app, store } = createApp({ checkConnection });
-    const { id } = await createAccount(app);
+    const created = await createAccount(app);
     checkConnection.mockClear();
     seen.length = 0;
 
     const response = await request(app)
-      .patch(`/api/accounts/${id}`)
+      .patch(`/api/accounts/${created.id}`)
       .set('Content-Type', 'application/json')
       .send({ values: { token: '' } });
 
     expect(response.status).toBe(200);
     expect(checkConnection).toHaveBeenCalledTimes(1);
     expect(seen[0]?.token).toBe(FIXTURE_SECRET);
-    expect(response.body.values).not.toHaveProperty('token');
+    const body = asAccountPublic(parseJson(response.text));
+    expect(body.values).not.toHaveProperty('token');
     expect(response.text).not.toContain(FIXTURE_SECRET);
     const stored = (store.read().accounts as Array<{ values: Record<string, string> }>)[0];
     expect(stored.values.token).toBe(FIXTURE_SECRET);
@@ -260,25 +310,25 @@ describe('accounts-api: Patch account with secret keep semantics', () => {
   it('Enabled-only patch skips checkConnection', async () => {
     const checkConnection = vi.fn(() => undefined);
     const { app } = createApp({ checkConnection });
-    const { id } = await createAccount(app);
+    const created = await createAccount(app);
     checkConnection.mockClear();
 
     const response = await request(app)
-      .patch(`/api/accounts/${id}`)
+      .patch(`/api/accounts/${created.id}`)
       .set('Content-Type', 'application/json')
       .send({ enabled: false });
 
     expect(response.status).toBe(200);
-    expect(response.body.enabled).toBe(false);
+    expect(asAccountPublic(parseJson(response.text)).enabled).toBe(false);
     expect(checkConnection).not.toHaveBeenCalled();
     expect(response.text).not.toContain(FIXTURE_SECRET);
   });
 
   it('Empty required non-secret on patch is 400', async () => {
     const { app, store } = createApp({});
-    const { id } = await createAccount(app);
+    const created = await createAccount(app);
     const response = await request(app)
-      .patch(`/api/accounts/${id}`)
+      .patch(`/api/accounts/${created.id}`)
       .set('Content-Type', 'application/json')
       .send({ values: { user: '' } });
     expect(response.status).toBe(400);
@@ -291,10 +341,10 @@ describe('accounts-api: Patch account with secret keep semantics', () => {
 describe('accounts-api: Check connection without write', () => {
   it('Check succeeds without writing', async () => {
     const { app, store } = createApp({});
-    const { id } = await createAccount(app);
+    const created = await createAccount(app);
     const before = JSON.stringify(store.read());
     const response = await request(app)
-      .post(`/api/accounts/${id}/check`)
+      .post(`/api/accounts/${created.id}/check`)
       .set('Content-Type', 'application/json');
     expect(response.status).toBe(200);
     expect(response.text).not.toContain(FIXTURE_SECRET);
@@ -310,10 +360,10 @@ describe('accounts-api: Check connection without write', () => {
         }
       },
     });
-    const { id } = await createAccount(app);
+    const created = await createAccount(app);
     fail = true;
     const response = await request(app)
-      .post(`/api/accounts/${id}/check`)
+      .post(`/api/accounts/${created.id}/check`)
       .set('Content-Type', 'application/json');
     expect(response.status).toBe(400);
     expect(response.text).toBe('Connection check failed');
@@ -324,27 +374,27 @@ describe('accounts-api: Check connection without write', () => {
 describe('accounts-api: Delete account removes it from configurations', () => {
   it('Delete cascades out of configuration accountIds', async () => {
     const { app } = createApp({});
-    const { id: accountId } = await createAccount(app);
+    const account = await createAccount(app);
     const configResponse = await request(app)
       .post('/api/configurations')
       .set('Content-Type', 'application/json')
       .send({ name: 'Ops' });
-    const configId = configResponse.body.id as string;
+    const config = asConfigPublic(parseJson(configResponse.text));
     await request(app)
-      .put(`/api/configurations/${configId}/accounts`)
+      .put(`/api/configurations/${config.id}/accounts`)
       .set('Content-Type', 'application/json')
-      .send({ accountIds: [accountId] });
+      .send({ accountIds: [account.id] });
 
     const deleted = await request(app)
-      .delete(`/api/accounts/${accountId}`)
+      .delete(`/api/accounts/${account.id}`)
       .set('Content-Type', 'application/json');
     expect(deleted.status).toBe(204);
 
     const accounts = await request(app).get('/api/accounts');
-    expect(accounts.body).toEqual([]);
+    expect(parseJson(accounts.text)).toEqual([]);
 
     const configs = await request(app).get('/api/configurations');
-    expect(configs.body[0].accountIds).toEqual([]);
+    expect(asConfigPublic((parseJson(configs.text) as unknown[])[0]).accountIds).toEqual([]);
   });
 
   it('Unknown account id on DELETE — 404', async () => {
@@ -367,20 +417,24 @@ describe('accounts-api: Assign accounts to a configuration', () => {
       .post('/api/configurations')
       .set('Content-Type', 'application/json')
       .send({ name: 'Ops' });
-    const configId = configResponse.body.id as string;
+    const config = asConfigPublic(parseJson(configResponse.text));
 
     const response = await request(app)
-      .put(`/api/configurations/${configId}/accounts`)
+      .put(`/api/configurations/${config.id}/accounts`)
       .set('Content-Type', 'application/json')
       .send({ accountIds: [a2.id, a1.id] });
 
     expect(response.status).toBe(200);
-    expect(response.body.accountIds).toEqual([a2.id, a1.id]);
-    expect(response.body).not.toHaveProperty('token');
-    expect(response.body).not.toHaveProperty('tokenHash');
+    const body = asConfigPublic(parseJson(response.text));
+    expect(body.accountIds).toEqual([a2.id, a1.id]);
+    expect(body).not.toHaveProperty('token');
+    expect(body).not.toHaveProperty('tokenHash');
 
     const list = await request(app).get('/api/configurations');
-    expect(list.body[0].accountIds).toEqual([a2.id, a1.id]);
+    expect(asConfigPublic((parseJson(list.text) as unknown[])[0]).accountIds).toEqual([
+      a2.id,
+      a1.id,
+    ]);
   });
 
   it('Unknown account id rejects without write', async () => {
@@ -389,42 +443,42 @@ describe('accounts-api: Assign accounts to a configuration', () => {
       .post('/api/configurations')
       .set('Content-Type', 'application/json')
       .send({ name: 'Ops' });
-    const configId = configResponse.body.id as string;
+    const config = asConfigPublic(parseJson(configResponse.text));
 
     const response = await request(app)
-      .put(`/api/configurations/${configId}/accounts`)
+      .put(`/api/configurations/${config.id}/accounts`)
       .set('Content-Type', 'application/json')
       .send({ accountIds: ['missing'] });
 
     expect(response.status).toBe(400);
     const list = await request(app).get('/api/configurations');
-    expect(list.body[0].accountIds).toEqual([]);
+    expect(asConfigPublic((parseJson(list.text) as unknown[])[0]).accountIds).toEqual([]);
   });
 
   it('Duplicate account ids rejected', async () => {
     const { app } = createApp({});
-    const { id: accountId } = await createAccount(app);
+    const account = await createAccount(app);
     const configResponse = await request(app)
       .post('/api/configurations')
       .set('Content-Type', 'application/json')
       .send({ name: 'Ops' });
-    const configId = configResponse.body.id as string;
+    const config = asConfigPublic(parseJson(configResponse.text));
 
     const response = await request(app)
-      .put(`/api/configurations/${configId}/accounts`)
+      .put(`/api/configurations/${config.id}/accounts`)
       .set('Content-Type', 'application/json')
-      .send({ accountIds: [accountId, accountId] });
+      .send({ accountIds: [account.id, account.id] });
 
     expect(response.status).toBe(400);
     const list = await request(app).get('/api/configurations');
-    expect(list.body[0].accountIds).toEqual([]);
+    expect(asConfigPublic((parseJson(list.text) as unknown[])[0]).accountIds).toEqual([]);
   });
 
   it('Disabled account may be assigned', async () => {
     const { app } = createApp({});
-    const { id: accountId } = await createAccount(app);
+    const account = await createAccount(app);
     await request(app)
-      .patch(`/api/accounts/${accountId}`)
+      .patch(`/api/accounts/${account.id}`)
       .set('Content-Type', 'application/json')
       .send({ enabled: false });
 
@@ -432,15 +486,15 @@ describe('accounts-api: Assign accounts to a configuration', () => {
       .post('/api/configurations')
       .set('Content-Type', 'application/json')
       .send({ name: 'Ops' });
-    const configId = configResponse.body.id as string;
+    const config = asConfigPublic(parseJson(configResponse.text));
 
     const response = await request(app)
-      .put(`/api/configurations/${configId}/accounts`)
+      .put(`/api/configurations/${config.id}/accounts`)
       .set('Content-Type', 'application/json')
-      .send({ accountIds: [accountId] });
+      .send({ accountIds: [account.id] });
 
     expect(response.status).toBe(200);
-    expect(response.body.accountIds).toEqual([accountId]);
+    expect(asConfigPublic(parseJson(response.text)).accountIds).toEqual([account.id]);
   });
 });
 
@@ -453,7 +507,7 @@ describe('accounts-api: Accounts API follows admin JSON and CORS rules', () => {
       .send('connector=fake&label=Work');
     expect(response.status).toBe(415);
     const list = await request(app).get('/api/accounts');
-    expect(list.body).toEqual([]);
+    expect(parseJson(list.text)).toEqual([]);
   });
 
   it('Successful accounts list has no CORS headers', async () => {
@@ -467,26 +521,28 @@ describe('accounts-api: Accounts API follows admin JSON and CORS rules', () => {
 describe('accounts-api: configurations responses include accountIds', () => {
   it('Create list rotate and patch include accountIds', async () => {
     const { app } = createApp({});
-    const created = await request(app)
+    const createdResponse = await request(app)
       .post('/api/configurations')
       .set('Content-Type', 'application/json')
       .send({ name: 'Ops' });
-    expect(created.status).toBe(201);
-    expect(created.body.accountIds).toEqual([]);
+    expect(createdResponse.status).toBe(201);
+    const created = asConfigPublic(parseJson(createdResponse.text));
+    expect(created.accountIds).toEqual([]);
 
     const list = await request(app).get('/api/configurations');
-    expect(list.body[0].accountIds).toEqual([]);
+    expect(asConfigPublic((parseJson(list.text) as unknown[])[0]).accountIds).toEqual([]);
 
     const patched = await request(app)
-      .patch(`/api/configurations/${created.body.id as string}`)
+      .patch(`/api/configurations/${created.id}`)
       .set('Content-Type', 'application/json')
       .send({ enabled: false });
-    expect(patched.body.accountIds).toEqual([]);
+    expect(asConfigPublic(parseJson(patched.text)).accountIds).toEqual([]);
 
     const rotated = await request(app)
-      .post(`/api/configurations/${created.body.id as string}/rotate`)
+      .post(`/api/configurations/${created.id}/rotate`)
       .set('Content-Type', 'application/json');
-    expect(rotated.body.accountIds).toEqual([]);
-    expect(rotated.body).toHaveProperty('token');
+    const rotatedBody = parseJson(rotated.text) as Record<string, unknown>;
+    expect(rotatedBody.accountIds).toEqual([]);
+    expect(rotatedBody).toHaveProperty('token');
   });
 });

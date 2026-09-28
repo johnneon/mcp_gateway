@@ -183,17 +183,13 @@ export function createConfigurationsService(store: EncryptedStore): Configuratio
 
     async removeAccountIdFromAll(accountId: string): Promise<void> {
       const rows = readConfigurations(store.read());
-      let changed = false;
-      const next = rows.map((row) => {
-        if (!row.accountIds.includes(accountId)) {
-          return row;
-        }
-        changed = true;
-        return {
-          ...row,
-          accountIds: row.accountIds.filter((id) => id !== accountId),
-        };
-      });
+      const next = rows.map((row) => ({
+        ...row,
+        accountIds: row.accountIds.filter((id) => id !== accountId),
+      }));
+      const changed = next.some(
+        (row, index) => row.accountIds.length !== rows[index]?.accountIds.length,
+      );
       if (!changed) {
         return;
       }

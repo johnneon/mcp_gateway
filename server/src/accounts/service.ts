@@ -322,27 +322,17 @@ export function createAccountsService(deps: AccountsServiceDeps): AccountsServic
       }
 
       let label = current.label;
-      if (hasLabel) {
-        if (typeof input.label !== 'string') {
-          throw new AccountValidationError('label must be a string');
-        }
+      if (input.label !== undefined) {
         label = normalizeLabel(input.label);
       }
 
       let values = current.values;
-      if (hasValues) {
-        if (
-          typeof input.values !== 'object' ||
-          input.values === null ||
-          Array.isArray(input.values)
-        ) {
-          throw new AccountValidationError('values must be an object');
-        }
+      if (input.values !== undefined) {
         assertStringValues(input.values);
         values = mergePatchValues(connector.fields, current.values, input.values);
       }
 
-      const enabled = hasEnabled ? Boolean(input.enabled) : current.enabled;
+      const enabled = input.enabled !== undefined ? input.enabled : current.enabled;
 
       // Any patch that includes label or values rechecks, including secret-keep no-ops.
       if (hasLabel || hasValues) {

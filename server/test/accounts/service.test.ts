@@ -63,9 +63,7 @@ function validValues(overrides: Record<string, string> = {}): Record<string, str
 function createServices(checkConnection?: ConnectorModule['checkConnection']) {
   const store = createMemoryStore({});
   const configurations = createConfigurationsService(store);
-  const connector = createFakeConnector(
-    checkConnection ? { checkConnection } : undefined,
-  );
+  const connector = createFakeConnector(checkConnection ? { checkConnection } : undefined);
   const registry = buildConnectorRegistry([connector]);
   const accounts = createAccountsService({
     store,
