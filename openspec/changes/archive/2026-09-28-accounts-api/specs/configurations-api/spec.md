@@ -1,9 +1,6 @@
-# configurations-api Specification
+# Spec Delta
 
-## Purpose
-Defines the configurations domain on the encrypted store and the admin-port HTTP API that creates, lists, rotates, enables or disables, and deletes configurations, showing the bearer token once and persisting only its SHA-256 hash.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Configurations document shape
 
@@ -108,25 +105,6 @@ On create and on rotate, the process SHALL generate a bearer token of exactly 32
 - **THEN** the response status is 404
 - **AND** the response body is short English text with no secrets
 
-### Requirement: Delete a configuration
-
-`DELETE /api/configurations/:id` on the admin port SHALL remove the matching configuration and respond with status 204 and an empty body. If no configuration has that `id`, the response SHALL be status 404 with a short English body and no secrets.
-
-#### Scenario: Successful delete
-
-- **GIVEN** a configuration exists with a known `id`
-- **WHEN** the client performs `DELETE /api/configurations/:id` with `Content-Type: application/json`
-- **THEN** the response status is 204
-- **AND** the response body is empty
-- **AND** a subsequent `GET /api/configurations` does not include that `id`
-
-#### Scenario: Unknown id on DELETE — 404
-
-- **GIVEN** the admin app with a store and no configuration with id `missing`
-- **WHEN** the client performs `DELETE /api/configurations/missing` with `Content-Type: application/json`
-- **THEN** the response status is 404
-- **AND** the response body is short English text with no secrets
-
 ### Requirement: Rotate returns a new token once
 
 `POST /api/configurations/:id/rotate` on the admin port SHALL replace `tokenHash` immediately and respond with status 200 and a JSON body that includes the new plaintext `token` once, together with `id`, `name`, `enabled`, and `accountIds`, and SHALL NOT include `tokenHash`. If no configuration has that `id`, the response SHALL be status 404 with a short English body and no secrets.
@@ -145,55 +123,3 @@ On create and on rotate, the process SHALL generate a bearer token of exactly 32
 - **THEN** the response status is 200
 - **AND** the JSON body includes `token`, `id`, `name`, `enabled`, and `accountIds` matching the stored list
 - **AND** the body has no `tokenHash` property
-
-### Requirement: /api mutations require application/json Content-Type
-
-For every non-GET request under `/api` on the admin port, if the `Content-Type` header is missing or its media type is not `application/json`, the process SHALL respond with status 415 and SHALL NOT change the store document. A `Content-Type` of `application/json; charset=utf-8` SHALL be accepted as `application/json`. A form-encoded body (`application/x-www-form-urlencoded`) SHALL be rejected with 415 without changing state.
-
-#### Scenario: Form body create is rejected without changing state
-
-- **GIVEN** the admin app with a store whose configurations list is empty
-- **WHEN** the client performs `POST /api/configurations` with `Content-Type: application/x-www-form-urlencoded` and body `name=Ops`
-- **THEN** the response status is 415
-- **AND** a subsequent `GET /api/configurations` returns an empty array
-
-#### Scenario: Missing Content-Type on PATCH does not change state
-
-- **GIVEN** a configuration exists with `enabled` true
-- **WHEN** the client performs `PATCH /api/configurations/:id` with body `{ "enabled": false }` and without a `Content-Type` header
-- **THEN** the response status is 415
-- **AND** a subsequent `GET /api/configurations` still shows that configuration with `enabled` true
-
-#### Scenario: charset=utf-8 JSON is accepted
-
-- **GIVEN** the admin app with a store
-- **WHEN** the client performs `POST /api/configurations` with `Content-Type: application/json; charset=utf-8` and body `{ "name": "Charset" }`
-- **THEN** the response status is 201
-- **AND** the JSON body has `name` equal to `Charset`
-
-### Requirement: No CORS headers on /api responses
-
-No response for a path under `/api` on the admin port, including error responses (400, 404, 415, and other `/api` errors), SHALL include a CORS header (`Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`, or `Access-Control-Allow-Credentials`).
-
-#### Scenario: Successful list has no CORS headers
-
-- **GIVEN** the admin app with a store
-- **WHEN** the client performs `GET /api/configurations`
-- **THEN** the response has none of the headers `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`, or `Access-Control-Allow-Credentials`
-
-#### Scenario: 415 error has no CORS headers
-
-- **GIVEN** the admin app with a store
-- **WHEN** the client performs `POST /api/configurations` with `Content-Type: text/plain` and an arbitrary body
-- **THEN** the response status is 415
-- **AND** the response has none of the headers `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`, or `Access-Control-Allow-Credentials`
-
-### Requirement: Token absent from plaintext on disk after create
-
-After a successful create that writes the store to disk, the bytes of the state file SHALL NOT contain the plaintext token string returned in the create response.
-
-#### Scenario: Create token is not in state.bin plaintext
-
-- **GIVEN** a store backed by a real encrypted file under a test `DATA_DIR`
-- **WHEN** the client creates a configuration through the admin API and receives a `token`
-- **THEN** the contents of `DATA_DIR/state.bin` as a byte sequence do not contain that token string in the clear

@@ -9,12 +9,14 @@ export type ConfigurationRecord = {
   name: string;
   tokenHash: string;
   enabled: boolean;
+  accountIds: string[];
 };
 
 export type ConfigurationPublic = {
   id: string;
   name: string;
   enabled: boolean;
+  accountIds: string[];
 };
 
 export type ConfigurationWithToken = ConfigurationPublic & {
@@ -26,10 +28,12 @@ export type ConfigurationsService = {
   create(name: string): Promise<ConfigurationWithToken>;
   rotate(id: string): Promise<ConfigurationWithToken>;
   setEnabled(id: string, enabled: boolean): Promise<ConfigurationPublic>;
+  setAccountIds(id: string, accountIds: string[]): Promise<ConfigurationPublic>;
+  removeAccountIdFromAll(accountId: string): Promise<void>;
   remove(id: string): Promise<void>;
 };
 
-function isConfigurationRecord(value: unknown): value is ConfigurationRecord {
+function isConfigurationRow(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
   }
@@ -42,16 +46,41 @@ function isConfigurationRecord(value: unknown): value is ConfigurationRecord {
   );
 }
 
+function readAccountIds(row: Record<string, unknown>): string[] {
+  if (!Array.isArray(row.accountIds)) {
+    return [];
+  }
+  return row.accountIds.filter((id): id is string => typeof id === 'string');
+}
+
 function readConfigurations(document: JsonObject): ConfigurationRecord[] {
   const raw = document.configurations;
   if (!Array.isArray(raw)) {
     return [];
   }
-  return raw.filter(isConfigurationRecord);
+  const rows: ConfigurationRecord[] = [];
+  for (const value of raw) {
+    if (!isConfigurationRow(value)) {
+      continue;
+    }
+    rows.push({
+      id: value.id as string,
+      name: value.name as string,
+      tokenHash: value.tokenHash as string,
+      enabled: value.enabled as boolean,
+      accountIds: readAccountIds(value),
+    });
+  }
+  return rows;
 }
 
 function toPublic(row: ConfigurationRecord): ConfigurationPublic {
-  return { id: row.id, name: row.name, enabled: row.enabled };
+  return {
+    id: row.id,
+    name: row.name,
+    enabled: row.enabled,
+    accountIds: [...row.accountIds],
+  };
 }
 
 function normalizeName(name: string): string {
@@ -60,6 +89,24 @@ function normalizeName(name: string): string {
     throw new ConfigurationValidationError('name must be a non-empty string');
   }
   return trimmed;
+}
+
+function assertNoDuplicateAccountIds(accountIds: string[]): void {
+  const seen = new Set<string>();
+  for (const id of accountIds) {
+    if (seen.has(id)) {
+      throw new ConfigurationValidationError('accountIds must not contain duplicates');
+    }
+    seen.add(id);
+  }
+}
+
+async function writeConfigurations(
+  store: EncryptedStore,
+  rows: ConfigurationRecord[],
+): Promise<void> {
+  const document = store.read();
+  await store.replace({ ...document, configurations: rows });
 }
 
 export function createConfigurationsService(store: EncryptedStore): ConfigurationsService {
@@ -76,10 +123,11 @@ export function createConfigurationsService(store: EncryptedStore): Configuratio
         name: normalized,
         tokenHash: hashToken(token),
         enabled: true,
+        accountIds: [],
       };
       const rows = readConfigurations(store.read());
       rows.push(row);
-      await store.replace({ configurations: rows });
+      await writeConfigurations(store, rows);
       return { ...toPublic(row), token };
     },
 
@@ -92,13 +140,11 @@ export function createConfigurationsService(store: EncryptedStore): Configuratio
       }
       const token = generateToken();
       const updated: ConfigurationRecord = {
-        id: current.id,
-        name: current.name,
-        enabled: current.enabled,
+        ...current,
         tokenHash: hashToken(token),
       };
       rows[index] = updated;
-      await store.replace({ configurations: rows });
+      await writeConfigurations(store, rows);
       return { ...toPublic(updated), token };
     },
 
@@ -110,14 +156,44 @@ export function createConfigurationsService(store: EncryptedStore): Configuratio
         throw new ConfigurationNotFoundError();
       }
       const updated: ConfigurationRecord = {
-        id: current.id,
-        name: current.name,
-        tokenHash: current.tokenHash,
+        ...current,
         enabled,
       };
       rows[index] = updated;
-      await store.replace({ configurations: rows });
+      await writeConfigurations(store, rows);
       return toPublic(updated);
+    },
+
+    async setAccountIds(id: string, accountIds: string[]): Promise<ConfigurationPublic> {
+      assertNoDuplicateAccountIds(accountIds);
+      const rows = readConfigurations(store.read());
+      const index = rows.findIndex((row) => row.id === id);
+      const current = index >= 0 ? rows[index] : undefined;
+      if (!current) {
+        throw new ConfigurationNotFoundError();
+      }
+      const updated: ConfigurationRecord = {
+        ...current,
+        accountIds: [...accountIds],
+      };
+      rows[index] = updated;
+      await writeConfigurations(store, rows);
+      return toPublic(updated);
+    },
+
+    async removeAccountIdFromAll(accountId: string): Promise<void> {
+      const rows = readConfigurations(store.read());
+      const next = rows.map((row) => ({
+        ...row,
+        accountIds: row.accountIds.filter((id) => id !== accountId),
+      }));
+      const changed = next.some(
+        (row, index) => row.accountIds.length !== rows[index]?.accountIds.length,
+      );
+      if (!changed) {
+        return;
+      }
+      await writeConfigurations(store, next);
     },
 
     async remove(id: string): Promise<void> {
@@ -127,7 +203,7 @@ export function createConfigurationsService(store: EncryptedStore): Configuratio
         throw new ConfigurationNotFoundError();
       }
       rows.splice(index, 1);
-      await store.replace({ configurations: rows });
+      await writeConfigurations(store, rows);
     },
   };
 }

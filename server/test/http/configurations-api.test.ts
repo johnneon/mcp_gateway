@@ -60,6 +60,7 @@ type ConfigWithToken = {
   id: string;
   name: string;
   enabled: boolean;
+  accountIds: string[];
   token: string;
 };
 
@@ -67,6 +68,7 @@ type ConfigPublic = {
   id: string;
   name: string;
   enabled: boolean;
+  accountIds: string[];
 };
 
 function parseJson(text: string): unknown {
@@ -79,11 +81,13 @@ function asConfigWithToken(value: unknown): ConfigWithToken {
       id: expect.any(String) as string,
       name: expect.any(String) as string,
       enabled: expect.any(Boolean) as boolean,
+      accountIds: expect.any(Array) as string[],
       token: expect.any(String) as string,
     }),
   );
   const row = value as ConfigWithToken;
   expect(row).not.toHaveProperty('tokenHash');
+  expect(Array.isArray(row.accountIds)).toBe(true);
   return row;
 }
 
@@ -93,11 +97,13 @@ function asConfigPublic(value: unknown): ConfigPublic {
       id: expect.any(String) as string,
       name: expect.any(String) as string,
       enabled: expect.any(Boolean) as boolean,
+      accountIds: expect.any(Array) as string[],
     }),
   );
   const row = value as ConfigPublic;
   expect(row).not.toHaveProperty('token');
   expect(row).not.toHaveProperty('tokenHash');
+  expect(Array.isArray(row.accountIds)).toBe(true);
   return row;
 }
 
@@ -187,8 +193,27 @@ describe('configurations-api: Configurations document shape', () => {
     expect(typeof entry.name).toBe('string');
     expect(typeof entry.tokenHash).toBe('string');
     expect(typeof entry.enabled).toBe('boolean');
-    expect(entry).not.toHaveProperty('accountIds');
+    expect(entry.accountIds).toEqual([]);
     expect(entry).not.toHaveProperty('token');
+  });
+
+  it('Missing accountIds on an existing row reads as empty', async () => {
+    const store = createMemoryStore({
+      configurations: [
+        {
+          id: 'c1',
+          name: 'Legacy',
+          tokenHash: 'abc',
+          enabled: true,
+        },
+      ],
+    });
+    const app = createAdminApp({ store });
+    const response = await request(app).get('/api/configurations');
+    expect(response.status).toBe(200);
+    expect(asConfigList(parseJson(response.text))).toEqual([
+      { id: 'c1', name: 'Legacy', enabled: true, accountIds: [] },
+    ]);
   });
 });
 
@@ -205,6 +230,7 @@ describe('configurations-api: Bearer token generation and hash persistence', () 
     const body = asConfigWithToken(parseJson(response.text));
     expect(body.name).toBe('Ops');
     expect(body.enabled).toBe(true);
+    expect(body.accountIds).toEqual([]);
     expect(body.token).toMatch(/^[A-Za-z0-9_-]+$/);
 
     const rows = store.read().configurations as Array<{ tokenHash: string }>;
@@ -230,6 +256,7 @@ describe('configurations-api: Bearer token generation and hash persistence', () 
     expect(rotatedResponse.status).toBe(200);
     const rotated = asConfigWithToken(parseJson(rotatedResponse.text));
     expect(rotated.token).not.toBe(created.token);
+    expect(rotated).toHaveProperty('accountIds');
     const rows = store.read().configurations as Array<{ tokenHash: string }>;
     expect(rows[0].tokenHash).toBe(hashToken(rotated.token));
     expect(rows[0].tokenHash).not.toBe(previousHash);
@@ -248,6 +275,7 @@ describe('configurations-api: Create configuration', () => {
     const body = asConfigWithToken(parseJson(response.text));
     expect(body.name).toBe('Primary');
     expect(body.enabled).toBe(true);
+    expect(body.accountIds).toEqual([]);
   });
 
   it('Empty name is rejected without changing state', async () => {
@@ -301,6 +329,7 @@ describe('configurations-api: Enable or disable a configuration', () => {
       id: created.id,
       name: 'Ops',
       enabled: false,
+      accountIds: [],
     });
 
     const enabledResponse = await request(app)
@@ -308,7 +337,9 @@ describe('configurations-api: Enable or disable a configuration', () => {
       .set('Content-Type', 'application/json')
       .send({ enabled: true });
 
-    expect(asConfigPublic(parseJson(enabledResponse.text)).enabled).toBe(true);
+    const enabledBody = asConfigPublic(parseJson(enabledResponse.text));
+    expect(enabledBody.enabled).toBe(true);
+    expect(enabledBody.accountIds).toEqual([]);
   });
 
   it('Unknown id on PATCH — 404', async () => {
@@ -365,6 +396,30 @@ describe('configurations-api: Rotate returns a new token once', () => {
     expect(response.status).toBe(404);
     expect(response.text).toBe('Not Found');
   });
+
+  it('Rotate success includes accountIds', async () => {
+    const store = createMemoryStore({});
+    const app = createAdminApp({ store });
+    const createdResponse = await request(app)
+      .post('/api/configurations')
+      .set('Content-Type', 'application/json')
+      .send({ name: 'Ops' });
+    const created = asConfigWithToken(parseJson(createdResponse.text));
+
+    const document = store.read();
+    const rows = document.configurations as JsonObject[];
+    rows[0] = { ...rows[0], accountIds: ['a1'] };
+    await store.replace({ ...document, configurations: rows });
+
+    const rotatedResponse = await request(app)
+      .post(`/api/configurations/${created.id}/rotate`)
+      .set('Content-Type', 'application/json');
+
+    expect(rotatedResponse.status).toBe(200);
+    const rotated = asConfigWithToken(parseJson(rotatedResponse.text));
+    expect(rotated.accountIds).toEqual(['a1']);
+    expect(rotated).not.toHaveProperty('tokenHash');
+  });
 });
 
 describe('configurations-api: /api mutations require application/json Content-Type', () => {
@@ -395,7 +450,7 @@ describe('configurations-api: /api mutations require application/json Content-Ty
     expect(response.status).toBe(415);
     const list = await request(app).get('/api/configurations');
     expect(asConfigList(parseJson(list.text))).toEqual([
-      { id: created.id, name: 'Ops', enabled: true },
+      { id: created.id, name: 'Ops', enabled: true, accountIds: [] },
     ]);
   });
 
