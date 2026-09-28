@@ -14,7 +14,7 @@
 
 ## 3. Configuration account checkboxes
 
-- [ ] 3.1 On `ConfigurationsPage`, load accounts and connectors as needed; under each configuration render account checkboxes grouped by connector; include disabled accounts; each toggle immediately PUTs the full `accountIds` list; keep bearer only in create/rotate reveal. RTL scenarios: check sends full list; disabled account assignable; uncheck sends list without that id; no token shown from toggle. Check: Configurations checkbox tests pass; token reveal tests still pass.
+- [x] 3.1 On `ConfigurationsPage`, load accounts and connectors as needed; under each configuration render account checkboxes grouped by connector; include disabled accounts; each toggle immediately PUTs the full `accountIds` list; keep bearer only in create/rotate reveal. RTL scenarios: check sends full list; disabled account assignable; uncheck sends list without that id; no token shown from toggle. Check: Configurations checkbox tests pass; token reveal tests still pass.
 
 ## 4. Full package check
 

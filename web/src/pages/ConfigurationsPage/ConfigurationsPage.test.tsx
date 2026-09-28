@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptyResponse, jsonResponse, mockFetch, textResponse } from '@/test/mockFetch';
@@ -8,6 +8,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const fakeConnector = {
+  id: 'fake',
+  name: 'Fake',
+  kind: 'native' as const,
+  fields: [
+    { name: 'token', label: 'Token', type: 'secret' as const, required: true },
+    { name: 'user', label: 'User', type: 'text' as const, required: true },
+  ],
+};
+
 function configurationsHandler(
   rows: unknown[],
   options?: {
@@ -16,28 +26,49 @@ function configurationsHandler(
     rotate?: { status: number; body: unknown };
     deleteStatus?: number;
     listError?: { status: number; body: string };
+    accounts?: unknown[];
+    connectors?: unknown[];
+    putAccounts?: { status: number; body: unknown };
   },
 ) {
+  let configurationRows = [...rows];
   return mockFetch((url, _init, call) => {
     if (call.method === 'GET' && url === '/api/configurations') {
       if (options?.listError) {
         return textResponse(options.listError.body, options.listError.status);
       }
-      return jsonResponse(rows);
+      return jsonResponse(configurationRows);
+    }
+    if (call.method === 'GET' && url === '/api/accounts') {
+      return jsonResponse(options?.accounts ?? []);
+    }
+    if (call.method === 'GET' && url === '/api/connectors') {
+      return jsonResponse(options?.connectors ?? []);
     }
     if (call.method === 'POST' && url === '/api/configurations') {
       const body = options?.create?.body ?? {
         id: 'c-new',
         name: 'Primary',
         enabled: true,
+        accountIds: [],
         token: 'tok-create-once',
       };
       const status = options?.create?.status ?? 201;
       if (status >= 200 && status < 300) {
-        const created = body as { id: string; name: string; enabled: boolean };
-        rows = [
-          ...(rows as Array<{ id: string }>),
-          { id: created.id, name: created.name, enabled: created.enabled },
+        const created = body as {
+          id: string;
+          name: string;
+          enabled: boolean;
+          accountIds?: string[];
+        };
+        configurationRows = [
+          ...configurationRows,
+          {
+            id: created.id,
+            name: created.name,
+            enabled: created.enabled,
+            accountIds: created.accountIds ?? [],
+          },
         ];
       }
       return jsonResponse(body, status);
@@ -48,14 +79,46 @@ function configurationsHandler(
           id: 'c1',
           name: 'Ops',
           enabled: true,
+          accountIds: [],
           token: 'tok-rotated',
         },
         options?.rotate?.status ?? 200,
       );
     }
+    if (call.method === 'PUT' && /\/api\/configurations\/[^/]+\/accounts$/.test(url)) {
+      const status = options?.putAccounts?.status ?? 200;
+      const body =
+        options?.putAccounts?.body ??
+        (() => {
+          const idMatch = /\/api\/configurations\/([^/]+)\/accounts$/.exec(url);
+          const id = idMatch?.[1] ?? 'c1';
+          const parsed = JSON.parse(call.body ?? '{"accountIds":[]}') as {
+            accountIds: string[];
+          };
+          return {
+            id,
+            name: 'Ops',
+            enabled: true,
+            accountIds: parsed.accountIds,
+          };
+        })();
+      if (status >= 200 && status < 300) {
+        const updated = body as { id: string; accountIds: string[] };
+        configurationRows = configurationRows.map((row) =>
+          (row as { id: string }).id === updated.id
+            ? { ...(row as object), accountIds: updated.accountIds }
+            : row,
+        );
+        return jsonResponse(body, status);
+      }
+      if (typeof body === 'string') {
+        return textResponse(body, status);
+      }
+      return jsonResponse(body, status);
+    }
     if (call.method === 'PATCH' && url.startsWith('/api/configurations/')) {
       return jsonResponse(
-        options?.patch?.body ?? { id: 'c1', name: 'Ops', enabled: false },
+        options?.patch?.body ?? { id: 'c1', name: 'Ops', enabled: false, accountIds: [] },
         options?.patch?.status ?? 200,
       );
     }
@@ -63,7 +126,7 @@ function configurationsHandler(
       const status = options?.deleteStatus ?? 204;
       if (status === 204) {
         const id = url.replace('/api/configurations/', '');
-        rows = (rows as Array<{ id: string }>).filter((row) => row.id !== id);
+        configurationRows = configurationRows.filter((row) => (row as { id: string }).id !== id);
         return emptyResponse(204);
       }
       return textResponse('Not Found', status);
@@ -90,6 +153,7 @@ describe('admin-configurations-ui: List configurations without tokens', () => {
         id: 'c1',
         name: 'Ops',
         enabled: true,
+        accountIds: [],
         token: 'secret-should-not-show',
         tokenHash: 'hash-should-not-show',
       },
@@ -147,7 +211,9 @@ describe('admin-configurations-ui: Create configuration and reveal token once', 
 describe('admin-configurations-ui: Confirm before rotate and delete', () => {
   it('Rotate requires confirmation then shows the new token', async () => {
     const user = userEvent.setup();
-    const { calls } = configurationsHandler([{ id: 'c1', name: 'Ops', enabled: true }]);
+    const { calls } = configurationsHandler([
+      { id: 'c1', name: 'Ops', enabled: true, accountIds: [] },
+    ]);
 
     render(<ConfigurationsPage />);
     expect(await screen.findByText('Ops')).toBeInTheDocument();
@@ -169,7 +235,9 @@ describe('admin-configurations-ui: Confirm before rotate and delete', () => {
 
   it('Rotate without confirmation does not call the API', async () => {
     const user = userEvent.setup();
-    const { calls } = configurationsHandler([{ id: 'c1', name: 'Ops', enabled: true }]);
+    const { calls } = configurationsHandler([
+      { id: 'c1', name: 'Ops', enabled: true, accountIds: [] },
+    ]);
 
     render(<ConfigurationsPage />);
     expect(await screen.findByText('Ops')).toBeInTheDocument();
@@ -185,7 +253,9 @@ describe('admin-configurations-ui: Confirm before rotate and delete', () => {
 
   it('Delete requires confirmation then removes the row', async () => {
     const user = userEvent.setup();
-    const { calls } = configurationsHandler([{ id: 'c1', name: 'Ops', enabled: true }]);
+    const { calls } = configurationsHandler([
+      { id: 'c1', name: 'Ops', enabled: true, accountIds: [] },
+    ]);
 
     render(<ConfigurationsPage />);
     expect(await screen.findByText('Ops')).toBeInTheDocument();
@@ -208,7 +278,9 @@ describe('admin-configurations-ui: Confirm before rotate and delete', () => {
 
   it('Delete without confirmation does not call the API', async () => {
     const user = userEvent.setup();
-    const { calls } = configurationsHandler([{ id: 'c1', name: 'Ops', enabled: true }]);
+    const { calls } = configurationsHandler([
+      { id: 'c1', name: 'Ops', enabled: true, accountIds: [] },
+    ]);
 
     render(<ConfigurationsPage />);
     expect(await screen.findByText('Ops')).toBeInTheDocument();
@@ -226,7 +298,9 @@ describe('admin-configurations-ui: Confirm before rotate and delete', () => {
 describe('admin-configurations-ui: Enable or disable from the Configurations screen', () => {
   it('Disable a configuration', async () => {
     const user = userEvent.setup();
-    const { calls } = configurationsHandler([{ id: 'c1', name: 'Ops', enabled: true }]);
+    const { calls } = configurationsHandler([
+      { id: 'c1', name: 'Ops', enabled: true, accountIds: [] },
+    ]);
 
     render(<ConfigurationsPage />);
     expect(await screen.findByText('Ops')).toBeInTheDocument();
@@ -254,5 +328,143 @@ describe('admin-configurations-ui: Show English errors from failed API calls', (
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Internal Server Error');
     expect(screen.queryByText(/tok-/)).not.toBeInTheDocument();
+  });
+});
+
+describe('admin-configurations-ui: Configuration account checkboxes by connector', () => {
+  it('Toggle assigns the full accountIds list', async () => {
+    const user = userEvent.setup();
+    const { calls } = configurationsHandler(
+      [{ id: 'c1', name: 'Ops', enabled: true, accountIds: [] }],
+      {
+        accounts: [
+          {
+            id: 'a1',
+            connector: 'fake',
+            label: 'Box',
+            enabled: true,
+            values: { user: 'alice' },
+          },
+        ],
+        connectors: [fakeConnector],
+        putAccounts: {
+          status: 200,
+          body: { id: 'c1', name: 'Ops', enabled: true, accountIds: ['a1'] },
+        },
+      },
+    );
+
+    render(<ConfigurationsPage />);
+    expect(await screen.findByText('Ops')).toBeInTheDocument();
+    expect(screen.getByText('Fake')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('checkbox', { name: 'Assign Box to Ops' }));
+
+    await waitFor(() => {
+      expect(
+        calls.some(
+          (call) => call.method === 'PUT' && call.url === '/api/configurations/c1/accounts',
+        ),
+      ).toBe(true);
+    });
+
+    const put = calls.find(
+      (call) => call.method === 'PUT' && call.url === '/api/configurations/c1/accounts',
+    );
+    expect(put?.headers.get('Content-Type')).toBe('application/json');
+    expect(put?.body).toBe(JSON.stringify({ accountIds: ['a1'] }));
+    expect(screen.queryByText(/tok-/)).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Assign Box to Ops' })).toBeChecked();
+  });
+
+  it('Disabled account may be assigned from the UI', async () => {
+    const user = userEvent.setup();
+    const { calls } = configurationsHandler(
+      [{ id: 'c1', name: 'Ops', enabled: true, accountIds: [] }],
+      {
+        accounts: [
+          {
+            id: 'a1',
+            connector: 'fake',
+            label: 'Box',
+            enabled: false,
+            values: { user: 'alice' },
+          },
+        ],
+        connectors: [fakeConnector],
+        putAccounts: {
+          status: 200,
+          body: { id: 'c1', name: 'Ops', enabled: true, accountIds: ['a1'] },
+        },
+      },
+    );
+
+    render(<ConfigurationsPage />);
+    expect(await screen.findByText('Box (disabled)')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('checkbox', { name: 'Assign Box to Ops' }));
+
+    await waitFor(() => {
+      expect(
+        calls.some(
+          (call) => call.method === 'PUT' && call.url === '/api/configurations/c1/accounts',
+        ),
+      ).toBe(true);
+    });
+
+    expect(
+      calls.find((call) => call.method === 'PUT' && call.url === '/api/configurations/c1/accounts')
+        ?.body,
+    ).toBe(JSON.stringify({ accountIds: ['a1'] }));
+    expect(screen.getByRole('checkbox', { name: 'Assign Box to Ops' })).toBeChecked();
+  });
+
+  it('Uncheck removes the id from the full list', async () => {
+    const user = userEvent.setup();
+    const { calls } = configurationsHandler(
+      [{ id: 'c1', name: 'Ops', enabled: true, accountIds: ['a1', 'a2'] }],
+      {
+        accounts: [
+          {
+            id: 'a1',
+            connector: 'fake',
+            label: 'Box',
+            enabled: true,
+            values: { user: 'alice' },
+          },
+          {
+            id: 'a2',
+            connector: 'fake',
+            label: 'Other',
+            enabled: true,
+            values: { user: 'bob' },
+          },
+        ],
+        connectors: [fakeConnector],
+        putAccounts: {
+          status: 200,
+          body: { id: 'c1', name: 'Ops', enabled: true, accountIds: ['a2'] },
+        },
+      },
+    );
+
+    render(<ConfigurationsPage />);
+    expect(await screen.findByText('Ops')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Assign Box to Ops' })).toBeChecked();
+
+    await user.click(screen.getByRole('checkbox', { name: 'Assign Box to Ops' }));
+
+    await waitFor(() => {
+      expect(
+        calls.some(
+          (call) => call.method === 'PUT' && call.url === '/api/configurations/c1/accounts',
+        ),
+      ).toBe(true);
+    });
+
+    expect(
+      calls.find((call) => call.method === 'PUT' && call.url === '/api/configurations/c1/accounts')
+        ?.body,
+    ).toBe(JSON.stringify({ accountIds: ['a2'] }));
   });
 });
