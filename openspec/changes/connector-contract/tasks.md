@@ -10,7 +10,7 @@
 
 ## 3. Connectors admin UI
 
-- [ ] 3.1 Update the Connectors page to fetch `GET /api/connectors`. Empty array keeps the exact empty-state copy. Non-empty list shows each connector `name` and each field's `label`, `type`, and `required`. No account action controls. English error on failed list without secrets. Replace RTL tests that asserted zero HTTP calls: cover empty list + copy, non-empty list without account actions/secrets, and list error. Check: Connectors tests pass; shell/nav tests still pass; `npm run typecheck -w web` exits 0.
+- [x] 3.1 Update the Connectors page to fetch `GET /api/connectors`. Empty array keeps the exact empty-state copy. Non-empty list shows each connector `name` and each field's `label`, `type`, and `required`. No account action controls. English error on failed list without secrets. Replace RTL tests that asserted zero HTTP calls: cover empty list + copy, non-empty list without account actions/secrets, and list error. Check: Connectors tests pass; shell/nav tests still pass; `npm run typecheck -w web` exits 0.
 
 ## 4. Full package check
 
