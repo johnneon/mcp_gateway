@@ -1,7 +1,7 @@
 # accounts-ui
 
 ## Result
-blockers: 1
+blockers: 0
 
 ## Spec
 - Connectors list from API: met
@@ -17,10 +17,10 @@ blockers: 1
 - build: passed
 
 ## Review
-- blocker: archived `e2e/fake-admin-harness.mjs` still imports `../../../../server/dist/...`, which after archive resolves to `openspec/server/dist/...` and fails with `ERR_MODULE_NOT_FOUND`. `e2e/README.md` cannot be followed from the archived path. Fix: deepen the relative imports by one segment (or otherwise resolve to repo-root `server/dist`). Validator did not edit the harness.
+- note: commit `0664eee` deepens archived `e2e/fake-admin-harness.mjs` imports to `../../../../../server/dist/...`. From repo root the harness prints `READY` (no `ERR_MODULE_NOT_FOUND`).
 - note: commit `8af1eb5` adds `openspec/**/*.mjs` to ESLint `ignores` only. `@typescript-eslint/no-explicit-any` remains `error` for typed server/web sources; `server/test/ci/eslint-any.test.ts` still fails explicit-`any` fixtures under `server/` and `web/`. Ignore does not weaken that rule for product code.
-- note: production connector registry remains empty by design; empty Connectors copy was walked against an empty-registry throwaway admin. Account create/edit/check/disable/delete and configuration checkbox assignment were walked against a throwaway harness with the same fake native connector as the archived script (archived script itself would not start).
-- note: browser console showed expected `400` on create when the connection check failed; no fixture secret in console.
+- note: production connector registry remains empty by design; empty Connectors copy was walked against an empty-registry throwaway admin. Account create/edit/check/disable/delete and configuration checkbox assignment were walked against the archived fake harness.
+- note: browser console showed expected `400` on create when the connection check failed; no fixture secret in console. `favicon.ico` 404 only otherwise.
 - note: delta scenario title `Non-empty list shows name and fields without account actions` is retained; the scenario body (list without secret keys/values) is what the page and RTL test implement. Account actions are covered by the ADDED requirements.
 - note: `openspec/specs/admin-configurations-ui/spec.md` updated at archive (finish); no apply-time edit of `mcp-gateway-spec.md`. No explicit `any` in change sources. No new server routes.
 
@@ -38,10 +38,10 @@ blockers: 1
 - Disabled account may be assigned from the UI: passed — `Box (disabled)` checkbox became checked after toggle
 - Uncheck removes the id from the full list: passed — uncheck sent a second `PUT .../accounts` 200
 - MCP port separation and bearer rejection: passed — MCP `/api/configurations` 404; admin `/mcp` 404; empty and unknown bearer both 401; valid bearer `tools/list` returned empty tools; token absent from list JSON and tools/list (`e2e/mcp-smoke.mjs`)
-- Archived harness start: failed — `node openspec/changes/archive/2026-09-28-accounts-ui/e2e/fake-admin-harness.mjs` exits with module not found (see Review blocker)
+- Archived harness start: passed — `node openspec/changes/archive/2026-09-28-accounts-ui/e2e/fake-admin-harness.mjs` printed `READY`
 
 ## Leaks
 - harness admin UI DOM / inputs after create/edit (fixture secret): clean
-- admin `GET /api/accounts` and configurations checkbox flow: clean — secret keys and plaintext bearer absent
+- admin `GET /api/accounts` and configurations checkbox flow: clean — secret keys and plaintext bearer absent after reveal close
 - browser console: clean of secrets (expected create 400 only)
 - MCP tools/list and unauthorized responses: clean
