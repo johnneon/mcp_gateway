@@ -2,7 +2,7 @@
 
 ## 1. Connector contract and registry
 
-- [ ] 1.1 Add the native connector module types (id, name, kind `native | proxy`, account fields, allowed destinations as `{ host, port }` | `{ field, port }`, `checkConnection`) and `buildConnectorRegistry` that fails on bad/duplicate id, bad/duplicate field, bad allowed destination, and `kind: proxy`. Export a production empty registry. Unit tests with a fake native connector cover: successful build; `checkConnection` callable without live provider; valid fields; constant and field-backed destinations; field-backed destination naming a missing/non-host field fails; duplicate id fails; bad id fails; proxy kind fails without starting a child process; production export length 0. Check: those tests pass; `npm run typecheck -w server` exits 0.
+- [x] 1.1 Add the native connector module types (id, name, kind `native | proxy`, account fields, allowed destinations as `{ host, port }` | `{ field, port }`, `checkConnection`) and `buildConnectorRegistry` that fails on bad/duplicate id, bad/duplicate field, bad allowed destination, and `kind: proxy`. Export a production empty registry. Unit tests with a fake native connector cover: successful build; `checkConnection` callable without live provider; valid fields; constant and field-backed destinations; field-backed destination naming a missing/non-host field fails; duplicate id fails; bad id fails; proxy kind fails without starting a child process; production export length 0. Check: those tests pass; `npm run typecheck -w server` exits 0.
 
 ## 2. Connectors admin API
 
