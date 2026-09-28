@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
+import type { AccountsService } from '../../accounts/service.js';
 import {
   ConfigurationNotFoundError,
   ConfigurationValidationError,
@@ -12,6 +13,10 @@ const createBodySchema = z.object({
 
 const patchBodySchema = z.object({
   enabled: z.boolean(),
+});
+
+const setAccountsBodySchema = z.object({
+  accountIds: z.array(z.string().min(1)),
 });
 
 function sendNotFound(res: Response): void {
@@ -42,7 +47,10 @@ async function mapDomainErrors(
   }
 }
 
-export function createConfigurationsRouter(service: ConfigurationsService): Router {
+export function createConfigurationsRouter(
+  service: ConfigurationsService,
+  accounts: Pick<AccountsService, 'getRecord'>,
+): Router {
   const router = Router();
 
   router.get('/', (_req: Request, res: Response) => {
@@ -70,6 +78,29 @@ export function createConfigurationsRouter(service: ConfigurationsService): Rout
       }
       const rotated = await service.rotate(id);
       res.status(200).json(rotated);
+    });
+  });
+
+  router.put('/:id/accounts', (req: Request, res: Response, next: NextFunction) => {
+    void mapDomainErrors(res, next, async () => {
+      const id = req.params.id;
+      if (typeof id !== 'string' || id.length === 0) {
+        sendNotFound(res);
+        return;
+      }
+      const parsed = setAccountsBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        sendBadRequest(res);
+        return;
+      }
+      for (const accountId of parsed.data.accountIds) {
+        if (!accounts.getRecord(accountId)) {
+          sendBadRequest(res);
+          return;
+        }
+      }
+      const updated = await service.setAccountIds(id, parsed.data.accountIds);
+      res.status(200).json(updated);
     });
   });
 

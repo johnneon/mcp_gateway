@@ -1,9 +1,11 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express, { type Express } from 'express';
+import { createAccountsService } from '../accounts/service.js';
 import { productionConnectorRegistry, type ConnectorRegistry } from '../connectors/registry.js';
 import { createConfigurationsService } from '../configurations/service.js';
 import type { EncryptedStore } from '../store/store.js';
+import { createAccountsRouter } from './api/accountsRoutes.js';
 import { createConfigurationsRouter } from './api/configurationsRoutes.js';
 import { createConnectorsRouter } from './api/connectorsRoutes.js';
 import { requireJsonContentType } from './requireJsonContentType.js';
@@ -28,10 +30,16 @@ export function createAdminApp(options: CreateAdminAppOptions): Express {
   const connectorRegistry = options.connectorRegistry ?? productionConnectorRegistry;
   const app = express();
   const configurations = createConfigurationsService(options.store);
+  const accounts = createAccountsService({
+    store: options.store,
+    connectorRegistry,
+    configurations,
+  });
 
   app.use('/api', requireJsonContentType);
   app.use('/api', express.json({ strict: false }));
-  app.use('/api/configurations', createConfigurationsRouter(configurations));
+  app.use('/api/configurations', createConfigurationsRouter(configurations, accounts));
+  app.use('/api/accounts', createAccountsRouter(accounts));
   app.use('/api/connectors', createConnectorsRouter(connectorRegistry));
 
   // Before static: a file named mcp in webRoot must not be served as /mcp.

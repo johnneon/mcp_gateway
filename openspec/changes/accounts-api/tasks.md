@@ -10,7 +10,7 @@
 
 ## 3. Admin HTTP routes
 
-- [ ] 3.1 Mount `GET|POST /api/accounts`, `PATCH|DELETE /api/accounts/:id`, `POST /api/accounts/:id/check`, and `PUT /api/configurations/:id/accounts` on `createAdminApp` using the injectable registry. Reuse existing JSON Content-Type middleware and short English 404 plain text. Map connection-check failure to status 400 with body exactly `Connection check failed`. Check: `npm run typecheck -w server` exits 0.
+- [x] 3.1 Mount `GET|POST /api/accounts`, `PATCH|DELETE /api/accounts/:id`, `POST /api/accounts/:id/check`, and `PUT /api/configurations/:id/accounts` on `createAdminApp` using the injectable registry. Reuse existing JSON Content-Type middleware and short English 404 plain text. Map connection-check failure to status 400 with body exactly `Connection check failed`. Check: `npm run typecheck -w server` exits 0.
 
 ## 4. HTTP scenario tests
 
