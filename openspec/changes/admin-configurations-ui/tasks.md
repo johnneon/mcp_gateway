@@ -8,7 +8,7 @@
 
 ## 2. App shell and Connectors
 
-- [ ] 2.1 Replace the placeholder App with an English shell: nav items Configurations and Connectors, active screen in React state (no client router), no login. Default screen Configurations. Update `App.test.tsx` so it asserts the shell and nav instead of the old "no Configurations/Connectors" placeholder. Check: shell tests pass; selecting Connectors does not change `window.location.pathname`.
+- [x] 2.1 Replace the placeholder App with an English shell: nav items Configurations and Connectors, active screen in React state (no client router), no login. Default screen Configurations. Update `App.test.tsx` so it asserts the shell and nav instead of the old "no Configurations/Connectors" placeholder. Check: shell tests pass; selecting Connectors does not change `window.location.pathname`.
 
 - [ ] 2.2 Add the Connectors page as an English empty state with no HTTP calls on mount or when selected. RTL test: empty-state copy visible; fake `fetch` receives zero calls when opening Connectors. Check: Connectors tests pass.
 
