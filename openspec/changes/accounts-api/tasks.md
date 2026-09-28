@@ -6,7 +6,7 @@
 
 ## 2. Accounts service
 
-- [ ] 2.1 Implement the accounts service on `EncryptedStore` plus `ConnectorRegistry` (no Express): empty `{}` → empty list; create / list (public view with secret keys absent) / patch (secret keep, enabled-only skips check) / checkConnection / remove with cascade via configurations helper. Validate required fields, unknown keys, hostname-only host values, label trim, UUID ids, `enabled: true` on create. Connection-check failure maps to a domain error with fixed message `Connection check failed` (no connector exception text). Unit tests with a fake connector cover create-after-check, check failure without write, secret keep on patch, enabled-only skip, host/unknown-key rejection, delete cascade. Check: new accounts service tests pass; fixture secret never appears in public view objects.
+- [x] 2.1 Implement the accounts service on `EncryptedStore` plus `ConnectorRegistry` (no Express): empty `{}` → empty list; create / list (public view with secret keys absent) / patch (secret keep, enabled-only skips check) / checkConnection / remove with cascade via configurations helper. Validate required fields, unknown keys, hostname-only host values, label trim, UUID ids, `enabled: true` on create. Connection-check failure maps to a domain error with fixed message `Connection check failed` (no connector exception text). Unit tests with a fake connector cover create-after-check, check failure without write, secret keep on patch, enabled-only skip, host/unknown-key rejection, delete cascade. Check: new accounts service tests pass; fixture secret never appears in public view objects.
 
 ## 3. Admin HTTP routes
 
