@@ -17,6 +17,9 @@ describe('admin-configurations-ui: Admin shell with Configurations and Connector
       if (call.method === 'GET' && url === '/api/connectors') {
         return jsonResponse([]);
       }
+      if (call.method === 'GET' && url === '/api/accounts') {
+        return jsonResponse([]);
+      }
       throw new Error(`unexpected fetch: ${call.method} ${url}`);
     });
 
@@ -40,6 +43,9 @@ describe('admin-configurations-ui: Admin shell with Configurations and Connector
         return jsonResponse([]);
       }
       if (call.method === 'GET' && url === '/api/connectors') {
+        return jsonResponse([]);
+      }
+      if (call.method === 'GET' && url === '/api/accounts') {
         return jsonResponse([]);
       }
       throw new Error(`unexpected fetch: ${call.method} ${url}`);

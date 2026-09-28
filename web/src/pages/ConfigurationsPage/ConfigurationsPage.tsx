@@ -11,14 +11,17 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { listAccounts, type AccountPublic } from '@/features/accounts/api';
 import {
   createConfiguration,
   deleteConfiguration,
   listConfigurations,
   rotateConfiguration,
+  setConfigurationAccounts,
   setConfigurationEnabled,
   type ConfigurationListItem,
 } from '@/features/configurations/api';
+import { listConnectors, type ConnectorPublicDescription } from '@/features/connectors/api';
 import { ApiError } from '@/shared/api';
 
 type PendingConfirm =
@@ -36,30 +39,41 @@ function errorMessage(error: unknown): string {
 
 export function ConfigurationsPage() {
   const [items, setItems] = useState<ConfigurationListItem[]>([]);
+  const [accounts, setAccounts] = useState<AccountPublic[]>([]);
+  const [connectors, setConnectors] = useState<ConnectorPublicDescription[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  const [accountsBusyId, setAccountsBusyId] = useState<string | null>(null);
   const [revealToken, setRevealToken] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
 
-  const loadList = useCallback(async () => {
+  const loadLists = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const rows = await listConfigurations();
-      setItems(rows);
+      const [configurationRows, accountRows, connectorRows] = await Promise.all([
+        listConfigurations(),
+        listAccounts(),
+        listConnectors(),
+      ]);
+      setItems(configurationRows);
+      setAccounts(accountRows);
+      setConnectors(connectorRows);
     } catch (err) {
       setError(errorMessage(err));
       setItems([]);
+      setAccounts([]);
+      setConnectors([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadList();
-  }, [loadList]);
+    void loadLists();
+  }, [loadLists]);
 
   async function handleCreate(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,7 +87,7 @@ export function ConfigurationsPage() {
       const created = await createConfiguration(name);
       setNameDraft('');
       setRevealToken(created.token);
-      await loadList();
+      await loadLists();
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -94,6 +108,29 @@ export function ConfigurationsPage() {
       setError(errorMessage(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleToggleAccount(
+    item: ConfigurationListItem,
+    accountId: string,
+    checked: boolean,
+  ) {
+    if (busy || accountsBusyId !== null) {
+      return;
+    }
+    const nextIds = checked
+      ? [...item.accountIds, accountId]
+      : item.accountIds.filter((id) => id !== accountId);
+    setAccountsBusyId(item.id);
+    setError(null);
+    try {
+      const updated = await setConfigurationAccounts(item.id, nextIds);
+      setItems((current) => current.map((row) => (row.id === updated.id ? updated : row)));
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setAccountsBusyId(null);
     }
   }
 
@@ -169,55 +206,107 @@ export function ConfigurationsPage() {
 
       {!loading && items.length > 0 ? (
         <ul className="divide-y divide-border rounded-lg border border-border">
-          {items.map((item) => (
-            <li
-              key={item.id}
-              className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="min-w-0 space-y-1">
-                <p className="truncate font-medium">{item.name}</p>
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id={`enabled-${item.id}`}
-                    checked={item.enabled}
-                    disabled={busy}
-                    onCheckedChange={(checked) => {
-                      void handleToggleEnabled(item, checked === true);
-                    }}
-                    aria-label={`Enable ${item.name}`}
-                  />
-                  <Label
-                    htmlFor={`enabled-${item.id}`}
-                    className="font-normal text-muted-foreground"
-                  >
-                    {item.enabled ? 'Enabled' : 'Disabled'}
-                  </Label>
+          {items.map((item) => {
+            const accountsLocked = accountsBusyId === item.id;
+            return (
+              <li key={item.id} className="flex flex-col gap-4 px-4 py-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 space-y-1">
+                    <p className="truncate font-medium">{item.name}</p>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id={`enabled-${item.id}`}
+                        checked={item.enabled}
+                        disabled={busy}
+                        onCheckedChange={(checked) => {
+                          void handleToggleEnabled(item, checked === true);
+                        }}
+                        aria-label={`Enable ${item.name}`}
+                      />
+                      <Label
+                        htmlFor={`enabled-${item.id}`}
+                        className="font-normal text-muted-foreground"
+                      >
+                        {item.enabled ? 'Enabled' : 'Disabled'}
+                      </Label>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => {
+                        setPendingConfirm({ kind: 'rotate', id: item.id, name: item.name });
+                      }}
+                    >
+                      Rotate token
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={busy}
+                      onClick={() => {
+                        setPendingConfirm({ kind: 'delete', id: item.id, name: item.name });
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => {
-                    setPendingConfirm({ kind: 'rotate', id: item.id, name: item.name });
-                  }}
-                >
-                  Rotate token
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  disabled={busy}
-                  onClick={() => {
-                    setPendingConfirm({ kind: 'delete', id: item.id, name: item.name });
-                  }}
-                >
-                  Delete
-                </Button>
-              </div>
-            </li>
-          ))}
+
+                <div className="space-y-3" aria-label={`Accounts for ${item.name}`}>
+                  {connectors.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No connectors to assign.</p>
+                  ) : (
+                    connectors.map((connector) => {
+                      const connectorAccounts = accounts.filter(
+                        (account) => account.connector === connector.id,
+                      );
+                      if (connectorAccounts.length === 0) {
+                        return null;
+                      }
+                      return (
+                        <div key={connector.id} className="space-y-2">
+                          <p className="text-sm font-medium text-muted-foreground">
+                            {connector.name}
+                          </p>
+                          <ul className="space-y-2">
+                            {connectorAccounts.map((account) => {
+                              const checkboxId = `config-${item.id}-account-${account.id}`;
+                              const checked = item.accountIds.includes(account.id);
+                              const accountLabel = account.enabled
+                                ? account.label
+                                : `${account.label} (disabled)`;
+                              return (
+                                <li key={account.id} className="flex items-center gap-2">
+                                  <Checkbox
+                                    id={checkboxId}
+                                    checked={checked}
+                                    disabled={busy || accountsLocked}
+                                    onCheckedChange={(value) => {
+                                      void handleToggleAccount(item, account.id, value === true);
+                                    }}
+                                    aria-label={`Assign ${account.label} to ${item.name}`}
+                                  />
+                                  <Label
+                                    htmlFor={checkboxId}
+                                    className="font-normal text-muted-foreground"
+                                  >
+                                    {accountLabel}
+                                  </Label>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
 
