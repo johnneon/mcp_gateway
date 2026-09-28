@@ -2,9 +2,9 @@
 
 ## 1. Shared foundations
 
-- [ ] 1.1 Add `@radix-ui/react-dialog` (and any companion Radix packages required by the shared dialog) to the `web` workspace; extend `web/src/test/setup.ts` with jsdom gaps Radix needs if not already present (`ResizeObserver`, pointer capture, `scrollIntoView`). Add `web/src/shared/api` fetch helper that sets `Content-Type: application/json` on every mutation and maps non-2xx to typed English errors. Unit-test the helper with fake `fetch`: JSON header on POST/PATCH/DELETE, error mapping. Check: new shared API tests pass; `npm run typecheck -w web` exits 0.
+- [ ] 1.1 Initialize shadcn/ui in `web` when `components.json` is missing (Tailwind, `@` → `web/src`, components in `web/src/components/ui`) and add the dialog with `npx shadcn@latest add dialog`. Do not add `@radix-ui/react-dialog` by hand. Keep the shared API fetch helper and its unit tests in this task (JSON Content-Type on POST/PATCH/DELETE, typed English errors). Extend `web/src/test/setup.ts` only for jsdom gaps the dialog still needs if they are missing. Check: dialog module exists under `components/ui`, shared API tests pass, `npm run typecheck -w web` exits 0.
 
-- [ ] 1.2 Add shared Dialog under `web/src/shared/ui` wrapping Radix Dialog, styled with a CSS module; features must not import Radix. Component test: open/close by accessible name, content visible while open and gone after close. Check: Dialog tests pass.
+- [ ] 1.2 Do not build a custom Dialog wrapper. Use the generated shadcn dialog. Component test: open/close by accessible name, content visible while open and gone after close, queried through `screen`. Features must not import `@radix-ui/*`. Check: dialog tests pass.
 
 ## 2. App shell and Connectors
 

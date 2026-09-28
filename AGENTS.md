@@ -11,7 +11,7 @@ Tasks are issues on the [Task tracker](https://github.com/users/johnneon/project
 One Node.js 22 process, TypeScript. Tests run on Vitest.
 
 - `server` — Express 5, MCP Streamable HTTP (`@modelcontextprotocol/sdk`), admin API, encrypted JSON store, connector contract, connectors.
-- `web` — React and Vite. Radix UI primitives, styles in CSS modules. No styled UI kit and no separate frontend service. The same process serves the static build.
+- `web` — React and Vite, shadcn/ui, Tailwind. No separate frontend service. The same process serves the static build.
 - All state is one JSON file encrypted with AES-GCM. The key comes only from the environment. If a required variable is missing, the process exits and prints the variable name, not the value.
 
 ## Laws

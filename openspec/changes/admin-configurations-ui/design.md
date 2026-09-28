@@ -2,7 +2,7 @@
 
 ## Context
 
-See `proposal.md` — Why. The admin API for configurations is already shipped (`openspec/specs/configurations-api`). The `web` package today is a placeholder shell (`MCP Gateway` / `Admin shell`) with Vitest and React Testing Library, but without Radix, navigation, or API calls. Vision screens: `mcp-gateway-spec.md` (Interface — Configurations and Connectors). This change implements Configurations management and a Connectors empty state only; account checkboxes are out because the API has no `accountIds`.
+See `proposal.md` — Why. The admin API for configurations is already shipped (`openspec/specs/configurations-api`). The `web` package today is a placeholder shell (`MCP Gateway` / `Admin shell`) with Vitest and React Testing Library, but without shadcn/ui, navigation, or API calls. Vision screens: `mcp-gateway-spec.md` (Interface — Configurations and Connectors). This change implements Configurations management and a Connectors empty state only; account checkboxes are out because the API has no `accountIds`.
 
 ## Goals / Non-Goals
 
@@ -11,14 +11,14 @@ See `proposal.md` — Why. The admin API for configurations is already shipped (
 - English admin shell: Configurations and Connectors, switched in React state, no client router, no login.
 - Configurations UI against existing `/api/configurations` only; one-time token reveal; confirm before rotate and delete.
 - Connectors English empty state with no API traffic.
-- Shared dialog wrapping Radix, styled with CSS modules; RTL tests with fake `fetch`.
+- Dialog from the shadcn CLI (`npx shadcn@latest add dialog`), styled by Tailwind via the kit; RTL tests with fake `fetch`.
 
 **Non-Goals:**
 
 - Account checkboxes, accounts API, connector catalog or implementation.
 - Changing static-file serving on the admin port.
 - Browser/e2e automation in the propose step (apply/verify later).
-- Editing `mcp-gateway-spec.md` or `openspec/specs/` until archive.
+- Further edits to `mcp-gateway-spec.md` or `openspec/specs/` during apply beyond the stack-line correction recorded in `proposal.md`.
 
 ## Decisions
 
@@ -72,14 +72,14 @@ Accepted by the person before propose; they are not reopened here. No open quest
 
 **Alternative (rejected):** call a future connectors API with an empty response — rejected; no such API in this change; keep the screen offline.
 
-### 6. Shared UI: Radix dialog, CSS modules, English copy
+### 6. Shared UI: shadcn dialog, Tailwind, English copy
 
-- Follow the frontend skill layout: `app/` shell and nav, `pages/` or feature containers for screens, `shared/ui` for the dialog (and other controls that wrap Radix behavior), CSS modules next to components, tokens in `app/styles` as needed.
-- Only `shared/ui` imports `@radix-ui/react-*`. Features and pages do not import Radix directly.
-- Add the needed `@radix-ui/react-dialog` (and any small companion primitives required by the shared controls) to the `web` workspace.
+- Follow the frontend skill layout: `app/` shell and nav, `pages/` or feature containers for screens, `components/ui` for shadcn primitives added by the CLI.
+- Init shadcn/ui and Tailwind in `web` when `components.json` is absent; then add the dialog with `npx shadcn@latest add dialog`. Generated files live in `web/src/components/ui`.
+- Features and pages import `@/components/ui/...` only. They do not import `@radix-ui/*`. Do not add `@radix-ui/react-dialog` (or other `@radix-ui/react-*`) by hand; a generated file under `components/ui` may import whatever package the CLI writes.
 - UI copy is English. No login screen.
 
-**Alternative (rejected):** hand-rolled modal without Radix — rejected; project stack calls for Radix primitives for behavior and accessibility.
+**Alternative (rejected):** a hand-rolled modal or a direct `@radix-ui/react-dialog` dependency — rejected; the accepted path is the shadcn CLI.
 
 ### 7. Tests (apply phase)
 
@@ -92,7 +92,7 @@ Accepted by the person before propose; they are not reopened here. No open quest
 ## Risks / Trade-offs
 
 - [Operator closes the reveal dialog before copying the token] → Mitigation: dialog copy makes clear the token is shown once; rotate remains available after confirm.
-- [Fake fetch tests miss portal focus quirks] → Mitigation: query via `screen` for Radix portals; full browser check deferred to verify/e2e.
+- [Fake fetch tests miss portal focus quirks] → Mitigation: query via `screen` for shadcn dialog portals; full browser check deferred to verify/e2e.
 - [Placeholder App test expects no Configurations/Connectors text] → Mitigation: update that test in the same apply task that introduces the shell; do not delete coverage of the shell heading.
 
 ## Migration Plan
@@ -102,4 +102,4 @@ Accepted by the person before propose; they are not reopened here. No open quest
 
 ## Open Questions
 
-None. The accepted decisions above close navigation, API usage, token lifetime in the UI, confirmations, Connectors scope, Radix/dialog styling, and the test boundary for this propose step.
+None. The accepted decisions above close navigation, API usage, token lifetime in the UI, confirmations, Connectors scope, dialog via the shadcn CLI, and the test boundary for this propose step.

@@ -15,7 +15,7 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 }
 
 if (typeof Element !== 'undefined') {
-  // jsdom may omit pointer-capture helpers used by Radix; always install test stubs.
+  // jsdom may omit pointer-capture helpers used by shadcn UI dialogs; always install test stubs.
   Element.prototype.hasPointerCapture = () => false;
   Element.prototype.setPointerCapture = () => {};
   Element.prototype.releasePointerCapture = () => {};

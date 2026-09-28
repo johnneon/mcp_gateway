@@ -9,7 +9,7 @@
 Один процесс на Node.js 22 и TypeScript.
 
 - `server` — Express 5, MCP Streamable HTTP (`@modelcontextprotocol/sdk`), admin API, зашифрованное хранилище.
-- `web` — React 19 и Vite. Примитивы Radix UI, стили в CSS-модулях. Отдельного фронтенд-сервиса нет: тот же процесс раздаёт собранную статику.
+- `web` — React 19 и Vite, shadcn/ui и Tailwind. Отдельного фронтенд-сервиса нет: тот же процесс раздаёт собранную статику.
 - Состояние — один JSON-файл, зашифрованный AES-GCM. Ключ только из окружения.
 - Тесты — Vitest.
 

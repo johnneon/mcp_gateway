@@ -17,14 +17,14 @@ Review `git diff origin/main...HEAD` on `change/<name>` against the accepted art
 - A delta requirement is unimplemented, or its scenario has no test.
 - A new or changed server module, component, hook, or helper has no tests.
 - A test was weakened or removed to make it pass.
-- `mcp-gateway-spec.md` or `openspec/specs/` changed during apply.
+- `mcp-gateway-spec.md` or `openspec/specs/` changed during apply, unless the accepted proposal of this change records that edit.
 - A commit on the branch contains `.env`, a key, the data directory, or a real secret.
 - A new or changed file introduces explicit `any`, or the change breaks the repository ESLint / Prettier contract (`npm run lint` or `npm run format:check` would fail).
 
 ## Note
 
 - Architecture drift: logic in an Express route, a service that imports Express or reads `process.env`, a module-level singleton.
-- Frontend drift: a dumb component that fetches, Radix imported outside `shared/ui`, domain names in `shared/ui`, styles outside a CSS module, raw values instead of tokens.
+- Frontend drift: a dumb component that fetches; a direct `@radix-ui/*` import or a hand-written duplicate of a shadcn component outside `components/ui`; domain names in `components/ui`; new UI styled outside Tailwind.
 - Test drift: queries by test id where a role exists, asserting internal state, whole-tree snapshots, real sleeps.
 - Naming, file structure, ordinary style notes that do not break the ESLint / Prettier contract.
 
