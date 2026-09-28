@@ -1,6 +1,6 @@
 ---
 name: frontend
-description: Builds the MCP Gateway admin UI with React, Vite, Radix UI primitives, and CSS modules, served by the same process as the server. Use when editing web/, admin screens, account forms, configuration screens, shared UI components, or styles.
+description: Builds the MCP Gateway admin UI with React, Vite, shadcn/ui, and Tailwind, served by the same process as the server. Use when editing web/, admin screens, account forms, configuration screens, shared UI components, or styles.
 ---
 
 # Frontend
@@ -16,7 +16,7 @@ web/src/
   app/                   entry, layout, navigation, global styles and tokens
   pages/<Page>/          one smart component per screen
   features/<feature>/    smart containers, feature-only dumb components, api.ts
-  shared/ui/<Name>/      generic dumb components, the only place that imports Radix
+  components/ui/         shadcn/ui primitives added by the CLI
   shared/api/            fetch client and response types
   shared/lib/            pure helpers
   test/                  test setup and helpers
@@ -31,34 +31,33 @@ Each component lives in its own folder:
 ```text
 AccountForm/
   AccountForm.tsx
-  AccountForm.module.css
   AccountForm.test.tsx
   index.ts               re-export only
 ```
 
-Import a component through its folder: `import { AccountForm } from '@/features/accounts/AccountForm'`. The `@` alias points to `web/src` in both `vite.config.ts` and `tsconfig.json`.
+Tailwind classes live on the elements. Import a component through its folder: `import { AccountForm } from '@/features/accounts/AccountForm'`. The `@` alias points to `web/src` in both `vite.config.ts` and `tsconfig.json`.
 
 ## Smart and dumb
 
 - **Dumb** components get data and callbacks through props and render them. No fetch, no API imports, no global state, no routing. Local UI state (open, hover, input draft) is fine.
 - **Smart** components load data, hold screen state, call the API, handle loading and error, and pass props down. They contain as little markup and styling as possible.
-- Pages are smart. Everything in `shared/ui` is dumb.
+- Pages are smart. Everything in `components/ui` is dumb.
 - A feature component that grows both data logic and markup splits into `XContainer` (smart) and `X` (dumb).
 
-## shared/ui
+## components/ui
 
-- Generic building blocks: `Button`, `Input`, `Field`, `Dialog`, `Table`, `Checkbox`, `Toast`, and so on.
-- Built on Radix UI primitives (`@radix-ui/react-*`) for behavior and accessibility, styled with CSS modules. Features never import Radix directly.
-- No domain knowledge: no "account", "connector", or "configuration" in `shared/ui`.
-- Add a component here when a second feature needs it, or when it wraps a Radix primitive.
+- Generic building blocks from shadcn/ui: `Button`, `Input`, `Field`, `Dialog`, `Table`, `Checkbox`, `Toast`, and so on.
+- Add a primitive with `npx shadcn@latest add <component>` from the `web` workspace. Do not hand-write a wrapper and do not add `@radix-ui/react-*` yourself.
+- Features and pages import `@/components/ui/...` only. They do not import `@radix-ui/*`.
+- No domain knowledge: no "account", "connector", or "configuration" in `components/ui`.
+- A generated file under `components/ui` may import whatever package the CLI writes.
 
 ## Styles
 
-- CSS modules only, next to the component: `Name.module.css`. No inline `style` except computed values. No CSS-in-JS, no Tailwind, no styled UI kit.
-- Design tokens (colors, spacing, radius, font sizes) are CSS custom properties in `app/styles/tokens.css`. Modules use tokens, not raw values.
-- Global CSS is only the reset and the tokens.
-- Class names are camelCase: `styles.submitButton`.
-- State styling uses Radix data attributes where they exist: `[data-state='open']`, `[data-disabled]`.
+- Tailwind utility classes for new screens, features, and shadcn components. Do not add a CSS module for a shadcn component. Do not introduce a second styling system.
+- No inline `style` except computed values. No CSS-in-JS.
+- Theme tokens are the CSS variables the shadcn init writes.
+- Global CSS is only the reset and the theme variables from the shadcn setup.
 
 ## Data and API
 

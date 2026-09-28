@@ -1,0 +1,1 @@
+export { ConfigurationsPage } from './ConfigurationsPage';

@@ -11,7 +11,7 @@ Every component, hook, and helper in `web/` gets tests in the same task that cre
 
 - Vitest with the `jsdom` environment.
 - `@testing-library/react`, `@testing-library/user-event`, `@testing-library/jest-dom`.
-- Setup in `web/src/test/setup.ts`: jest-dom matchers, `cleanup` after each test, and the jsdom gaps Radix needs (`ResizeObserver`, `Element.prototype.hasPointerCapture`, `Element.prototype.scrollIntoView`).
+- Setup in `web/src/test/setup.ts`: jest-dom matchers, `cleanup` after each test, and the jsdom gaps shadcn UI dialogs need (`ResizeObserver`, `Element.prototype.hasPointerCapture`, `Element.prototype.scrollIntoView`).
 - Helpers in `web/src/test/`: `renderWithProviders` if the app gains providers, and `mockFetch` for API responses.
 
 The test file sits next to the code: `AccountForm.test.tsx`, `format.test.ts`.
@@ -22,7 +22,7 @@ The test file sits next to the code: `AccountForm.test.tsx`, `format.test.ts`.
 | --- | --- | --- |
 | `shared/lib` helper | unit | inputs and outputs, edge cases |
 | `shared/api` client | unit with `mockFetch` | JSON header on mutations, error mapping |
-| `shared/ui` component | RTL | render by props, keyboard and mouse interaction, disabled and error states, accessible name |
+| `components/ui` component | RTL | render by props, keyboard and mouse interaction, disabled and error states, accessible name |
 | feature dumb component | RTL | every prop branch, callbacks called with the right arguments |
 | smart component or page | RTL with `mockFetch` | loading, empty, error, success; the request that was sent |
 
@@ -32,7 +32,7 @@ The test file sits next to the code: `AccountForm.test.tsx`, `format.test.ts`.
 - Interact through `userEvent.setup()`, not `fireEvent`.
 - Wait with `findBy*` or `waitFor`, never with timers.
 - Assert what the user sees or what leaves the component: text, roles, states, callback calls, requests. Do not assert internal state, hook calls, or class names.
-- Radix dialogs and menus render in a portal. Query through `screen`, not the render container.
+- shadcn dialogs and menus render in a portal. Query through `screen`, not the render container.
 - Smart components are tested against `mockFetch` at the network boundary, not by mocking their own `api.ts`. Check the method, the path, the JSON body, and `Content-Type: application/json`.
 - No snapshot tests of whole trees.
 - One behavior per test. The name says the behavior: `shows the token once after create`.
