@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ConfigurationsPage } from '@/pages/ConfigurationsPage';
+import { ConnectorsPage } from '@/pages/ConnectorsPage';
 
 export type AdminScreen = 'configurations' | 'connectors';
 
@@ -37,15 +38,7 @@ export function App() {
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-6 py-8">
-        {screen === 'configurations' ? (
-          <ConfigurationsPage />
-        ) : (
-          <section aria-labelledby="connectors-heading">
-            <h2 id="connectors-heading" className="text-xl font-medium">
-              Connectors
-            </h2>
-          </section>
-        )}
+        {screen === 'configurations' ? <ConfigurationsPage /> : <ConnectorsPage />}
       </main>
     </div>
   );
