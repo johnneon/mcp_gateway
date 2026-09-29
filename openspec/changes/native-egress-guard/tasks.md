@@ -8,7 +8,7 @@
 
 ## 2. Handler signature and call dispatch
 
-- [ ] 2.1 Extend `NativeToolHandler` to accept the egress client as the third argument; keep `checkConnection` without the client. Update existing fake handlers in server tests to the new signature. Unit/integration: handler records a present egress client on successful `tools/call`; `checkConnection` still invoked with account values only. Check: connector-contract scenario "Handler receives egress client; checkConnection does not" and existing registry build scenarios still pass.
+- [x] 2.1 Extend `NativeToolHandler` to accept the egress client as the third argument; keep `checkConnection` without the client. Update existing fake handlers in server tests to the new signature. Unit/integration: handler records a present egress client on successful `tools/call`; `checkConnection` still invoked with account values only. Check: connector-contract scenario "Handler receives egress client; checkConnection does not" and existing registry build scenarios still pass.
 
 - [ ] 2.2 In `dispatchToolCall`, build the egress client for the authorized account and pass it to the handler. Map egress network errors to their exact short English phrases for the MCP client (not `Tool execution failed`); keep other handler throws as the fixed `Tool execution failed` without exception text. Check: successful call still increments the fake counter and passes decrypted values; egress `Destination is not allowed` reaches the MCP client unchanged; handler-throw scenario still returns the fixed English error without the secret.
 

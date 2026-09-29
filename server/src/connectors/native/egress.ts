@@ -4,6 +4,7 @@ import type {
   AllowedDestination,
   ConstantAllowedDestination,
   FieldAllowedDestination,
+  NativeEgressClient,
 } from '../contract.js';
 
 export const EGRESS_DEFAULT_TIMEOUT_MS = 30_000;
@@ -67,17 +68,7 @@ export type EgressTransport = {
   tlsConnect(params: { host: string; port: number; signal: AbortSignal }): Promise<void>;
 };
 
-export type EgressClient = {
-  httpsRequest(params: {
-    host: string;
-    port: number;
-    method: string;
-    path: string;
-    headers?: Readonly<Record<string, string>>;
-    body?: string | Uint8Array;
-  }): Promise<EgressHttpsResult>;
-  tlsConnect(params: { host: string; port: number }): Promise<void>;
-};
+export type EgressClient = NativeEgressClient;
 
 export type CreateEgressClientOptions = {
   allowlist: readonly ResolvedDestination[];

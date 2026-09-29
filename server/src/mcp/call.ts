@@ -1,6 +1,7 @@
 import { Ajv, type ValidateFunction } from 'ajv';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import type { NativeToolResult, RegistryTool } from '../connectors/contract.js';
+import { createEgressClientForAccount } from '../connectors/native/egress.js';
 import type { ConnectorRegistry } from '../connectors/registry.js';
 import type { EncryptedStore } from '../store/store.js';
 import type { ActiveConfiguration } from './auth.js';
@@ -63,6 +64,11 @@ export async function dispatchToolCall(options: {
     throw new McpError(ErrorCode.InvalidParams, UNKNOWN_TOOL_MESSAGE);
   }
 
+  const connector = connectorRegistry.connectors.find((entry) => entry.id === tool.connectorId);
+  if (connector === undefined) {
+    throw new McpError(ErrorCode.InvalidParams, UNKNOWN_TOOL_MESSAGE);
+  }
+
   const eligible = eligibleAccountsForConnector(configuration, store, tool.connectorId);
   if (eligible.length === 0) {
     throw new McpError(ErrorCode.InvalidParams, ACCOUNT_NOT_ALLOWED_MESSAGE);
@@ -89,8 +95,13 @@ export async function dispatchToolCall(options: {
     throw new McpError(ErrorCode.InvalidParams, ACCOUNT_NOT_ALLOWED_MESSAGE);
   }
 
+  const egressClient = createEgressClientForAccount({
+    destinations: connector.allowedDestinations,
+    accountValues: account.values,
+  });
+
   try {
-    return await tool.handler(stripAccount(args), account.values);
+    return await tool.handler(stripAccount(args), account.values, egressClient);
   } catch {
     throw new McpError(ErrorCode.InternalError, TOOL_EXECUTION_FAILED_MESSAGE);
   }

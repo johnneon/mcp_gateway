@@ -679,4 +679,73 @@ describe('mcp-endpoint: tools/call validates, authorizes, then invokes handler',
       }
     });
   });
+
+  it('Successful call passes egress client to handler', async () => {
+    let recordedEgress: unknown;
+    const registry = buildConnectorRegistry([
+      createFakeEchoConnector((_args, _accountValues, egressClient) => {
+        recordedEgress = egressClient;
+        return { content: [{ type: 'text', text: 'ok' }] };
+      }),
+    ]);
+    const store = twoConfigStoreWithAccount({
+      accountIdsA: ['acc-1'],
+      accountIdsB: [],
+    });
+
+    await withMcpClient(store, registry, CONFIG_A_TOKEN, async (client) => {
+      const result = await client.callTool({
+        name: 'fake_echo',
+        arguments: { message: 'hello', account: 'acc-1' },
+      });
+      expect(result).toMatchObject({
+        content: [{ type: 'text', text: 'ok' }],
+      });
+    });
+
+    expect(recordedEgress).toEqual(
+      expect.objectContaining({
+        httpsRequest: expect.any(Function) as unknown,
+        tlsConnect: expect.any(Function) as unknown,
+      }),
+    );
+  });
+});
+
+describe('connector-contract: Native connector tools', () => {
+  it('Handler receives egress client; checkConnection does not', async () => {
+    let recordedEgress: unknown;
+    let checkConnectionArgCount = -1;
+    const connector = createFakeEchoConnector((_args, _accountValues, egressClient) => {
+      recordedEgress = egressClient;
+      return { content: [{ type: 'text', text: 'ok' }] };
+    });
+    connector.checkConnection = (...args: unknown[]) => {
+      checkConnectionArgCount = args.length;
+    };
+    const registry = buildConnectorRegistry([connector]);
+    const store = twoConfigStoreWithAccount({
+      accountIdsA: ['acc-1'],
+      accountIdsB: [],
+    });
+
+    await withMcpClient(store, registry, CONFIG_A_TOKEN, async (client) => {
+      await client.callTool({
+        name: 'fake_echo',
+        arguments: { message: 'hello', account: 'acc-1' },
+      });
+    });
+
+    expect(recordedEgress).toEqual(
+      expect.objectContaining({
+        httpsRequest: expect.any(Function) as unknown,
+        tlsConnect: expect.any(Function) as unknown,
+      }),
+    );
+
+    await Promise.resolve(
+      registry.connectors[0]?.checkConnection({ user: 'alice', token: FIXTURE_SECRET }),
+    );
+    expect(checkConnectionArgCount).toBe(1);
+  });
 });

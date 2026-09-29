@@ -45,9 +45,30 @@ export type NativeToolResult = {
   content: ReadonlyArray<{ type: 'text'; text: string }>;
 };
 
+/**
+ * Gateway-built network client limited to the connector allowlist for one account.
+ * Concrete implementation lives in connectors/native/egress.ts.
+ */
+export type NativeEgressClient = {
+  httpsRequest(params: {
+    host: string;
+    port: number;
+    method: string;
+    path: string;
+    headers?: Readonly<Record<string, string>>;
+    body?: string | Uint8Array;
+  }): Promise<{
+    status: number;
+    headers: Readonly<Record<string, string>>;
+    body: Uint8Array;
+  }>;
+  tlsConnect(params: { host: string; port: number }): Promise<void>;
+};
+
 export type NativeToolHandler = (
   args: Readonly<Record<string, unknown>>,
   accountValues: AccountFieldValues,
+  egressClient: NativeEgressClient,
 ) => NativeToolResult | Promise<NativeToolResult>;
 
 export type NativeConnectorTool = {
