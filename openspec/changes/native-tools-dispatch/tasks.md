@@ -10,7 +10,7 @@
 
 ## 3. Per-request tools/list with injected account
 
-- [ ] 3.1 Build `tools/list` per request from the active configuration and registry: list a connector's tools only when it has at least one eligible account; inject required `account` (`enum` of eligible ids; `description` with one `<id> (<label>)` per account; no oneOf/const/title; no account field values in the schema). Tests: configuration with account lists the fake tool with correct enum/description; configuration without the account yields `[]`; empty production registry still yields `[]`; serialized schema has no secret field values. Check: those list scenarios pass.
+- [x] 3.1 Build `tools/list` per request from the active configuration and registry: list a connector's tools only when it has at least one eligible account; inject required `account` (`enum` of eligible ids; `description` with one `<id> (<label>)` per account; no oneOf/const/title; no account field values in the schema). Tests: configuration with account lists the fake tool with correct enum/description; configuration without the account yields `[]`; empty production registry still yields `[]`; serialized schema has no secret field values. Check: those list scenarios pass.
 
 ## 4. tools/call validate, authorize, handler
 

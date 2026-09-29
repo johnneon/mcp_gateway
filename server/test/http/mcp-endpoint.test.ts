@@ -4,8 +4,13 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import request from 'supertest';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { ConnectorModule, NativeToolHandler } from '../../src/connectors/contract.js';
+import {
+  buildConnectorRegistry,
+  productionConnectorRegistry,
+  type ConnectorRegistry,
+} from '../../src/connectors/registry.js';
 import { createMcpApp } from '../../src/http/createMcpApp.js';
-import { productionConnectorRegistry } from '../../src/connectors/registry.js';
 import type { JsonObject } from '../../src/store/codec.js';
 import type { EncryptedStore } from '../../src/store/store.js';
 import { hashToken } from '../../src/token/token.js';
@@ -30,14 +35,18 @@ afterEach(async () => {
   }
 });
 
-function mcpAppFor(store: EncryptedStore) {
-  return createMcpApp({ store, connectorRegistry: productionConnectorRegistry });
+function mcpAppFor(
+  store: EncryptedStore,
+  connectorRegistry: ConnectorRegistry = productionConnectorRegistry,
+) {
+  return createMcpApp({ store, connectorRegistry });
 }
 
 async function listenMcpApp(
   store: EncryptedStore,
+  connectorRegistry: ConnectorRegistry = productionConnectorRegistry,
 ): Promise<{ baseUrl: string; server: http.Server }> {
-  const app = mcpAppFor(store);
+  const app = mcpAppFor(store, connectorRegistry);
   const server = http.createServer(app);
   openServers.push(server);
   await new Promise<void>((resolve, reject) => {
@@ -55,6 +64,10 @@ const DISABLED_NAME = 'Disabled Ops Config UNIQUE';
 const ENABLED_TOKEN = 'enabled-bearer-token-UNIQUE-7e2c-aaaa';
 const DISABLED_TOKEN = 'disabled-bearer-token-UNIQUE-7e2c-bbbb';
 const UNKNOWN_TOKEN = 'unknown-bearer-token-UNIQUE-7e2c-cccc';
+
+const FIXTURE_SECRET = 'fixture-secret-value-UNIQUE-7e2c';
+const CONFIG_A_TOKEN = 'config-a-bearer-UNIQUE-7e2c-aaaa';
+const CONFIG_B_TOKEN = 'config-b-bearer-UNIQUE-7e2c-bbbb';
 
 function createMemoryStore(initial: JsonObject = {}): EncryptedStore {
   let document: JsonObject = structuredClone(initial);
@@ -80,6 +93,58 @@ function storeWithConfigs(
       enabled: row.enabled,
     })),
   });
+}
+
+function createFakeEchoConnector(handler?: NativeToolHandler): ConnectorModule {
+  return {
+    id: 'fake',
+    name: 'Fake',
+    kind: 'native',
+    fields: [
+      { name: 'user', label: 'User', type: 'text', required: true },
+      { name: 'token', label: 'Token', type: 'secret', required: true },
+    ],
+    allowedDestinations: [{ host: 'fake.example.test', port: 443 }],
+    checkConnection: () => undefined,
+    tools: [
+      {
+        name: 'echo',
+        description: 'Echo arguments for tests',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+          },
+          required: ['message'],
+        },
+        handler:
+          handler ??
+          (() => ({
+            content: [{ type: 'text', text: 'ok' }],
+          })),
+      },
+    ],
+  };
+}
+
+async function listToolsWithBearer(
+  store: EncryptedStore,
+  registry: ConnectorRegistry,
+  token: string,
+) {
+  const { baseUrl } = await listenMcpApp(store, registry);
+  const transport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`), {
+    requestInit: {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  });
+  const client = new Client({ name: 'mcp-endpoint-test', version: '0.0.0' });
+  await client.connect(transport);
+  const listed = await client.listTools();
+  await client.close();
+  return listed;
 }
 
 const INITIALIZE_BODY = {
@@ -257,5 +322,142 @@ describe('mcp-endpoint: Stateless Streamable HTTP with empty tools/list', () => 
       id: 2,
       result: { tools: [] },
     });
+  });
+});
+
+function twoConfigStoreWithAccount(options: {
+  accountIdsA: string[];
+  accountIdsB: string[];
+  accountEnabled?: boolean;
+}): EncryptedStore {
+  return createMemoryStore({
+    accounts: [
+      {
+        id: 'acc-1',
+        connector: 'fake',
+        label: 'Box',
+        enabled: options.accountEnabled ?? true,
+        values: {
+          user: 'alice',
+          token: FIXTURE_SECRET,
+        },
+      },
+    ],
+    configurations: [
+      {
+        id: 'cfg-a',
+        name: 'Config A',
+        tokenHash: hashToken(CONFIG_A_TOKEN),
+        enabled: true,
+        accountIds: options.accountIdsA,
+      },
+      {
+        id: 'cfg-b',
+        name: 'Config B',
+        tokenHash: hashToken(CONFIG_B_TOKEN),
+        enabled: true,
+        accountIds: options.accountIdsB,
+      },
+    ],
+  });
+}
+
+describe('mcp-endpoint: Resolve first enabled configuration after bearer auth', () => {
+  it('First enabled matching configuration scopes tools', async () => {
+    const registry = buildConnectorRegistry([createFakeEchoConnector()]);
+    const store = twoConfigStoreWithAccount({
+      accountIdsA: ['acc-1'],
+      accountIdsB: [],
+    });
+
+    const listedA = await listToolsWithBearer(store, registry, CONFIG_A_TOKEN);
+    expect(listedA.tools.map((tool) => tool.name)).toContain('fake_echo');
+
+    const listedB = await listToolsWithBearer(store, registry, CONFIG_B_TOKEN);
+    expect(listedB.tools).toEqual([]);
+  });
+});
+
+describe('mcp-endpoint: tools/list from eligible accounts only', () => {
+  it('Connector tools hidden when configuration has no eligible account', async () => {
+    const registry = buildConnectorRegistry([createFakeEchoConnector()]);
+    const store = twoConfigStoreWithAccount({
+      accountIdsA: ['acc-1'],
+      accountIdsB: [],
+    });
+
+    const listed = await listToolsWithBearer(store, registry, CONFIG_B_TOKEN);
+    expect(listed.tools).toEqual([]);
+  });
+
+  it('Connector tools listed when configuration has an eligible account', async () => {
+    const registry = buildConnectorRegistry([createFakeEchoConnector()]);
+    const store = twoConfigStoreWithAccount({
+      accountIdsA: ['acc-1'],
+      accountIdsB: [],
+    });
+
+    const listed = await listToolsWithBearer(store, registry, CONFIG_A_TOKEN);
+    expect(listed.tools.map((tool) => tool.name)).toContain('fake_echo');
+  });
+
+  it('Empty production registry still yields empty tools/list', async () => {
+    const store = storeWithConfigs([
+      { id: 'cfg-enabled', name: ENABLED_NAME, token: ENABLED_TOKEN, enabled: true },
+    ]);
+    const listed = await listToolsWithBearer(store, productionConnectorRegistry, ENABLED_TOKEN);
+    expect(listed.tools).toEqual([]);
+    expect(productionConnectorRegistry.connectors).toHaveLength(0);
+  });
+});
+
+describe('mcp-endpoint: Injected account argument in tool schemas', () => {
+  it('Account enum and description show only eligible accounts', async () => {
+    const registry = buildConnectorRegistry([createFakeEchoConnector()]);
+    const store = twoConfigStoreWithAccount({
+      accountIdsA: ['acc-1'],
+      accountIdsB: [],
+    });
+
+    const listed = await listToolsWithBearer(store, registry, CONFIG_A_TOKEN);
+    const tool = listed.tools.find((entry) => entry.name === 'fake_echo');
+    expect(tool).toBeDefined();
+    const schema = tool?.inputSchema as {
+      required?: string[];
+      properties?: {
+        account?: {
+          type?: string;
+          enum?: string[];
+          description?: string;
+          oneOf?: unknown;
+          const?: unknown;
+          title?: unknown;
+        };
+      };
+    };
+    expect(schema.required).toContain('account');
+    expect(schema.properties?.account?.type).toBe('string');
+    expect(schema.properties?.account?.enum).toEqual(['acc-1']);
+    expect(schema.properties?.account?.description).toContain('acc-1 (Box)');
+    expect(schema.properties?.account?.oneOf).toBeUndefined();
+    expect(schema.properties?.account?.const).toBeUndefined();
+    expect(schema.properties?.account?.title).toBeUndefined();
+
+    const serialized = JSON.stringify(tool);
+    expect(serialized).not.toContain(FIXTURE_SECRET);
+  });
+});
+
+describe('connector-contract: MCP app accepts an injectable connector registry', () => {
+  it('MCP app with injected fake registry can list tools for an eligible account', async () => {
+    const registry = buildConnectorRegistry([createFakeEchoConnector()]);
+    const store = twoConfigStoreWithAccount({
+      accountIdsA: ['acc-1'],
+      accountIdsB: [],
+    });
+
+    const listed = await listToolsWithBearer(store, registry, CONFIG_A_TOKEN);
+    expect(listed.tools.map((tool) => tool.name)).toContain('fake_echo');
+    expect(productionConnectorRegistry.connectors).toHaveLength(0);
   });
 });
