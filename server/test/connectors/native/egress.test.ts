@@ -167,3 +167,164 @@ describe('native-egress: production defaults', () => {
     expect(RESPONSE_TOO_LARGE_MESSAGE).toBe('Response too large');
   });
 });
+
+describe('native-egress: Never follow redirects', () => {
+  it('Redirect to a foreign host is refused without following', async () => {
+    const location = 'https://evil.example.test/x';
+    const bodyText = 'redirect-body-UNIQUE';
+    const transport = createCountingTransport({
+      https: () =>
+        Promise.resolve({
+          status: 302,
+          headers: { location },
+          body: Buffer.from(bodyText, 'utf8'),
+        }),
+    });
+    const client = createEgressClient({
+      allowlist: [{ host: 'api.example.test', port: 443 }],
+      transport,
+    });
+
+    try {
+      await client.httpsRequest({
+        host: 'api.example.test',
+        port: 443,
+        method: 'GET',
+        path: '/',
+      });
+      expect.fail('expected redirect refusal');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      expect(message).toBe(REDIRECT_NOT_ALLOWED_MESSAGE);
+      expect(message).not.toContain(location);
+      expect(message).not.toContain(bodyText);
+      expect(message).not.toContain('evil.example.test');
+    }
+    expect(transport.callCount).toBe(1);
+  });
+
+  it('Redirect to the same allowed host is still refused', async () => {
+    const transport = createCountingTransport({
+      https: () =>
+        Promise.resolve({
+          status: 301,
+          headers: { location: 'https://api.example.test/other' },
+          body: new Uint8Array(0),
+        }),
+    });
+    const client = createEgressClient({
+      allowlist: [{ host: 'api.example.test', port: 443 }],
+      transport,
+    });
+
+    await expect(
+      client.httpsRequest({
+        host: 'api.example.test',
+        port: 443,
+        method: 'GET',
+        path: '/',
+      }),
+    ).rejects.toMatchObject({ message: REDIRECT_NOT_ALLOWED_MESSAGE });
+    expect(transport.callCount).toBe(1);
+  });
+});
+
+describe('native-egress: Timeout and max response size constants', () => {
+  it('Injected abort yields Connection failed', async () => {
+    const transport = createCountingTransport({
+      https: () => {
+        const abortError = new Error('The operation was aborted');
+        abortError.name = 'AbortError';
+        return Promise.reject(abortError);
+      },
+    });
+    const client = createEgressClient({
+      allowlist: [{ host: 'api.example.test', port: 443 }],
+      transport,
+      timeoutMs: 50,
+    });
+
+    try {
+      await client.httpsRequest({
+        host: 'api.example.test',
+        port: 443,
+        method: 'GET',
+        path: '/',
+      });
+      expect.fail('expected connection failed');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      expect(message).toBe(CONNECTION_FAILED_MESSAGE);
+      expect(message).not.toMatch(/location|content-type|set-cookie/i);
+      expect(message).not.toContain('{');
+    }
+  });
+
+  it('Oversized response yields Response too large without truncated body', async () => {
+    const oversized = Buffer.alloc(32, 0x61);
+    const transport = createCountingTransport({
+      https: () =>
+        Promise.resolve({
+          status: 200,
+          headers: { 'content-type': 'application/octet-stream' },
+          body: oversized,
+        }),
+    });
+    const client = createEgressClient({
+      allowlist: [{ host: 'api.example.test', port: 443 }],
+      transport,
+      maxResponseBytes: 16,
+    });
+
+    let caught: unknown;
+    try {
+      await client.httpsRequest({
+        host: 'api.example.test',
+        port: 443,
+        method: 'GET',
+        path: '/',
+      });
+      expect.fail('expected response too large');
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ message: RESPONSE_TOO_LARGE_MESSAGE });
+    const message = caught instanceof Error ? caught.message : String(caught);
+    expect(message).toBe(RESPONSE_TOO_LARGE_MESSAGE);
+    expect(message).not.toContain('content-type');
+    expect(message).not.toContain('aaaaaaaa');
+    expect(caught).not.toHaveProperty('body');
+  });
+});
+
+describe('native-egress: Network errors are short English phrases without bodies', () => {
+  it('Fake transport returning a secret in the body does not leak it on redirect refusal', async () => {
+    const fixtureSecret = 'fixture-secret-in-redirect-body-UNIQUE';
+    const transport = createCountingTransport({
+      https: () =>
+        Promise.resolve({
+          status: 302,
+          headers: { location: 'https://evil.example.test/' },
+          body: Buffer.from(fixtureSecret, 'utf8'),
+        }),
+    });
+    const client = createEgressClient({
+      allowlist: [{ host: 'api.example.test', port: 443 }],
+      transport,
+    });
+
+    try {
+      await client.httpsRequest({
+        host: 'api.example.test',
+        port: 443,
+        method: 'GET',
+        path: '/',
+      });
+      expect.fail('expected redirect refusal');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      expect(message).toBe(REDIRECT_NOT_ALLOWED_MESSAGE);
+      expect(message).not.toContain(fixtureSecret);
+    }
+  });
+});

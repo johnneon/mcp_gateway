@@ -331,6 +331,10 @@ export function createEgressClient(options: CreateEgressClientOptions): EgressCl
           mapTransportFailure(error);
         }
 
+        if (transportResult.status >= 300 && transportResult.status < 400) {
+          throw new EgressError('redirect_not_allowed', REDIRECT_NOT_ALLOWED_MESSAGE);
+        }
+
         const body = await readBodyLimited(transportResult.body, maxResponseBytes);
         return {
           status: transportResult.status,
