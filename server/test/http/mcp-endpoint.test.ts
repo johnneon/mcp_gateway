@@ -781,3 +781,182 @@ describe('connector-contract: Native connector tools', () => {
     expect(checkConnectionArgCount).toBe(1);
   });
 });
+
+describe('mcp-endpoint: Scrub secret account values from tool results and errors', () => {
+  it('Secret returned in the body is redacted in the tool result', async () => {
+    const registry = buildConnectorRegistry([
+      createFakeEchoConnector((_args, accountValues) => ({
+        content: [{ type: 'text', text: `token=${accountValues.token ?? ''}` }],
+      })),
+    ]);
+    const store = twoConfigStoreWithAccount({
+      accountIdsA: ['acc-1'],
+      accountIdsB: [],
+    });
+
+    await withMcpClient(store, registry, CONFIG_A_TOKEN, async (client) => {
+      const result = await client.callTool({
+        name: 'fake_echo',
+        arguments: { message: 'hello', account: 'acc-1' },
+      });
+      const text = JSON.stringify(result);
+      expect(text).toContain('[redacted]');
+      expect(text).not.toContain(FIXTURE_SECRET);
+    });
+  });
+
+  it('Longer secret is redacted before a shorter overlapping secret', async () => {
+    const connector: ConnectorModule = {
+      id: 'fake',
+      name: 'Fake',
+      kind: 'native',
+      fields: [
+        { name: 'short', label: 'Short', type: 'secret', required: true },
+        { name: 'long', label: 'Long', type: 'secret', required: true },
+      ],
+      allowedDestinations: [{ host: 'fake.example.test', port: 443 }],
+      checkConnection: () => undefined,
+      tools: [
+        {
+          name: 'echo',
+          description: 'Echo',
+          inputSchema: {
+            type: 'object',
+            properties: { message: { type: 'string' } },
+            required: ['message'],
+          },
+          handler: () => ({
+            content: [{ type: 'text', text: 'value=abc' }],
+          }),
+        },
+      ],
+    };
+    const registry = buildConnectorRegistry([connector]);
+    const store = createMemoryStore({
+      accounts: [
+        {
+          id: 'acc-1',
+          connector: 'fake',
+          label: 'Box',
+          enabled: true,
+          values: { short: 'ab', long: 'abc' },
+        },
+      ],
+      configurations: [
+        {
+          id: 'cfg-a',
+          name: 'Config A',
+          tokenHash: hashToken(CONFIG_A_TOKEN),
+          enabled: true,
+          accountIds: ['acc-1'],
+        },
+      ],
+    });
+
+    await withMcpClient(store, registry, CONFIG_A_TOKEN, async (client) => {
+      const result = await client.callTool({
+        name: 'fake_echo',
+        arguments: { message: 'hello', account: 'acc-1' },
+      });
+      const text = JSON.stringify(result);
+      expect(text).toContain('[redacted]');
+      expect(text).not.toContain('abc');
+      expect(text).not.toMatch(/\[redacted\]c/);
+    });
+  });
+
+  it('Empty secret and non-secret fields are not redacted', async () => {
+    const connector: ConnectorModule = {
+      id: 'fake',
+      name: 'Fake',
+      kind: 'native',
+      fields: [
+        { name: 'token', label: 'Token', type: 'secret', required: false },
+        { name: 'note', label: 'Note', type: 'text', required: true },
+        { name: 'mailhost', label: 'Mail host', type: 'host', required: true },
+      ],
+      allowedDestinations: [{ host: 'fake.example.test', port: 443 }],
+      checkConnection: () => undefined,
+      tools: [
+        {
+          name: 'echo',
+          description: 'Echo',
+          inputSchema: {
+            type: 'object',
+            properties: { message: { type: 'string' } },
+            required: ['message'],
+          },
+          handler: () => ({
+            content: [
+              {
+                type: 'text',
+                text: 'visible-text and mail.example.test',
+              },
+            ],
+          }),
+        },
+      ],
+    };
+    const registry = buildConnectorRegistry([connector]);
+    const store = createMemoryStore({
+      accounts: [
+        {
+          id: 'acc-1',
+          connector: 'fake',
+          label: 'Box',
+          enabled: true,
+          values: {
+            token: '',
+            note: 'visible-text',
+            mailhost: 'mail.example.test',
+          },
+        },
+      ],
+      configurations: [
+        {
+          id: 'cfg-a',
+          name: 'Config A',
+          tokenHash: hashToken(CONFIG_A_TOKEN),
+          enabled: true,
+          accountIds: ['acc-1'],
+        },
+      ],
+    });
+
+    await withMcpClient(store, registry, CONFIG_A_TOKEN, async (client) => {
+      const result = await client.callTool({
+        name: 'fake_echo',
+        arguments: { message: 'hello', account: 'acc-1' },
+      });
+      const text = JSON.stringify(result);
+      expect(text).toContain('visible-text');
+      expect(text).toContain('mail.example.test');
+      expect(text).not.toContain('[redacted]');
+    });
+  });
+
+  it('Secret in error text is scrubbed before the client sees it', async () => {
+    const registry = buildConnectorRegistry([
+      createFakeEchoConnector(() => {
+        throw new Error(`failure leaked ${FIXTURE_SECRET}`);
+      }),
+    ]);
+    const store = twoConfigStoreWithAccount({
+      accountIdsA: ['acc-1'],
+      accountIdsB: [],
+    });
+
+    await withMcpClient(store, registry, CONFIG_A_TOKEN, async (client) => {
+      try {
+        await client.callTool({
+          name: 'fake_echo',
+          arguments: { message: 'hello', account: 'acc-1' },
+        });
+        expect.fail('expected callTool to throw');
+      } catch (error) {
+        const message = errorMessage(error);
+        expect(message).not.toContain(FIXTURE_SECRET);
+      }
+    });
+  });
+});

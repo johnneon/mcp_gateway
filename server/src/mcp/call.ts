@@ -17,6 +17,7 @@ import {
   eligibleAccountsForConnector,
   type EligibleAccount,
 } from './tools.js';
+import { collectNonEmptySecrets, scrubSecretsInText, scrubSecretsInToolResult } from './scrub.js';
 
 export const TOOL_EXECUTION_FAILED_MESSAGE = 'Tool execution failed';
 export const INVALID_TOOL_ARGUMENTS_MESSAGE = 'Invalid tool arguments';
@@ -118,15 +119,21 @@ export async function dispatchToolCall(options: {
     accountValues: account.values,
   });
 
+  const secrets = collectNonEmptySecrets(connector.fields, account.values);
+
   try {
-    return await tool.handler(stripAccount(args), account.values, egressClient);
+    const result = await tool.handler(stripAccount(args), account.values, egressClient);
+    return scrubSecretsInToolResult(result, secrets);
   } catch (error) {
     if (isEgressError(error) && isEgressNetworkMessage(error.message)) {
-      throw new McpError(ErrorCode.InternalError, error.message);
+      throw new McpError(ErrorCode.InternalError, scrubSecretsInText(error.message, secrets));
     }
     if (error instanceof Error && isEgressNetworkMessage(error.message)) {
-      throw new McpError(ErrorCode.InternalError, error.message);
+      throw new McpError(ErrorCode.InternalError, scrubSecretsInText(error.message, secrets));
     }
-    throw new McpError(ErrorCode.InternalError, TOOL_EXECUTION_FAILED_MESSAGE);
+    throw new McpError(
+      ErrorCode.InternalError,
+      scrubSecretsInText(TOOL_EXECUTION_FAILED_MESSAGE, secrets),
+    );
   }
 }

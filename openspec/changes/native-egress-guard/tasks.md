@@ -14,7 +14,7 @@
 
 ## 3. Secret scrubbing
 
-- [ ] 3.1 Before returning a tool result or MCP error to the client, replace every non-empty account secret field value with `[redacted]` in each text content part and in error text; replace longer secrets first; leave empty secrets and non-secret fields (`text`, `host`) unchanged. Tests: secret in body is redacted; longer-before-shorter; empty secret and non-secret fields untouched; secret embedded in error text is scrubbed. Check: those mcp-endpoint scrubbing scenarios pass.
+- [x] 3.1 Before returning a tool result or MCP error to the client, replace every non-empty account secret field value with `[redacted]` in each text content part and in error text; replace longer secrets first; leave empty secrets and non-secret fields (`text`, `host`) unchanged. Tests: secret in body is redacted; longer-before-shorter; empty secret and non-secret fields untouched; secret embedded in error text is scrubbed. Check: those mcp-endpoint scrubbing scenarios pass.
 
 ## 4. Full package check
 
