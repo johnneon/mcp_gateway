@@ -41,6 +41,7 @@ function createFakeConnector(overrides: Partial<ConnectorModule> = {}): Connecto
     ],
     allowedDestinations: [{ host: 'imap.example.test', port: 993 }],
     checkConnection: () => undefined,
+    tools: [],
   };
   return {
     ...base,
@@ -48,6 +49,7 @@ function createFakeConnector(overrides: Partial<ConnectorModule> = {}): Connecto
     fields: overrides.fields ?? base.fields,
     allowedDestinations: overrides.allowedDestinations ?? base.allowedDestinations,
     checkConnection: overrides.checkConnection ?? base.checkConnection,
+    tools: overrides.tools ?? base.tools,
   };
 }
 

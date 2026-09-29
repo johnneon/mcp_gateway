@@ -48,6 +48,7 @@ function createFakeNative(): ConnectorModule {
       { field: 'mailhost', port: 993 },
     ],
     checkConnection: () => undefined,
+    tools: [],
   };
 }
 

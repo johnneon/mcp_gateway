@@ -2,7 +2,7 @@
 
 ## 1. Connector tools on the module and registry
 
-- [ ] 1.1 Extend the native connector module type with `tools` (short `name` matching `^[a-z0-9_]+$`, English `description`, arguments JSON Schema, `handler`). Update `buildConnectorRegistry` to validate tools (unique names, reject a schema property named `account`) and expose MCP names as `<connector id>_<tool name>`. Keep the production registry empty. Unit tests with a fake: successful build exposes `<id>_echo`; schema with `account` fails build; production export length 0. Check: those registry tests pass; `npm run typecheck -w server` exits 0.
+- [x] 1.1 Extend the native connector module type with `tools` (short `name` matching `^[a-z0-9_]+$`, English `description`, arguments JSON Schema, `handler`). Update `buildConnectorRegistry` to validate tools (unique names, reject a schema property named `account`) and expose MCP names as `<connector id>_<tool name>`. Keep the production registry empty. Unit tests with a fake: successful build exposes `<id>_echo`; schema with `account` fails build; production export length 0. Check: those registry tests pass; `npm run typecheck -w server` exits 0.
 
 ## 2. Inject registry into MCP app and resolve configuration
 
