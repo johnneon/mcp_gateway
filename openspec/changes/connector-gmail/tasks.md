@@ -10,7 +10,7 @@
 
 ## 3. Shared mail protocol module
 
-- [ ] 3.1 Add a shared IMAP/SMTP module that speaks only over a provided duplex (no own TCP/TLS socket): IMAP LOGIN, SELECT, SEARCH built from a narrow filter struct (unseen, from, subject substring, since), FETCH for headers and text body; SMTP AUTH only (no send). Optional MIME parse library with no network I/O is allowed for body decode. Unit tests against fake IMAP and fake SMTP duplex servers: LOGIN/AUTH success and failure; SEARCH rejects free-form syntax at the module API; FETCH returns headers and text without attachment bytes. Check: those unit tests pass; shared-module scenario "authenticates over a duplex without opening its own TCP socket" passes.
+- [x] 3.1 Add a shared IMAP/SMTP module that speaks only over a provided duplex (no own TCP/TLS socket): IMAP LOGIN, SELECT, SEARCH built from a narrow filter struct (unseen, from, subject substring, since), FETCH for headers and text body; SMTP AUTH only (no send). Optional MIME parse library with no network I/O is allowed for body decode. Unit tests against fake IMAP and fake SMTP duplex servers: LOGIN/AUTH success and failure; SEARCH rejects free-form syntax at the module API; FETCH returns headers and text without attachment bytes. Check: those unit tests pass; shared-module scenario "authenticates over a duplex without opening its own TCP socket" passes.
 
 ## 4. Gmail connector and production registry
 
