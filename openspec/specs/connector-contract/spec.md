@@ -8,7 +8,7 @@ Defines the native connector module contract, account field and allowed-destinat
 
 ### Requirement: Native connector module shape
 
-A connector module SHALL declare `id` (string matching `^[a-z0-9]+$`), `name` (non-empty display string), `kind` with TypeScript type `native | proxy`, `fields` (account field descriptions), `allowedDestinations` (host and port pairs), and a `checkConnection` function. Only modules with `kind` equal to `native` SHALL be registrable. The `checkConnection` function SHALL accept account field values and SHALL NOT be exposed as an HTTP route in this change. A field of type `host` means a hostname only: no scheme, no path, no userinfo, and no port in the value (enforcement of entered values belongs to a later accounts change).
+A connector module SHALL declare `id` (string matching `^[a-z0-9]+$`), `name` (non-empty display string), `kind` with TypeScript type `native | proxy`, `fields` (account field descriptions), `allowedDestinations` (host and port pairs), and a `checkConnection` function. Only modules with `kind` equal to `native` SHALL be registrable. The `checkConnection` function SHALL accept account field values and the gateway-built egress client for that account, and SHALL NOT be exposed as an HTTP route. A field of type `host` means a hostname only: no scheme, no path, no userinfo, and no port in the value (enforcement of entered values belongs to accounts validation).
 
 #### Scenario: Fake native connector satisfies the contract
 
@@ -19,10 +19,10 @@ A connector module SHALL declare `id` (string matching `^[a-z0-9]+$`), `name` (n
 
 #### Scenario: Connection check is callable without HTTP exposure
 
-- **GIVEN** a fake native connector whose `checkConnection` resolves successfully for a fixed fake account-values object
-- **WHEN** the test invokes `checkConnection` with those values
+- **GIVEN** a fake native connector whose `checkConnection` resolves successfully for a fixed fake account-values object and a fake egress client
+- **WHEN** the test invokes `checkConnection` with those values and that egress client
 - **THEN** the invocation completes without throwing
-- **AND** no HTTP route under `/api` invokes that function as a result of this change
+- **AND** no HTTP route under `/api` invokes that function as a raw connector export bypassing the accounts service
 
 ### Requirement: Account field description
 
@@ -36,7 +36,7 @@ Each account field SHALL have `name` (string matching `^[a-z0-9]+$`, unique with
 
 ### Requirement: Allowed destinations as host and port pairs
 
-Each allowed destination SHALL be either a constant `{ host, port }` where `host` is a non-empty hostname string and `port` is an integer port declared in connector code, or an operator-entered host `{ field, port }` where `field` is the `name` of an account field of type `host` on the same connector and `port` is an integer port declared in connector code. The shape exists so a later Gmail connector can declare `imap.gmail.com:993` and `smtp.gmail.com:465` as constants; this change SHALL NOT register a Gmail connector.
+Each allowed destination SHALL be either a constant `{ host, port }` where `host` is a non-empty hostname string and `port` is an integer port declared in connector code, or an operator-entered host `{ field, port }` where `field` is the `name` of an account field of type `host` on the same connector and `port` is an integer port declared in connector code. Product connectors such as Gmail MAY register constant destinations (for example `imap.gmail.com:993` and `smtp.gmail.com:465`).
 
 #### Scenario: Constant and field-backed destinations are accepted
 
@@ -73,19 +73,27 @@ The process SHALL build the connector registry from a code array of connector mo
 - **THEN** registry build fails
 - **AND** no child process is started
 
-### Requirement: Production registry is empty
+### Requirement: Production registry includes registered product connectors
 
-The production connector registry export SHALL be an empty built registry (zero connectors). Tests SHALL pass their own registry, including a fake native connector when needed, into the admin app factory instead of relying on the production export.
+The production connector registry export SHALL be a built registry that includes every product connector module registered in code for this process (including Gmail when this change ships). Tests that need a fake connector SHALL pass their own registry into the admin or MCP app factory and SHALL NOT rely on the production export containing that fake.
 
-#### Scenario: Production export has no connectors
+#### Scenario: Production export includes Gmail
 
 - **GIVEN** the production connector registry module
 - **WHEN** its public connector list is read
-- **THEN** the list length is 0
+- **THEN** the list length is at least 1
+- **AND** the list includes a connector with `id` `gmail`
+
+#### Scenario: Tests inject a fake instead of using production for fake assertions
+
+- **GIVEN** a test that needs a fake native connector id that is not a product connector
+- **WHEN** the admin or MCP app is created for that test
+- **THEN** the test passes a registry built with that fake into the app factory
+- **AND** the production registry export is not required to contain that fake
 
 ### Requirement: Native connector tools
 
-A native connector module SHALL declare a `tools` array. Each tool SHALL have a short `name` (non-empty string matching `^[a-z0-9_]+$`, unique within the connector), an English `description` (non-empty string), an arguments JSON Schema (an object schema describing model arguments), and a `handler` function. The MCP tool name for a tool SHALL be the concatenation of the connector `id`, an underscore, and the tool `name` (for example `fake_echo`). The `handler` SHALL accept the model arguments with the gateway-injected `account` property removed, the decrypted account field values for the selected account, and the gateway-built egress client for that account. The `checkConnection` function SHALL NOT receive the egress client in this change. Building the registry SHALL fail when any tool's own arguments schema declares a property named `account`. The production connector registry SHALL remain empty. Tests SHALL pass a registry that includes a fake native connector with tools into the MCP app factory when asserting tool list and call behavior.
+A native connector module SHALL declare a `tools` array. Each tool SHALL have a short `name` (non-empty string matching `^[a-z0-9_]+$`, unique within the connector), an English `description` (non-empty string), an arguments JSON Schema (an object schema describing model arguments), and a `handler` function. The MCP tool name for a tool SHALL be the concatenation of the connector `id`, an underscore, and the tool `name` (for example `fake_echo`). The `handler` SHALL accept the model arguments with the gateway-injected `account` property removed, the decrypted account field values for the selected account, and the gateway-built egress client for that account. The `checkConnection` function SHALL accept the account field values and the same gateway-built egress client for that account. Building the registry SHALL fail when any tool's own arguments schema declares a property named `account`. The production connector registry SHALL include registered product connectors. Tests SHALL pass a registry that includes a fake native connector with tools into the MCP app factory when asserting tool list and call behavior, and SHALL NOT rely on the production export containing that fake.
 
 #### Scenario: Fake native connector with tools builds into a registry
 
@@ -104,19 +112,21 @@ A native connector module SHALL declare a `tools` array. Each tool SHALL have a 
 
 - **GIVEN** the production connector registry module
 - **WHEN** its public connector list is read
-- **THEN** the list length is 0
+- **THEN** the list length is at least 1
+- **AND** the list includes `id` `gmail`
+- **AND** the list is no longer required to be empty (product connectors are registered in production)
 
 #### Scenario: Handler receives egress client; checkConnection does not
 
-- **GIVEN** a fake native connector whose tool handler records whether it received an egress client argument, and whose `checkConnection` records its argument list length
+- **GIVEN** a fake native connector whose tool handler records whether it received an egress client argument, and whose `checkConnection` records whether it received an egress client argument
 - **AND** the MCP app is created with a registry built from that fake and a store with an eligible account included in an enabled configuration
 - **WHEN** an MCP client authenticates with that configuration's bearer and successfully calls the fake tool
 - **THEN** the handler-recorded egress client is present
-- **AND** invoking `checkConnection` with only account field values still completes without an egress client argument
+- **AND** invoking `checkConnection` with account field values and an egress client records that the egress client argument was present
 
 ### Requirement: MCP app accepts an injectable connector registry
 
-`createMcpApp` SHALL accept a connector registry alongside the encrypted store. The production process SHALL pass the empty production registry. Tests SHALL inject a registry built with a fake native connector (with tools) into the MCP app the same way they inject a registry into the admin app, and SHALL NOT rely on the production export containing that fake.
+`createMcpApp` SHALL accept a connector registry alongside the encrypted store. The production process SHALL pass the production connector registry (including registered product connectors such as Gmail). Tests SHALL inject a registry built with a fake native connector (with tools) into the MCP app the same way they inject a registry into the admin app, and SHALL NOT rely on the production export containing that fake.
 
 #### Scenario: MCP app with injected fake registry can list tools for an eligible account
 
@@ -124,4 +134,4 @@ A native connector module SHALL declare a `tools` array. Each tool SHALL have a 
 - **AND** the plaintext bearer of that configuration is known to the test
 - **WHEN** an MCP client authenticates with that bearer and calls `tools/list`
 - **THEN** the listed tools include the fake connector's tool under its MCP name
-- **AND** the production registry export still has length 0
+- **AND** the production registry export still includes product connectors such as `gmail` and is not required to contain the fake
