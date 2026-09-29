@@ -411,7 +411,7 @@ describe('mcp-endpoint: tools/list from eligible accounts only', () => {
     ]);
     const listed = await listToolsWithBearer(store, productionConnectorRegistry, ENABLED_TOKEN);
     expect(listed.tools).toEqual([]);
-    expect(productionConnectorRegistry.connectors).toHaveLength(0);
+    expect(productionConnectorRegistry.connectors.map((c) => c.id)).toContain('gmail');
   });
 });
 
@@ -462,7 +462,8 @@ describe('connector-contract: MCP app accepts an injectable connector registry',
 
     const listed = await listToolsWithBearer(store, registry, CONFIG_A_TOKEN);
     expect(listed.tools.map((tool) => tool.name)).toContain('fake_echo');
-    expect(productionConnectorRegistry.connectors).toHaveLength(0);
+    expect(productionConnectorRegistry.connectors.map((c) => c.id)).toContain('gmail');
+    expect(productionConnectorRegistry.connectors.map((c) => c.id)).not.toContain('fake');
   });
 });
 

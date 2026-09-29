@@ -14,7 +14,7 @@
 
 ## 4. Gmail connector and production registry
 
-- [ ] 4.1 Implement the Gmail native connector (`id` `gmail`, name `Gmail`, fields `address` / `password`, constant destinations `imap.gmail.com:993` and `smtp.gmail.com:465`); `checkConnection` opens TLS sessions via egress and requires IMAP LOGIN and SMTP AUTH both succeed; register it in the production registry export. Tests: production list includes `gmail` with correct fields and destinations; create account succeeds against fake IMAP+SMTP; create fails with `Connection check failed` when IMAP rejects or SMTP rejects, without saving and without the fixture password in the response. Check: connector-gmail identity, allowlist, and connection-check scenarios pass; tests that assumed production length 0 are updated to the new contract without relying on production containing fakes.
+- [x] 4.1 Implement the Gmail native connector (`id` `gmail`, name `Gmail`, fields `address` / `password`, constant destinations `imap.gmail.com:993` and `smtp.gmail.com:465`); `checkConnection` opens TLS sessions via egress and requires IMAP LOGIN and SMTP AUTH both succeed; register it in the production registry export. Tests: production list includes `gmail` with correct fields and destinations; create account succeeds against fake IMAP+SMTP; create fails with `Connection check failed` when IMAP rejects or SMTP rejects, without saving and without the fixture password in the response. Check: connector-gmail identity, allowlist, and connection-check scenarios pass; tests that assumed production length 0 are updated to the new contract without relying on production containing fakes.
 
 ## 5. Gmail MCP tools
 

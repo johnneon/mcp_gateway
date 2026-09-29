@@ -128,10 +128,11 @@ describe('connector-contract: Registry build validates and rejects proxy', () =>
   });
 });
 
-describe('connector-contract: Production registry is empty', () => {
-  it('Production export has no connectors', () => {
-    expect(productionConnectorRegistry.connectors).toHaveLength(0);
-    expect(productionConnectorRegistry.listPublic()).toHaveLength(0);
+describe('connector-contract: Production registry includes registered product connectors', () => {
+  it('Production export includes Gmail', () => {
+    expect(productionConnectorRegistry.connectors.length).toBeGreaterThanOrEqual(1);
+    expect(productionConnectorRegistry.connectors.map((c) => c.id)).toContain('gmail');
+    expect(productionConnectorRegistry.listPublic().map((c) => c.id)).toContain('gmail');
   });
 });
 
@@ -179,8 +180,8 @@ describe('connector-contract: Native connector tools', () => {
   });
 
   it('Production registry stays empty', () => {
-    expect(productionConnectorRegistry.connectors).toHaveLength(0);
-    expect(productionConnectorRegistry.tools).toHaveLength(0);
-    expect(productionConnectorRegistry.listPublic()).toHaveLength(0);
+    expect(productionConnectorRegistry.connectors.length).toBeGreaterThanOrEqual(1);
+    expect(productionConnectorRegistry.connectors.map((c) => c.id)).toContain('gmail');
+    expect(productionConnectorRegistry.listPublic().map((c) => c.id)).toContain('gmail');
   });
 });
