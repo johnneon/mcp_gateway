@@ -18,7 +18,7 @@
 
 ## 5. Gmail MCP tools
 
-- [ ] 5.1 Implement `list_messages`, `search_messages`, and `read_message` (MCP names `gmail_list_messages`, `gmail_search_messages`, `gmail_read_message`) using the shared module over egress TLS sessions. Arguments: mailbox default `INBOX`; capped limit for list; narrow filter only for search (reject free-form); uid for read. Results: list/search summaries (uid, from, subject, date, seen/unread) without bodies; read returns headers and text body without attachment bytes. Fixture password absent from tool results and MCP errors. Check: connector-gmail tool and password-scrubbing scenarios pass against fake IMAP; `npm run typecheck -w server` exits 0.
+- [x] 5.1 Implement `list_messages`, `search_messages`, and `read_message` (MCP names `gmail_list_messages`, `gmail_search_messages`, `gmail_read_message`) using the shared module over egress TLS sessions. Arguments: mailbox default `INBOX`; capped limit for list; narrow filter only for search (reject free-form); uid for read. Results: list/search summaries (uid, from, subject, date, seen/unread) without bodies; read returns headers and text body without attachment bytes. Fixture password absent from tool results and MCP errors. Check: connector-gmail tool and password-scrubbing scenarios pass against fake IMAP; `npm run typecheck -w server` exits 0.
 
 ## 6. Full package check
 

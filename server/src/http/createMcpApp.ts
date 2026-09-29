@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { ConnectorRegistry } from '../connectors/registry.js';
+import type { EgressTransport } from '../connectors/native/egress.js';
 import { dispatchToolCall } from '../mcp/call.js';
 import {
   parseBearerToken,
@@ -16,6 +17,7 @@ import type { EncryptedStore } from '../store/store.js';
 export type CreateMcpAppOptions = {
   store: EncryptedStore;
   connectorRegistry: ConnectorRegistry;
+  egressTransport?: EgressTransport;
 };
 
 const UNAUTHORIZED_BODY = 'Unauthorized';
@@ -39,6 +41,7 @@ function createGatewayServer(
   connectorRegistry: ConnectorRegistry,
   configuration: ActiveConfiguration,
   store: EncryptedStore,
+  egressTransport: EgressTransport | undefined,
 ): McpServer {
   const mcp = new McpServer({
     name: 'mcp-gateway',
@@ -57,6 +60,7 @@ function createGatewayServer(
       store,
       toolName: request.params.name,
       args: asArgumentRecord(request.params.arguments),
+      ...(egressTransport !== undefined ? { egressTransport } : {}),
     }),
   );
   return mcp;
@@ -67,7 +71,7 @@ function createGatewayServer(
  * Non-POST methods on /mcp are rejected before Streamable HTTP.
  */
 export function createMcpApp(options: CreateMcpAppOptions): Express {
-  const { store, connectorRegistry } = options;
+  const { store, connectorRegistry, egressTransport } = options;
   const app = express();
   app.set('strict routing', true);
 
@@ -87,7 +91,7 @@ export function createMcpApp(options: CreateMcpAppOptions): Express {
       return;
     }
 
-    const server = createGatewayServer(connectorRegistry, configuration, store);
+    const server = createGatewayServer(connectorRegistry, configuration, store, egressTransport);
     // Omit sessionIdGenerator so it stays undefined (stateless Streamable HTTP).
     const transport = new StreamableHTTPServerTransport({
       enableJsonResponse: true,
