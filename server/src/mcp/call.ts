@@ -1,7 +1,14 @@
 import { Ajv, type ValidateFunction } from 'ajv';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import type { NativeToolResult, RegistryTool } from '../connectors/contract.js';
-import { createEgressClientForAccount } from '../connectors/native/egress.js';
+import {
+  CONNECTION_FAILED_MESSAGE,
+  createEgressClientForAccount,
+  DESTINATION_NOT_ALLOWED_MESSAGE,
+  isEgressError,
+  REDIRECT_NOT_ALLOWED_MESSAGE,
+  RESPONSE_TOO_LARGE_MESSAGE,
+} from '../connectors/native/egress.js';
 import type { ConnectorRegistry } from '../connectors/registry.js';
 import type { EncryptedStore } from '../store/store.js';
 import type { ActiveConfiguration } from './auth.js';
@@ -15,6 +22,13 @@ export const TOOL_EXECUTION_FAILED_MESSAGE = 'Tool execution failed';
 export const INVALID_TOOL_ARGUMENTS_MESSAGE = 'Invalid tool arguments';
 export const ACCOUNT_NOT_ALLOWED_MESSAGE = 'Account is not allowed for this tool';
 export const UNKNOWN_TOOL_MESSAGE = 'Unknown tool';
+
+const EGRESS_MCP_MESSAGES: ReadonlySet<string> = new Set([
+  DESTINATION_NOT_ALLOWED_MESSAGE,
+  REDIRECT_NOT_ALLOWED_MESSAGE,
+  CONNECTION_FAILED_MESSAGE,
+  RESPONSE_TOO_LARGE_MESSAGE,
+]);
 
 const ajv = new Ajv({
   allErrors: true,
@@ -45,6 +59,10 @@ function findEligibleAccount(
     return undefined;
   }
   return eligible.find((account) => account.id === accountId);
+}
+
+function isEgressNetworkMessage(message: string): boolean {
+  return EGRESS_MCP_MESSAGES.has(message);
 }
 
 /**
@@ -102,7 +120,13 @@ export async function dispatchToolCall(options: {
 
   try {
     return await tool.handler(stripAccount(args), account.values, egressClient);
-  } catch {
+  } catch (error) {
+    if (isEgressError(error) && isEgressNetworkMessage(error.message)) {
+      throw new McpError(ErrorCode.InternalError, error.message);
+    }
+    if (error instanceof Error && isEgressNetworkMessage(error.message)) {
+      throw new McpError(ErrorCode.InternalError, error.message);
+    }
     throw new McpError(ErrorCode.InternalError, TOOL_EXECUTION_FAILED_MESSAGE);
   }
 }
