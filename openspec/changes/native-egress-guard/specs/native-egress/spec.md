@@ -72,7 +72,7 @@ An HTTPS request SHALL use redirect mode that does not follow redirects (`redire
 
 ### Requirement: Timeout and max response size constants
 
-In production the egress client SHALL use a timeout of 30 seconds and a maximum response body size of 1 MiB (1048576 bytes). Tests SHALL inject smaller timeout and max-size values through dependencies and SHALL NOT use real sleeps. On timeout or abort the client SHALL fail with message exactly `Connection failed`. When the response body would exceed the max size the client SHALL abort the read, SHALL NOT return a truncated body, and SHALL fail with message exactly `Response too large`.
+In production the egress client SHALL use a timeout of 30 seconds and a maximum response body size of 64 MiB (67108864 bytes). Tests SHALL inject smaller timeout and max-size values through dependencies and SHALL NOT use real sleeps. On timeout or abort the client SHALL fail with message exactly `Connection failed`. When the response body would exceed the max size the client SHALL abort the read, SHALL NOT return a truncated body, and SHALL fail with message exactly `Response too large`.
 
 #### Scenario: Injected abort yields Connection failed
 

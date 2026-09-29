@@ -20,7 +20,7 @@ See `proposal.md` — Why. Native tools already dispatch through `dispatchToolCa
 
 ## Decisions
 
-Accepted by the person before propose; they are not reopened here. No open questions remain for this change.
+Accepted decisions below are not reopened, except the production max response size, which the person revised during review (see decision 5). No open questions remain for this change.
 
 ### 1. Handler receives egress client; checkConnection does not
 
@@ -57,7 +57,10 @@ Accepted by the person before propose; they are not reopened here. No open quest
 
 ### 5. Timeout and max size as code constants; injectable in tests
 
-- Production: timeout **30 seconds**, max response size **1 MiB (1048576 bytes)**.
+The person revised the production max response size during review (from 1 MiB to 64 MiB). The other locked decisions in this design stay.
+
+- Production: timeout **30 seconds**, max response size **64 MiB (67108864 bytes)**.
+- Why 64 MiB: Gmail and typical mail servers allow about a 25 MB attachment. MIME base64 expands that by about 4/3, so one full message on the socket is about 35 MB plus headers. 64 MiB is the power-of-two ceiling that covers that message. A larger cap (hundreds of MiB) would let one response pin the single Node process. Unbounded reads stay refused.
 - Factory/dependencies accept overrides so tests inject smaller values. No real sleeps in tests (fake abort / oversized stream).
 - Timeout or abort → `Connection failed`.
 - Oversized body → abort the read; do not return a truncated body; error `Response too large`.
