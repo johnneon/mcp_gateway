@@ -2,7 +2,7 @@
 
 ## 1. Egress TLS session
 
-- [ ] 1.1 Extend the native egress client and injectable transport with a TLS session operation that allowlist-checks before I/O, returns an open duplex, and does not end the socket on establish; keep existing HTTPS and handshake-only `tlsConnect` behavior; same production timeout (30s) and max size (64 MiB), injectable in tests. Unit tests with a fake transport: allowed session invokes transport once and leaves duplex open; disallowed host leaves call count at 0 with `Destination is not allowed`; handshake `tlsConnect` still ends the socket and remains distinct from session. Check: those unit tests pass; `npm run typecheck -w server` exits 0.
+- [x] 1.1 Extend the native egress client and injectable transport with a TLS session operation that allowlist-checks before I/O, returns an open duplex, and does not end the socket on establish; keep existing HTTPS and handshake-only `tlsConnect` behavior; same production timeout (30s) and max size (64 MiB), injectable in tests. Unit tests with a fake transport: allowed session invokes transport once and leaves duplex open; disallowed host leaves call count at 0 with `Destination is not allowed`; handshake `tlsConnect` still ends the socket and remains distinct from session. Check: those unit tests pass; `npm run typecheck -w server` exits 0.
 
 ## 2. checkConnection receives egress
 

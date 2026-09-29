@@ -1,3 +1,4 @@
+import type { Duplex } from 'node:stream';
 import { connect as tlsConnectSocket } from 'node:tls';
 import type {
   AccountFieldValues,
@@ -66,6 +67,7 @@ export type EgressTransportHttpsResult = {
 export type EgressTransport = {
   httpsRequest(params: EgressTransportHttpsParams): Promise<EgressTransportHttpsResult>;
   tlsConnect(params: { host: string; port: number; signal: AbortSignal }): Promise<void>;
+  tlsSession(params: { host: string; port: number; signal: AbortSignal }): Promise<Duplex>;
 };
 
 export type EgressClient = NativeEgressClient;
@@ -275,6 +277,50 @@ function createDefaultTransport(): EgressTransport {
         });
       });
     },
+
+    async tlsSession(params) {
+      return await new Promise<Duplex>((resolve, reject) => {
+        let settled = false;
+        const onAbort = (): void => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          socket.destroy();
+          const abortError = new Error('The operation was aborted');
+          abortError.name = 'AbortError';
+          reject(abortError);
+        };
+        const socket = tlsConnectSocket(
+          {
+            host: params.host,
+            port: params.port,
+            servername: params.host,
+          },
+          () => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            params.signal.removeEventListener('abort', onAbort);
+            resolve(socket);
+          },
+        );
+        if (params.signal.aborted) {
+          onAbort();
+          return;
+        }
+        params.signal.addEventListener('abort', onAbort, { once: true });
+        socket.once('error', (error: Error) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          params.signal.removeEventListener('abort', onAbort);
+          reject(error);
+        });
+      });
+    },
   };
 }
 
@@ -343,6 +389,24 @@ export function createEgressClient(options: CreateEgressClientOptions): EgressCl
       try {
         try {
           await transport.tlsConnect({
+            host: params.host,
+            port: params.port,
+            signal,
+          });
+        } catch (error) {
+          mapTransportFailure(error);
+        }
+      } finally {
+        clear();
+      }
+    },
+
+    async tlsSession(params) {
+      assertAllowed(allowlist, params.host, params.port);
+      const { signal, clear } = withTimeoutSignal(timeoutMs);
+      try {
+        try {
+          return await transport.tlsSession({
             host: params.host,
             port: params.port,
             signal,
