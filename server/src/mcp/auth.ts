@@ -2,9 +2,12 @@ import type { JsonObject } from '../store/codec.js';
 import type { EncryptedStore } from '../store/store.js';
 import { tokenMatchesHash } from '../token/token.js';
 
-type ConfigurationAuthRow = {
+export type ActiveConfiguration = {
+  id: string;
+  name: string;
   tokenHash: string;
   enabled: boolean;
+  accountIds: string[];
 };
 
 /**
@@ -28,20 +31,67 @@ export function parseBearerToken(authorization: string | undefined): string | nu
   return authorization.slice(7);
 }
 
-function isConfigurationAuthRow(value: unknown): value is ConfigurationAuthRow {
+function isConfigurationAuthRow(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
   }
   const row = value as Record<string, unknown>;
-  return typeof row.tokenHash === 'string' && typeof row.enabled === 'boolean';
+  return (
+    typeof row.id === 'string' &&
+    typeof row.name === 'string' &&
+    typeof row.tokenHash === 'string' &&
+    typeof row.enabled === 'boolean'
+  );
 }
 
-function readAuthRows(document: JsonObject): ConfigurationAuthRow[] {
+function readAccountIds(row: Record<string, unknown>): string[] {
+  if (!Array.isArray(row.accountIds)) {
+    return [];
+  }
+  return row.accountIds.filter((id): id is string => typeof id === 'string');
+}
+
+function readAuthRows(document: JsonObject): ActiveConfiguration[] {
   const raw = document.configurations;
   if (!Array.isArray(raw)) {
     return [];
   }
-  return raw.filter(isConfigurationAuthRow);
+  const rows: ActiveConfiguration[] = [];
+  for (const value of raw) {
+    if (!isConfigurationAuthRow(value)) {
+      continue;
+    }
+    rows.push({
+      id: value.id as string,
+      name: value.name as string,
+      tokenHash: value.tokenHash as string,
+      enabled: value.enabled as boolean,
+      accountIds: readAccountIds(value),
+    });
+  }
+  return rows;
+}
+
+/**
+ * Full-scan bearer resolution. Always compares every stored hash. Returns the
+ * first enabled hash match in document order, or null when none accept.
+ */
+export function resolveActiveConfiguration(
+  store: EncryptedStore,
+  token: string,
+): ActiveConfiguration | null {
+  if (token.length === 0) {
+    return null;
+  }
+  let accepted: ActiveConfiguration | null = null;
+  for (const row of readAuthRows(store.read())) {
+    if (tokenMatchesHash(token, row.tokenHash) && row.enabled) {
+      if (accepted === null) {
+        accepted = row;
+      }
+    }
+  }
+  return accepted;
 }
 
 /**
@@ -49,14 +99,5 @@ function readAuthRows(document: JsonObject): ConfigurationAuthRow[] {
  * Accepts only when at least one match is enabled. Always scans all rows.
  */
 export function authenticateBearer(store: EncryptedStore, token: string): boolean {
-  if (token.length === 0) {
-    return false;
-  }
-  let accepted = false;
-  for (const row of readAuthRows(store.read())) {
-    if (tokenMatchesHash(token, row.tokenHash) && row.enabled) {
-      accepted = true;
-    }
-  }
-  return accepted;
+  return resolveActiveConfiguration(store, token) !== null;
 }

@@ -32,7 +32,10 @@ async function start(): Promise<void> {
     throw error;
   }
 
-  const mcpApp = createMcpApp({ store });
+  const mcpApp = createMcpApp({
+    store,
+    connectorRegistry: productionConnectorRegistry,
+  });
   const adminApp = createAdminApp({
     store,
     connectorRegistry: productionConnectorRegistry,

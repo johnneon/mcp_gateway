@@ -5,6 +5,7 @@ import request from 'supertest';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createAdminApp } from '../../src/http/createAdminApp.js';
 import { createMcpApp } from '../../src/http/createMcpApp.js';
+import { productionConnectorRegistry } from '../../src/connectors/registry.js';
 import type { JsonObject } from '../../src/store/codec.js';
 import type { EncryptedStore } from '../../src/store/store.js';
 
@@ -39,7 +40,10 @@ function assertNoSecrets(body: string): void {
 }
 
 function mcpApp(): ReturnType<typeof createMcpApp> {
-  return createMcpApp({ store: createMemoryStore() });
+  return createMcpApp({
+    store: createMemoryStore(),
+    connectorRegistry: productionConnectorRegistry,
+  });
 }
 
 describe('mcp-port-routing: GET /health on the MCP port without authentication', () => {

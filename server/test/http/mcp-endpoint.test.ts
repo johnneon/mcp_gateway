@@ -5,6 +5,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import request from 'supertest';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMcpApp } from '../../src/http/createMcpApp.js';
+import { productionConnectorRegistry } from '../../src/connectors/registry.js';
 import type { JsonObject } from '../../src/store/codec.js';
 import type { EncryptedStore } from '../../src/store/store.js';
 import { hashToken } from '../../src/token/token.js';
@@ -29,10 +30,14 @@ afterEach(async () => {
   }
 });
 
+function mcpAppFor(store: EncryptedStore) {
+  return createMcpApp({ store, connectorRegistry: productionConnectorRegistry });
+}
+
 async function listenMcpApp(
   store: EncryptedStore,
 ): Promise<{ baseUrl: string; server: http.Server }> {
-  const app = createMcpApp({ store });
+  const app = mcpAppFor(store);
   const server = http.createServer(app);
   openServers.push(server);
   await new Promise<void>((resolve, reject) => {
@@ -93,7 +98,7 @@ describe('mcp-endpoint: Bearer authentication before JSON-RPC on POST /mcp', () 
     const store = storeWithConfigs([
       { id: 'cfg-enabled', name: ENABLED_NAME, token: ENABLED_TOKEN, enabled: true },
     ]);
-    const app = createMcpApp({ store });
+    const app = mcpAppFor(store);
     const response = await request(app)
       .post('/mcp')
       .set('Authorization', `Bearer ${ENABLED_TOKEN}`)
@@ -107,7 +112,7 @@ describe('mcp-endpoint: Bearer authentication before JSON-RPC on POST /mcp', () 
     const store = storeWithConfigs([
       { id: 'cfg-disabled', name: DISABLED_NAME, token: DISABLED_TOKEN, enabled: false },
     ]);
-    const app = createMcpApp({ store });
+    const app = mcpAppFor(store);
     const response = await request(app)
       .post('/mcp')
       .set('Authorization', `Bearer ${DISABLED_TOKEN}`)
@@ -124,7 +129,7 @@ describe('mcp-endpoint: Identical Unauthorized refusal for failed auth', () => {
     const store = storeWithConfigs([
       { id: 'cfg-enabled', name: ENABLED_NAME, token: ENABLED_TOKEN, enabled: true },
     ]);
-    const app = createMcpApp({ store });
+    const app = mcpAppFor(store);
     const response = await request(app).post('/mcp').send(INITIALIZE_BODY);
 
     expect(response.status).toBe(401);
@@ -137,7 +142,7 @@ describe('mcp-endpoint: Identical Unauthorized refusal for failed auth', () => {
     const store = storeWithConfigs([
       { id: 'cfg-enabled', name: ENABLED_NAME, token: ENABLED_TOKEN, enabled: true },
     ]);
-    const app = createMcpApp({ store });
+    const app = mcpAppFor(store);
     const response = await request(app)
       .post('/mcp')
       .set('Authorization', 'Bearer ')
@@ -151,7 +156,7 @@ describe('mcp-endpoint: Identical Unauthorized refusal for failed auth', () => {
     const store = storeWithConfigs([
       { id: 'cfg-enabled', name: ENABLED_NAME, token: ENABLED_TOKEN, enabled: true },
     ]);
-    const app = createMcpApp({ store });
+    const app = mcpAppFor(store);
     const response = await request(app)
       .post('/mcp')
       .set('Authorization', `Bearer ${UNKNOWN_TOKEN}`)
@@ -166,7 +171,7 @@ describe('mcp-endpoint: Identical Unauthorized refusal for failed auth', () => {
       { id: 'cfg-enabled', name: ENABLED_NAME, token: ENABLED_TOKEN, enabled: true },
       { id: 'cfg-disabled', name: DISABLED_NAME, token: DISABLED_TOKEN, enabled: false },
     ]);
-    const app = createMcpApp({ store });
+    const app = mcpAppFor(store);
 
     const missing = await request(app).post('/mcp').send(INITIALIZE_BODY);
     const empty = await request(app)
@@ -217,7 +222,7 @@ describe('mcp-endpoint: Stateless Streamable HTTP with empty tools/list', () => 
     const store = storeWithConfigs([
       { id: 'cfg-enabled', name: ENABLED_NAME, token: ENABLED_TOKEN, enabled: true },
     ]);
-    const app = createMcpApp({ store });
+    const app = mcpAppFor(store);
     const response = await request(app)
       .post('/mcp')
       .set('Authorization', `Bearer ${ENABLED_TOKEN}`)

@@ -6,7 +6,7 @@
 
 ## 2. Inject registry into MCP app and resolve configuration
 
-- [ ] 2.1 Extend `createMcpApp` options with a connector registry; `main.ts` passes the production empty registry. After successful bearer auth, resolve the first enabled hash-matching configuration (full scan preserved for accept/refuse). Existing bearer 401 scenarios and empty `tools/list` with the production empty registry still pass. Check: existing mcp-endpoint auth and empty-list tests pass; `npm run typecheck -w server` exits 0.
+- [x] 2.1 Extend `createMcpApp` options with a connector registry; `main.ts` passes the production empty registry. After successful bearer auth, resolve the first enabled hash-matching configuration (full scan preserved for accept/refuse). Existing bearer 401 scenarios and empty `tools/list` with the production empty registry still pass. Check: existing mcp-endpoint auth and empty-list tests pass; `npm run typecheck -w server` exits 0.
 
 ## 3. Per-request tools/list with injected account
 

@@ -3,11 +3,18 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { authenticateBearer, parseBearerToken } from '../mcp/auth.js';
+import type { ConnectorRegistry } from '../connectors/registry.js';
+import {
+  parseBearerToken,
+  resolveActiveConfiguration,
+  type ActiveConfiguration,
+} from '../mcp/auth.js';
+import { listToolsForConfiguration } from '../mcp/tools.js';
 import type { EncryptedStore } from '../store/store.js';
 
 export type CreateMcpAppOptions = {
   store: EncryptedStore;
+  connectorRegistry: ConnectorRegistry;
 };
 
 const UNAUTHORIZED_BODY = 'Unauthorized';
@@ -17,11 +24,14 @@ function sendUnauthorized(res: Response): void {
 }
 
 /**
- * Empty-tool McpServer. The high-level class only wires tools/list when a tool
- * is registered; with zero tools we register an empty list handler ourselves
- * and omit listChanged so no tools/list_changed notifications are advertised.
+ * Per-request McpServer bound to the active configuration and connector registry.
+ * Omits listChanged so no tools/list_changed notifications are advertised.
  */
-function createEmptyGatewayServer(): McpServer {
+function createGatewayServer(
+  connectorRegistry: ConnectorRegistry,
+  configuration: ActiveConfiguration,
+  store: EncryptedStore,
+): McpServer {
   const mcp = new McpServer({
     name: 'mcp-gateway',
     version: '0.0.0',
@@ -29,7 +39,9 @@ function createEmptyGatewayServer(): McpServer {
   mcp.server.registerCapabilities({
     tools: {},
   });
-  mcp.server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
+  mcp.server.setRequestHandler(ListToolsRequestSchema, () => ({
+    tools: listToolsForConfiguration(connectorRegistry, configuration, store),
+  }));
   return mcp;
 }
 
@@ -38,7 +50,7 @@ function createEmptyGatewayServer(): McpServer {
  * Non-POST methods on /mcp are rejected before Streamable HTTP.
  */
 export function createMcpApp(options: CreateMcpAppOptions): Express {
-  const { store } = options;
+  const { store, connectorRegistry } = options;
   const app = express();
   app.set('strict routing', true);
 
@@ -48,12 +60,17 @@ export function createMcpApp(options: CreateMcpAppOptions): Express {
 
   app.post('/mcp', express.json({ limit: '4mb' }), async (req: Request, res: Response) => {
     const token = parseBearerToken(req.get('Authorization') ?? undefined);
-    if (token === null || !authenticateBearer(store, token)) {
+    if (token === null) {
+      sendUnauthorized(res);
+      return;
+    }
+    const configuration = resolveActiveConfiguration(store, token);
+    if (configuration === null) {
       sendUnauthorized(res);
       return;
     }
 
-    const server = createEmptyGatewayServer();
+    const server = createGatewayServer(connectorRegistry, configuration, store);
     // Omit sessionIdGenerator so it stays undefined (stateless Streamable HTTP).
     const transport = new StreamableHTTPServerTransport({
       enableJsonResponse: true,
