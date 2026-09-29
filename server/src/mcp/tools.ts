@@ -113,7 +113,7 @@ function accountPropertyDescription(accounts: readonly EligibleAccount[]): strin
   return accounts.map((account) => `${account.id} (${account.label})`).join('\n');
 }
 
-function injectAccountSchema(
+export function buildToolInputSchema(
   authorProperties: Readonly<Record<string, unknown>> | undefined,
   authorRequired: readonly string[] | undefined,
   accounts: readonly EligibleAccount[],
@@ -156,7 +156,7 @@ export function listToolsForConfiguration(
       tools.push({
         name: mcpToolName(connector.id, tool.name),
         description: tool.description,
-        inputSchema: injectAccountSchema(
+        inputSchema: buildToolInputSchema(
           tool.inputSchema.properties,
           tool.inputSchema.required,
           eligible,

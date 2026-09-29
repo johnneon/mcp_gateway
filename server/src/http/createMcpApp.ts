@@ -2,8 +2,9 @@ import express, { type Express, type Request, type Response } from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { ConnectorRegistry } from '../connectors/registry.js';
+import { dispatchToolCall } from '../mcp/call.js';
 import {
   parseBearerToken,
   resolveActiveConfiguration,
@@ -21,6 +22,13 @@ const UNAUTHORIZED_BODY = 'Unauthorized';
 
 function sendUnauthorized(res: Response): void {
   res.status(401).set('Content-Type', 'text/plain; charset=utf-8').send(UNAUTHORIZED_BODY);
+}
+
+function asArgumentRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
 }
 
 /**
@@ -42,6 +50,15 @@ function createGatewayServer(
   mcp.server.setRequestHandler(ListToolsRequestSchema, () => ({
     tools: listToolsForConfiguration(connectorRegistry, configuration, store),
   }));
+  mcp.server.setRequestHandler(CallToolRequestSchema, async (request) =>
+    dispatchToolCall({
+      connectorRegistry,
+      configuration,
+      store,
+      toolName: request.params.name,
+      args: asArgumentRecord(request.params.arguments),
+    }),
+  );
   return mcp;
 }
 

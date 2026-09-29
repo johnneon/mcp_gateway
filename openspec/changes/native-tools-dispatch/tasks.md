@@ -14,7 +14,7 @@
 
 ## 4. tools/call validate, authorize, handler
 
-- [ ] 4.1 Add Ajv as a server dependency. On `tools/call`, validate arguments against the tool schema plus injected `account`; authorize eligible account; call handler with `account` removed and decrypted field values; map handler throws to a fixed English MCP error without exception text or secrets. Tests with a fake call counter and two configurations: success increments counter and handler sees decrypted values including a fixture secret; refusal for account absent from configuration, foreign account, disabled account, and schema validation failure leave the counter at 0; handler throw returns fixed English error without the secret or exception message. Check: those call scenarios pass; `npm run typecheck -w server` exits 0.
+- [x] 4.1 Add Ajv as a server dependency. On `tools/call`, validate arguments against the tool schema plus injected `account`; authorize eligible account; call handler with `account` removed and decrypted field values; map handler throws to a fixed English MCP error without exception text or secrets. Tests with a fake call counter and two configurations: success increments counter and handler sees decrypted values including a fixture secret; refusal for account absent from configuration, foreign account, disabled account, and schema validation failure leave the counter at 0; handler throw returns fixed English error without the secret or exception message. Check: those call scenarios pass; `npm run typecheck -w server` exits 0.
 
 ## 5. Full package check
 
