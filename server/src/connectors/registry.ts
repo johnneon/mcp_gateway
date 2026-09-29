@@ -5,10 +5,14 @@ import type {
   ConnectorModule,
   ConstantAllowedDestination,
   FieldAllowedDestination,
+  NativeConnectorTool,
   PublicConnector,
+  RegistryTool,
+  ToolArgumentsSchema,
 } from './contract.js';
 
 const ID_PATTERN = /^[a-z0-9]+$/;
+const TOOL_NAME_PATTERN = /^[a-z0-9_]+$/;
 const FIELD_TYPES: ReadonlySet<AccountFieldType> = new Set(['text', 'secret', 'host']);
 
 export class ConnectorRegistryError extends Error {
@@ -20,8 +24,14 @@ export class ConnectorRegistryError extends Error {
 
 export type ConnectorRegistry = {
   readonly connectors: readonly ConnectorModule[];
+  readonly tools: readonly RegistryTool[];
   listPublic(): PublicConnector[];
+  getTool(mcpName: string): RegistryTool | undefined;
 };
+
+export function mcpToolName(connectorId: string, toolName: string): string {
+  return `${connectorId}_${toolName}`;
+}
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -160,6 +170,54 @@ function assertValidModule(module: ConnectorModule, seenIds: Set<string>): void 
   if (typeof module.checkConnection !== 'function') {
     throw new ConnectorRegistryError(`Connector "${module.id}" must declare checkConnection`);
   }
+
+  const seenToolNames = new Set<string>();
+  for (const tool of module.tools) {
+    assertValidTool(tool, module.id, seenToolNames);
+  }
+}
+
+function schemaDeclaresAccount(schema: ToolArgumentsSchema): boolean {
+  const props = schema.properties;
+  if (props === undefined) {
+    return false;
+  }
+  return Object.prototype.hasOwnProperty.call(props, 'account');
+}
+
+function assertValidTool(
+  tool: NativeConnectorTool,
+  connectorId: string,
+  seenNames: Set<string>,
+): void {
+  if (!isNonEmptyString(tool.name) || !TOOL_NAME_PATTERN.test(tool.name)) {
+    throw new ConnectorRegistryError(
+      `Connector "${connectorId}" has invalid tool name "${tool.name}"`,
+    );
+  }
+  if (seenNames.has(tool.name)) {
+    throw new ConnectorRegistryError(
+      `Connector "${connectorId}" has duplicate tool name "${tool.name}"`,
+    );
+  }
+  seenNames.add(tool.name);
+
+  if (!isNonEmptyString(tool.description)) {
+    throw new ConnectorRegistryError(
+      `Connector "${connectorId}" tool "${tool.name}" has empty description`,
+    );
+  }
+
+  if (schemaDeclaresAccount(tool.inputSchema)) {
+    throw new ConnectorRegistryError(
+      `Connector "${connectorId}" tool "${tool.name}" must not declare property "account"`,
+    );
+  }
+  if (typeof tool.handler !== 'function') {
+    throw new ConnectorRegistryError(
+      `Connector "${connectorId}" tool "${tool.name}" must declare a handler`,
+    );
+  }
 }
 
 function toPublicConnector(module: ConnectorModule): PublicConnector {
@@ -192,14 +250,51 @@ export function buildConnectorRegistry(modules: readonly ConnectorModule[]): Con
         ...module,
         fields: Object.freeze([...module.fields]),
         allowedDestinations: Object.freeze([...module.allowedDestinations]),
+        tools: Object.freeze(
+          module.tools.map((tool) =>
+            Object.freeze({
+              ...tool,
+              inputSchema: Object.freeze({
+                ...tool.inputSchema,
+                ...(tool.inputSchema.properties !== undefined
+                  ? { properties: Object.freeze({ ...tool.inputSchema.properties }) }
+                  : {}),
+                ...(tool.inputSchema.required !== undefined
+                  ? { required: Object.freeze([...tool.inputSchema.required]) }
+                  : {}),
+              }),
+            }),
+          ),
+        ),
       }),
     ),
   );
 
+  const tools: readonly RegistryTool[] = Object.freeze(
+    connectors.flatMap((module) =>
+      module.tools.map((tool) =>
+        Object.freeze({
+          mcpName: mcpToolName(module.id, tool.name),
+          connectorId: module.id,
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          handler: tool.handler,
+        }),
+      ),
+    ),
+  );
+
+  const toolsByMcpName = new Map(tools.map((tool) => [tool.mcpName, tool]));
+
   return Object.freeze({
     connectors,
+    tools,
     listPublic(): PublicConnector[] {
       return connectors.map(toPublicConnector);
+    },
+    getTool(mcpName: string): RegistryTool | undefined {
+      return toolsByMcpName.get(mcpName);
     },
   });
 }

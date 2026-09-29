@@ -26,6 +26,7 @@ function createFakeNative(overrides: Partial<ConnectorModule> = {}): ConnectorMo
       { field: 'mailhost', port: 993 },
     ],
     checkConnection: () => undefined,
+    tools: [],
   };
   return {
     ...base,
@@ -33,6 +34,7 @@ function createFakeNative(overrides: Partial<ConnectorModule> = {}): ConnectorMo
     fields: overrides.fields ?? base.fields,
     allowedDestinations: overrides.allowedDestinations ?? base.allowedDestinations,
     checkConnection: overrides.checkConnection ?? base.checkConnection,
+    tools: overrides.tools ?? base.tools,
   };
 }
 
@@ -123,6 +125,56 @@ describe('connector-contract: Registry build validates and rejects proxy', () =>
 describe('connector-contract: Production registry is empty', () => {
   it('Production export has no connectors', () => {
     expect(productionConnectorRegistry.connectors).toHaveLength(0);
+    expect(productionConnectorRegistry.listPublic()).toHaveLength(0);
+  });
+});
+
+describe('connector-contract: Native connector tools', () => {
+  it('Fake native connector with tools builds into a registry', () => {
+    const fake = createFakeNative({
+      tools: [
+        {
+          name: 'echo',
+          description: 'Echo arguments for tests',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              message: { type: 'string' },
+            },
+            required: ['message'],
+          },
+          handler: () => ({ content: [{ type: 'text', text: 'ok' }] }),
+        },
+      ],
+    });
+    const registry = buildConnectorRegistry([fake]);
+    expect(registry.getTool('fake_echo')?.mcpName).toBe('fake_echo');
+    expect(registry.tools.map((tool) => tool.mcpName)).toContain('fake_echo');
+  });
+
+  it('Tool schema that declares account fails registry build', () => {
+    const fake = createFakeNative({
+      tools: [
+        {
+          name: 'echo',
+          description: 'Echo arguments for tests',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              account: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+          handler: () => ({ content: [{ type: 'text', text: 'ok' }] }),
+        },
+      ],
+    });
+    expect(() => buildConnectorRegistry([fake])).toThrow(ConnectorRegistryError);
+  });
+
+  it('Production registry stays empty', () => {
+    expect(productionConnectorRegistry.connectors).toHaveLength(0);
+    expect(productionConnectorRegistry.tools).toHaveLength(0);
     expect(productionConnectorRegistry.listPublic()).toHaveLength(0);
   });
 });
