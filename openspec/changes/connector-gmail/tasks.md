@@ -22,4 +22,4 @@
 
 ## 6. Full package check
 
-- [ ] 6.1 From the repository root: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` exit 0. Test names cover every new scenario in the `connector-gmail`, `connector-contract`, `native-egress`, and `accounts-api` deltas. Check: every command exits 0.
+- [x] 6.1 From the repository root: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` exit 0. Test names cover every new scenario in the `connector-gmail`, `connector-contract`, `native-egress`, and `accounts-api` deltas. Check: every command exits 0.
