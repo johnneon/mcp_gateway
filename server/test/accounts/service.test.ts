@@ -5,7 +5,11 @@ import {
   ConnectionCheckFailedError,
 } from '../../src/accounts/errors.js';
 import { createAccountsService } from '../../src/accounts/service.js';
-import type { ConnectorModule } from '../../src/connectors/contract.js';
+import type {
+  AccountFieldValues,
+  ConnectorModule,
+  NativeEgressClient,
+} from '../../src/connectors/contract.js';
 import { buildConnectorRegistry } from '../../src/connectors/registry.js';
 import { createConfigurationsService } from '../../src/configurations/service.js';
 import type { JsonObject } from '../../src/store/codec.js';
@@ -129,13 +133,38 @@ describe('accounts-api: Create account after connection check', () => {
       label: '  Work  ',
       values: validValues(),
     });
-    expect(checkConnection).toHaveBeenCalledWith(validValues());
+    expect(checkConnection).toHaveBeenCalledWith(
+      validValues(),
+      expect.objectContaining({
+        httpsRequest: expect.any(Function) as unknown,
+        tlsConnect: expect.any(Function) as unknown,
+        tlsSession: expect.any(Function) as unknown,
+      }),
+    );
     expect(created.label).toBe('Work');
     expect(created.enabled).toBe(true);
     expect(created.values).not.toHaveProperty('token');
     expect(JSON.stringify(created)).not.toContain(FIXTURE_SECRET);
     const stored = (store.read().accounts as Array<{ values: Record<string, string> }>)[0];
     expect(stored.values.token).toBe(FIXTURE_SECRET);
+  });
+
+  it('Create passes egress client into checkConnection', async () => {
+    let sawEgress = false;
+    const checkConnection = vi.fn(
+      (_values: AccountFieldValues, egressClient: NativeEgressClient) => {
+        sawEgress = typeof egressClient.tlsSession === 'function';
+      },
+    );
+    const { accounts } = createServices(checkConnection);
+    const created = await accounts.create({
+      connector: 'fake',
+      label: 'Work',
+      values: validValues(),
+    });
+    expect(created.enabled).toBe(true);
+    expect(sawEgress).toBe(true);
+    expect(checkConnection).toHaveBeenCalledTimes(1);
   });
 
   it('Unknown connector id is 400 without write', async () => {
@@ -203,9 +232,13 @@ describe('accounts-api: Create account after connection check', () => {
 describe('accounts-api: Patch account with secret keep semantics', () => {
   it('Empty secret on patch keeps stored value and rechecks', async () => {
     const seen: AccountFieldValues[] = [];
-    const checkConnection = vi.fn((values: AccountFieldValues) => {
-      seen.push({ ...values });
-    });
+    let sawEgress = false;
+    const checkConnection = vi.fn(
+      (values: AccountFieldValues, egressClient: NativeEgressClient) => {
+        seen.push({ ...values });
+        sawEgress = typeof egressClient.tlsSession === 'function';
+      },
+    );
     const { store, accounts } = createServices(checkConnection);
     const created = await accounts.create({
       connector: 'fake',
@@ -214,10 +247,12 @@ describe('accounts-api: Patch account with secret keep semantics', () => {
     });
     checkConnection.mockClear();
     seen.length = 0;
+    sawEgress = false;
 
     const patched = await accounts.patch(created.id, { values: { token: '' } });
     expect(checkConnection).toHaveBeenCalledTimes(1);
     expect(seen[0]?.token).toBe(FIXTURE_SECRET);
+    expect(sawEgress).toBe(true);
     expect(patched.values).not.toHaveProperty('token');
     expect(JSON.stringify(patched)).not.toContain(FIXTURE_SECRET);
     const stored = (store.read().accounts as Array<{ values: Record<string, string> }>)[0];
@@ -265,6 +300,26 @@ describe('accounts-api: Check connection without write', () => {
     const before = JSON.stringify(store.read());
     await accounts.check(created.id);
     expect(JSON.stringify(store.read())).toBe(before);
+  });
+
+  it('Explicit check passes egress client', async () => {
+    let sawEgress = false;
+    const checkConnection = vi.fn(
+      (_values: AccountFieldValues, egressClient: NativeEgressClient) => {
+        sawEgress = typeof egressClient.tlsSession === 'function';
+      },
+    );
+    const { accounts } = createServices(checkConnection);
+    const created = await accounts.create({
+      connector: 'fake',
+      label: 'Work',
+      values: validValues(),
+    });
+    sawEgress = false;
+    checkConnection.mockClear();
+    await accounts.check(created.id);
+    expect(sawEgress).toBe(true);
+    expect(checkConnection).toHaveBeenCalledTimes(1);
   });
 
   it('Check failure returns fixed body', async () => {

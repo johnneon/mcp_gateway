@@ -30,7 +30,10 @@ export type ConnectorKind = 'native' | 'proxy';
 
 export type AccountFieldValues = Readonly<Record<string, string>>;
 
-export type CheckConnection = (accountValues: AccountFieldValues) => void | Promise<void>;
+export type CheckConnection = (
+  accountValues: AccountFieldValues,
+  egressClient: NativeEgressClient,
+) => void | Promise<void>;
 
 /**
  * JSON Schema for tool arguments authored by the connector.

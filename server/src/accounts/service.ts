@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { AccountField, AccountFieldValues, ConnectorModule } from '../connectors/contract.js';
+import { createEgressClientForAccount, type EgressTransport } from '../connectors/native/egress.js';
 import type { ConnectorRegistry } from '../connectors/registry.js';
 import type { ConfigurationsService } from '../configurations/service.js';
 import type { JsonObject } from '../store/codec.js';
@@ -51,6 +52,7 @@ export type AccountsServiceDeps = {
   store: EncryptedStore;
   connectorRegistry: ConnectorRegistry;
   configurations: Pick<ConfigurationsService, 'removeAccountIdFromAll'>;
+  egressTransport?: EgressTransport;
 };
 
 function isAccountRow(value: unknown): value is Record<string, unknown> {
@@ -254,16 +256,22 @@ function toPublic(row: AccountRecord, registry: ConnectorRegistry): AccountPubli
 async function runCheckConnection(
   connector: ConnectorModule,
   values: AccountFieldValues,
+  egressTransport: EgressTransport | undefined,
 ): Promise<void> {
+  const egressClient = createEgressClientForAccount({
+    destinations: connector.allowedDestinations,
+    accountValues: values,
+    ...(egressTransport !== undefined ? { transport: egressTransport } : {}),
+  });
   try {
-    await connector.checkConnection(values);
+    await connector.checkConnection(values, egressClient);
   } catch {
     throw new ConnectionCheckFailedError();
   }
 }
 
 export function createAccountsService(deps: AccountsServiceDeps): AccountsService {
-  const { store, connectorRegistry, configurations } = deps;
+  const { store, connectorRegistry, configurations, egressTransport } = deps;
 
   return {
     list(): AccountPublic[] {
@@ -285,7 +293,7 @@ export function createAccountsService(deps: AccountsServiceDeps): AccountsServic
       assertRequiredOnCreate(connector.fields, input.values);
       assertHostValues(connector.fields, input.values);
 
-      await runCheckConnection(connector, input.values);
+      await runCheckConnection(connector, input.values, egressTransport);
 
       const row: AccountRecord = {
         id: randomUUID(),
@@ -336,7 +344,7 @@ export function createAccountsService(deps: AccountsServiceDeps): AccountsServic
 
       // Any patch that includes label or values rechecks, including secret-keep no-ops.
       if (hasLabel || hasValues) {
-        await runCheckConnection(connector, values);
+        await runCheckConnection(connector, values, egressTransport);
       }
 
       const updated: AccountRecord = {
@@ -360,7 +368,7 @@ export function createAccountsService(deps: AccountsServiceDeps): AccountsServic
       if (!connector) {
         throw new AccountValidationError('unknown connector');
       }
-      await runCheckConnection(connector, current.values);
+      await runCheckConnection(connector, current.values, egressTransport);
     },
 
     async remove(id: string): Promise<void> {

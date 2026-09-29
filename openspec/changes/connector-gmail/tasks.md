@@ -6,7 +6,7 @@
 
 ## 2. checkConnection receives egress
 
-- [ ] 2.1 Change `CheckConnection` to `(accountValues, egressClient)`; update all in-tree fake connectors and registry/MCP tests to the new signature. Accounts service builds `createEgressClientForAccount` from the connector allowlist and values and passes it on create, patch (when check runs), and explicit check; failures still map to fixed `Connection check failed` without exception text or secrets. Check: connector-contract scenario "Handler receives egress client; checkConnection does not" (updated: both receive egress) and accounts-api scenarios for create/patch/check with egress pass; existing fixed-body failure scenarios still pass.
+- [x] 2.1 Change `CheckConnection` to `(accountValues, egressClient)`; update all in-tree fake connectors and registry/MCP tests to the new signature. Accounts service builds `createEgressClientForAccount` from the connector allowlist and values and passes it on create, patch (when check runs), and explicit check; failures still map to fixed `Connection check failed` without exception text or secrets. Check: connector-contract scenario "Handler receives egress client; checkConnection does not" (updated: both receive egress) and accounts-api scenarios for create/patch/check with egress pass; existing fixed-body failure scenarios still pass.
 
 ## 3. Shared mail protocol module
 
