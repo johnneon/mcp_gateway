@@ -12,6 +12,7 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
+    "@mcp-gateway/fake-stdio-mcp": "file:../packages/fake-stdio-mcp",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "ajv": "^8.20.0",
     "express": "^5.1.0",
