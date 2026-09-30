@@ -101,6 +101,21 @@ const tools = [
     description: 'Exit this process without a tool result',
     inputSchema: { type: 'object', properties: {} },
   },
+  {
+    name: 'echo_args',
+    description: 'Return the JSON of the arguments received on tools/call',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        note: { type: 'string' },
+      },
+    },
+  },
+  {
+    name: 'leak_secret',
+    description: 'Return the TOKEN environment variable',
+    inputSchema: { type: 'object', properties: {} },
+  },
 ];
 
 function writeMessage(message) {
@@ -125,6 +140,17 @@ function readToolName(params) {
     return '';
   }
   return params.name;
+}
+
+function readToolArguments(params) {
+  if (params === null || typeof params !== 'object' || !('arguments' in params)) {
+    return {};
+  }
+  const args = params.arguments;
+  if (args === null || typeof args !== 'object' || Array.isArray(args)) {
+    return {};
+  }
+  return args;
 }
 
 function handleMessage(message) {
@@ -180,6 +206,26 @@ function handleMessage(message) {
         jsonrpc: '2.0',
         id,
         result: { content: [{ type: 'text', text }] },
+      });
+      return;
+    }
+    if (name === 'echo_args') {
+      writeMessage({
+        jsonrpc: '2.0',
+        id,
+        result: {
+          content: [{ type: 'text', text: JSON.stringify(readToolArguments(params)) }],
+        },
+      });
+      return;
+    }
+    if (name === 'leak_secret') {
+      process.stderr.write('fake-stdio-mcp-stderr-marker\n');
+      const token = typeof process.env.TOKEN === 'string' ? process.env.TOKEN : '';
+      writeMessage({
+        jsonrpc: '2.0',
+        id,
+        result: { content: [{ type: 'text', text: token }] },
       });
       return;
     }

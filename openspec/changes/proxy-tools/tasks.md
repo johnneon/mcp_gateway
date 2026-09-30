@@ -6,7 +6,7 @@
 
 ## 2. Fake echo and leak tools
 
-- [ ] 2.1 Extend `packages/fake-stdio-mcp` in place at version exactly `1.0.0` with `echo_args` and `leak_secret` per `design.md`. Keep `report_env` and `crash`. Do not use `npx`. Cover proxy-runtime scenarios `echo_args returns the arguments it received` and `leak_secret returns TOKEN and writes the stderr marker` by driving the installed fake and capturing stderr in the test, not through `ChildPipeTransport`. Check: those tests pass, and the existing scenario `Server depends on the exact installed package` still passes.
+- [x] 2.1 Extend `packages/fake-stdio-mcp` in place at version exactly `1.0.0` with `echo_args` and `leak_secret` per `design.md`. Keep `report_env` and `crash`. Do not use `npx`. Cover proxy-runtime scenarios `echo_args returns the arguments it received` and `leak_secret returns TOKEN and writes the stderr marker` by driving the installed fake and capturing stderr in the test, not through `ChildPipeTransport`. Check: those tests pass, and the existing scenario `Server depends on the exact installed package` still passes.
 
 ## 3. tools/list from the allowlist
 
