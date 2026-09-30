@@ -10,4 +10,4 @@
 
 ## 3. Full package check
 
-- [ ] 3.1 From the repository root: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` exit 0. Test names cover every new scenario in the `connector-mail-ru`, `connector-contract`, and `connector-gmail` deltas. Check: every command exits 0.
+- [x] 3.1 From the repository root: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` exit 0. Test names cover every new scenario in the `connector-mail-ru`, `connector-contract`, and `connector-gmail` deltas. Check: every command exits 0.
