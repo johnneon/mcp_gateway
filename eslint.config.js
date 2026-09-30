@@ -11,6 +11,7 @@ export default tseslint.config(
       '**/coverage/**',
       'eslint.config.js',
       'openspec/**/*.mjs',
+      'packages/fake-stdio-mcp/**',
     ],
   },
   eslint.configs.recommended,

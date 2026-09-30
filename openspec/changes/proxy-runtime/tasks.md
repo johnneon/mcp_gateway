@@ -2,7 +2,7 @@
 
 ## 1. Fake stdio package
 
-- [ ] 1.1 Add `packages/fake-stdio-mcp` (`@mcp-gateway/fake-stdio-mcp`, version exactly `1.0.0`, plain ESM `index.js`) that increments a launch-count file from `argv[2]`, serves MCP over stdio, and implements `report_env` (JSON `env`, `execPath`, `argv`, `pid`) and `crash` (`process.exit(1)`). Add the workspace, the server `file:../packages/fake-stdio-mcp` dependency with no version range, the ESLint ignore, and the Prettier globs from `design.md`. Install so the package resolves. Test name covers requirement `Pinned package and spawn without download` and scenario `Server depends on the exact installed package`. Check: that test passes.
+- [x] 1.1 Add `packages/fake-stdio-mcp` (`@mcp-gateway/fake-stdio-mcp`, version exactly `1.0.0`, plain ESM `index.js`) that increments a launch-count file from `argv[2]`, serves MCP over stdio, and implements `report_env` (JSON `env`, `execPath`, `argv`, `pid`) and `crash` (`process.exit(1)`). Add the workspace, the server `file:../packages/fake-stdio-mcp` dependency with no version range, the ESLint ignore, and the Prettier globs from `design.md`. Install so the package resolves. Test name covers requirement `Pinned package and spawn without download` and scenario `Server depends on the exact installed package`. Check: that test passes.
 
 ## 2. Spawn and child environment
 
