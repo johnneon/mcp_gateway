@@ -6,7 +6,7 @@
 
 ## 2. Mail.ru MCP tools
 
-- [ ] 2.1 Implement `list_messages`, `search_messages`, and `read_message` (MCP names `mailru_list_messages`, `mailru_search_messages`, `mailru_read_message`) on the shared module over an egress TLS session to `imap.mail.ru:993`. Arguments: mailbox default `INBOX`; list limit default 20 and cap 50; narrow filter only for search (reject free-form syntax and unknown keys); required uid for read. Results: list/search summaries (uid, from, subject, date, seen/unread) without bodies; read returns headers and text body without attachment bytes. Fixture password absent from tool results and MCP errors. Check: connector-mail-ru tool and password-scrubbing scenarios pass against fake IMAP; `npm run typecheck -w server` exits 0.
+- [x] 2.1 Implement `list_messages`, `search_messages`, and `read_message` (MCP names `mailru_list_messages`, `mailru_search_messages`, `mailru_read_message`) on the shared module over an egress TLS session to `imap.mail.ru:993`. Arguments: mailbox default `INBOX`; list limit default 20 and cap 50; narrow filter only for search (reject free-form syntax and unknown keys); required uid for read. Results: list/search summaries (uid, from, subject, date, seen/unread) without bodies; read returns headers and text body without attachment bytes. Fixture password absent from tool results and MCP errors. Check: connector-mail-ru tool and password-scrubbing scenarios pass against fake IMAP; `npm run typecheck -w server` exits 0.
 
 ## 3. Full package check
 
