@@ -9,6 +9,11 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { ProxyConnectorModule } from '../../src/connectors/contract.js';
+import {
+  createProxyRuntime,
+  PROXY_IDLE_TIMEOUT_MS,
+  type ProxyRuntime,
+} from '../../src/connectors/proxy/runtime.js';
 import { buildConnectorRegistry, type ConnectorRegistry } from '../../src/connectors/registry.js';
 import { createMcpApp } from '../../src/http/createMcpApp.js';
 import type { JsonObject } from '../../src/store/codec.js';
@@ -52,8 +57,15 @@ type ListedTool = z.infer<typeof listedToolSchema>;
 
 const openServers: http.Server[] = [];
 const tempDirs: string[] = [];
+const openRuntimes: ProxyRuntime[] = [];
 
 afterEach(async () => {
+  while (openRuntimes.length > 0) {
+    const runtime = openRuntimes.pop();
+    if (runtime !== undefined) {
+      await runtime.close();
+    }
+  }
   while (openServers.length > 0) {
     const server = openServers.pop();
     if (server !== undefined) {
@@ -234,5 +246,161 @@ describe('mcp-endpoint: Proxy tools/list from the in-code allowlist', () => {
     const names = listed.map((tool) => tool.name);
     expect(names).not.toContain(`${CONNECTOR_ID}_echo_args`);
     expect(names).not.toContain(`${CONNECTOR_ID}_leak_secret`);
+  });
+});
+
+const STDERR_MARKER = 'fake-stdio-mcp-stderr-marker';
+
+function parentEnvForChild(): Record<string, string> {
+  const parent: Record<string, string> = {};
+  if (process.env.PATH !== undefined) {
+    parent.PATH = process.env.PATH;
+  }
+  if (process.env.SYSTEMROOT !== undefined) {
+    parent.SYSTEMROOT = process.env.SYSTEMROOT;
+  }
+  return parent;
+}
+
+function openRuntime(): ProxyRuntime {
+  const runtime = createProxyRuntime({
+    platform: process.platform,
+    parentEnv: parentEnvForChild(),
+    idleTimeoutMs: PROXY_IDLE_TIMEOUT_MS,
+    now: () => 0,
+    schedule: () => ({
+      cancel() {
+        return undefined;
+      },
+    }),
+  });
+  openRuntimes.push(runtime);
+  return runtime;
+}
+
+function readToolText(result: unknown): string {
+  if (typeof result !== 'object' || result === null || !('content' in result)) {
+    throw new Error('The tool result has no content.');
+  }
+  const content = result.content;
+  if (!Array.isArray(content) || content.length === 0) {
+    throw new Error('The tool result has no content.');
+  }
+  const first: unknown = content[0];
+  if (
+    typeof first !== 'object' ||
+    first === null ||
+    !('text' in first) ||
+    typeof first.text !== 'string'
+  ) {
+    throw new Error('The tool result has no text.');
+  }
+  return first.text;
+}
+
+async function callTool(
+  store: EncryptedStore,
+  registry: ConnectorRegistry,
+  runtime: ProxyRuntime,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const app = createMcpApp({ store, connectorRegistry: registry, proxyRuntime: runtime });
+  const server = http.createServer(app);
+  openServers.push(server);
+  await new Promise<void>((resolve, reject) => {
+    server.listen(0, '127.0.0.1', () => {
+      resolve();
+    });
+    server.once('error', reject);
+  });
+  const address = server.address() as AddressInfo;
+  const transport = new StreamableHTTPClientTransport(
+    new URL(`http://127.0.0.1:${String(address.port)}/mcp`),
+    {
+      requestInit: {
+        headers: { Authorization: `Bearer ${CONFIG_TOKEN}` },
+      },
+    },
+  );
+  const client = new Client({ name: 'proxy-tools-call-test', version: '0.0.0' });
+  await client.connect(transport);
+  try {
+    return await client.callTool({ name, arguments: args });
+  } finally {
+    await client.close();
+  }
+}
+
+describe('mcp-endpoint: Proxy tools/call strips account and calls the child by short name', () => {
+  it('echo_args receives arguments without account', async () => {
+    const countFile = await makeLaunchCountFile();
+    const registry = buildConnectorRegistry([proxyConnector(countFile)]);
+    const store = storeForProxyAccount([ACCOUNT_ID]);
+    const result = await callTool(store, registry, openRuntime(), `${CONNECTOR_ID}_echo_args`, {
+      account: ACCOUNT_ID,
+      note: 'hello',
+    });
+    const text = readToolText(result);
+    const parsed: unknown = JSON.parse(text) as unknown;
+    expect(parsed).toEqual({ note: 'hello' });
+    expect(
+      typeof parsed === 'object' &&
+        parsed !== null &&
+        Object.prototype.hasOwnProperty.call(parsed, 'account'),
+    ).toBe(false);
+    expect(await readLaunchCount(countFile)).toBe(1);
+  });
+
+  it('Allowlist schema rejects a call the child would accept', async () => {
+    const countFile = await makeLaunchCountFile();
+    const registry = buildConnectorRegistry([proxyConnector(countFile)]);
+    const store = storeForProxyAccount([ACCOUNT_ID]);
+    await expect(
+      callTool(store, registry, openRuntime(), `${CONNECTOR_ID}_echo_args`, {
+        account: ACCOUNT_ID,
+      }),
+    ).rejects.toThrow(/Invalid tool arguments/);
+    expect(await readLaunchCount(countFile)).toBe(0);
+  });
+
+  it('Ineligible account does not start the child', async () => {
+    const countFile = await makeLaunchCountFile();
+    const registry = buildConnectorRegistry([proxyConnector(countFile)]);
+    const store = storeForProxyAccount([]);
+    await expect(
+      callTool(store, registry, openRuntime(), `${CONNECTOR_ID}_echo_args`, {
+        account: ACCOUNT_ID,
+        note: 'hello',
+      }),
+    ).rejects.toThrow(/Account is not allowed/);
+    expect(await readLaunchCount(countFile)).toBe(0);
+  });
+
+  it('Non-allowlisted tool name does not start the child', async () => {
+    const countFile = await makeLaunchCountFile();
+    const registry = buildConnectorRegistry([proxyConnector(countFile)]);
+    const store = storeForProxyAccount([ACCOUNT_ID]);
+    await expect(
+      callTool(store, registry, openRuntime(), `${CONNECTOR_ID}_report_env`, {
+        account: ACCOUNT_ID,
+      }),
+    ).rejects.toThrow(/Unknown tool/);
+    expect(await readLaunchCount(countFile)).toBe(0);
+  });
+});
+
+describe('mcp-endpoint: Proxy tool result scrubs secrets and omits stderr', () => {
+  it('Secret in the result is redacted and the stderr marker is absent', async () => {
+    const countFile = await makeLaunchCountFile();
+    const registry = buildConnectorRegistry([proxyConnector(countFile)]);
+    const store = storeForProxyAccount([ACCOUNT_ID]);
+    const result = await callTool(store, registry, openRuntime(), `${CONNECTOR_ID}_leak_secret`, {
+      account: ACCOUNT_ID,
+    });
+    const text = readToolText(result);
+    expect(text).toContain('[redacted]');
+    expect(text).not.toContain(ACCOUNT_SECRET);
+    expect(text).not.toContain(STDERR_MARKER);
   });
 });

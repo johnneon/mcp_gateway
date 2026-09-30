@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import type { ProxyRuntime } from '../connectors/proxy/runtime.js';
 import type { ConnectorRegistry } from '../connectors/registry.js';
 import type { EgressTransport } from '../connectors/native/egress.js';
 import { dispatchToolCall } from '../mcp/call.js';
@@ -18,6 +19,7 @@ export type CreateMcpAppOptions = {
   store: EncryptedStore;
   connectorRegistry: ConnectorRegistry;
   egressTransport?: EgressTransport;
+  proxyRuntime?: ProxyRuntime;
 };
 
 const UNAUTHORIZED_BODY = 'Unauthorized';
@@ -42,6 +44,7 @@ function createGatewayServer(
   configuration: ActiveConfiguration,
   store: EncryptedStore,
   egressTransport: EgressTransport | undefined,
+  proxyRuntime: ProxyRuntime | undefined,
 ): McpServer {
   const mcp = new McpServer({
     name: 'mcp-gateway',
@@ -61,6 +64,7 @@ function createGatewayServer(
       toolName: request.params.name,
       args: asArgumentRecord(request.params.arguments),
       ...(egressTransport !== undefined ? { egressTransport } : {}),
+      ...(proxyRuntime !== undefined ? { proxyRuntime } : {}),
     }),
   );
   return mcp;
@@ -71,7 +75,7 @@ function createGatewayServer(
  * Non-POST methods on /mcp are rejected before Streamable HTTP.
  */
 export function createMcpApp(options: CreateMcpAppOptions): Express {
-  const { store, connectorRegistry, egressTransport } = options;
+  const { store, connectorRegistry, egressTransport, proxyRuntime } = options;
   const app = express();
   app.set('strict routing', true);
 
@@ -91,7 +95,13 @@ export function createMcpApp(options: CreateMcpAppOptions): Express {
       return;
     }
 
-    const server = createGatewayServer(connectorRegistry, configuration, store, egressTransport);
+    const server = createGatewayServer(
+      connectorRegistry,
+      configuration,
+      store,
+      egressTransport,
+      proxyRuntime,
+    );
     // Omit sessionIdGenerator so it stays undefined (stateless Streamable HTTP).
     const transport = new StreamableHTTPServerTransport({
       enableJsonResponse: true,
