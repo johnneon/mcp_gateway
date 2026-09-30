@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express, { type Express } from 'express';
 import { createAccountsService } from '../accounts/service.js';
+import type { EgressTransport } from '../connectors/native/egress.js';
 import { productionConnectorRegistry, type ConnectorRegistry } from '../connectors/registry.js';
 import { createConfigurationsService } from '../configurations/service.js';
 import type { EncryptedStore } from '../store/store.js';
@@ -14,6 +15,7 @@ export type CreateAdminAppOptions = {
   store: EncryptedStore;
   connectorRegistry?: ConnectorRegistry;
   webRoot?: string;
+  egressTransport?: EgressTransport;
 };
 
 function defaultWebRoot(): string {
@@ -34,6 +36,7 @@ export function createAdminApp(options: CreateAdminAppOptions): Express {
     store: options.store,
     connectorRegistry,
     configurations,
+    ...(options.egressTransport !== undefined ? { egressTransport: options.egressTransport } : {}),
   });
 
   app.use('/api', requireJsonContentType);

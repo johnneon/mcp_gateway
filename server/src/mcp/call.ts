@@ -8,6 +8,7 @@ import {
   isEgressError,
   REDIRECT_NOT_ALLOWED_MESSAGE,
   RESPONSE_TOO_LARGE_MESSAGE,
+  type EgressTransport,
 } from '../connectors/native/egress.js';
 import type { ConnectorRegistry } from '../connectors/registry.js';
 import type { EncryptedStore } from '../store/store.js';
@@ -75,8 +76,9 @@ export async function dispatchToolCall(options: {
   store: EncryptedStore;
   toolName: string;
   args: Record<string, unknown>;
+  egressTransport?: EgressTransport;
 }): Promise<NativeToolResult> {
-  const { connectorRegistry, configuration, store, toolName, args } = options;
+  const { connectorRegistry, configuration, store, toolName, args, egressTransport } = options;
 
   const tool: RegistryTool | undefined = connectorRegistry.getTool(toolName);
   if (tool === undefined) {
@@ -117,6 +119,7 @@ export async function dispatchToolCall(options: {
   const egressClient = createEgressClientForAccount({
     destinations: connector.allowedDestinations,
     accountValues: account.values,
+    ...(egressTransport !== undefined ? { transport: egressTransport } : {}),
   });
 
   const secrets = collectNonEmptySecrets(connector.fields, account.values);

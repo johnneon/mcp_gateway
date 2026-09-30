@@ -3,6 +3,8 @@
  * no scheme, path, userinfo, or port in the value (enforced by a later accounts change).
  */
 
+import type { Duplex } from 'node:stream';
+
 export type AccountFieldType = 'text' | 'secret' | 'host';
 
 export type AccountField = {
@@ -28,7 +30,10 @@ export type ConnectorKind = 'native' | 'proxy';
 
 export type AccountFieldValues = Readonly<Record<string, string>>;
 
-export type CheckConnection = (accountValues: AccountFieldValues) => void | Promise<void>;
+export type CheckConnection = (
+  accountValues: AccountFieldValues,
+  egressClient: NativeEgressClient,
+) => void | Promise<void>;
 
 /**
  * JSON Schema for tool arguments authored by the connector.
@@ -62,7 +67,15 @@ export type NativeEgressClient = {
     headers: Readonly<Record<string, string>>;
     body: Uint8Array;
   }>;
+  /**
+   * Handshake-only: connect then end the socket. Does not return a duplex for application bytes.
+   */
   tlsConnect(params: { host: string; port: number }): Promise<void>;
+  /**
+   * Allowlist-checked TLS session that returns an open duplex for reading and writing.
+   * Establishing the session does not end the duplex.
+   */
+  tlsSession(params: { host: string; port: number }): Promise<Duplex>;
 };
 
 export type NativeToolHandler = (

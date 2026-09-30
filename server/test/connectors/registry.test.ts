@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import type { ConnectorModule } from '../../src/connectors/contract.js';
+import type { ConnectorModule, NativeEgressClient } from '../../src/connectors/contract.js';
 import {
   buildConnectorRegistry,
   ConnectorRegistryError,
@@ -48,14 +48,20 @@ describe('connector-contract: Native connector module shape', () => {
 
   it('Connection check is callable without HTTP exposure', async () => {
     const accountValues = { user: 'u', token: 'secret-value', mailhost: 'mail.example.test' };
+    const fakeEgress: NativeEgressClient = {
+      httpsRequest: () => Promise.resolve({ status: 200, headers: {}, body: new Uint8Array(0) }),
+      tlsConnect: () => Promise.resolve(),
+      tlsSession: () => Promise.reject(new Error('not used')),
+    };
     const fake = createFakeNative({
-      checkConnection: (values) => {
+      checkConnection: (values, egressClient) => {
         expect(values).toEqual(accountValues);
+        expect(egressClient).toBe(fakeEgress);
       },
     });
     const registry = buildConnectorRegistry([fake]);
     await expect(
-      Promise.resolve(registry.connectors[0]?.checkConnection(accountValues)),
+      Promise.resolve(registry.connectors[0]?.checkConnection(accountValues, fakeEgress)),
     ).resolves.toBeUndefined();
   });
 });
@@ -122,10 +128,11 @@ describe('connector-contract: Registry build validates and rejects proxy', () =>
   });
 });
 
-describe('connector-contract: Production registry is empty', () => {
-  it('Production export has no connectors', () => {
-    expect(productionConnectorRegistry.connectors).toHaveLength(0);
-    expect(productionConnectorRegistry.listPublic()).toHaveLength(0);
+describe('connector-contract: Production registry includes registered product connectors', () => {
+  it('Production export includes Gmail', () => {
+    expect(productionConnectorRegistry.connectors.length).toBeGreaterThanOrEqual(1);
+    expect(productionConnectorRegistry.connectors.map((c) => c.id)).toContain('gmail');
+    expect(productionConnectorRegistry.listPublic().map((c) => c.id)).toContain('gmail');
   });
 });
 
@@ -173,8 +180,8 @@ describe('connector-contract: Native connector tools', () => {
   });
 
   it('Production registry stays empty', () => {
-    expect(productionConnectorRegistry.connectors).toHaveLength(0);
-    expect(productionConnectorRegistry.tools).toHaveLength(0);
-    expect(productionConnectorRegistry.listPublic()).toHaveLength(0);
+    expect(productionConnectorRegistry.connectors.length).toBeGreaterThanOrEqual(1);
+    expect(productionConnectorRegistry.connectors.map((c) => c.id)).toContain('gmail');
+    expect(productionConnectorRegistry.listPublic().map((c) => c.id)).toContain('gmail');
   });
 });

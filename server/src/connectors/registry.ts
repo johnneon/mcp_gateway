@@ -10,6 +10,7 @@ import type {
   RegistryTool,
   ToolArgumentsSchema,
 } from './contract.js';
+import { gmailConnector } from './gmail/index.js';
 
 const ID_PATTERN = /^[a-z0-9]+$/;
 const TOOL_NAME_PATTERN = /^[a-z0-9_]+$/;
@@ -299,5 +300,7 @@ export function buildConnectorRegistry(modules: readonly ConnectorModule[]): Con
   });
 }
 
-/** Production registry: no connectors until a later change registers them. */
-export const productionConnectorRegistry: ConnectorRegistry = buildConnectorRegistry([]);
+/** Production registry: product connectors registered in code. */
+export const productionConnectorRegistry: ConnectorRegistry = buildConnectorRegistry([
+  gmailConnector,
+]);

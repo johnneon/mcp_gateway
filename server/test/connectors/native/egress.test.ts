@@ -1,3 +1,4 @@
+import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import type { ConnectorModule } from '../../../src/connectors/contract.js';
 import {
@@ -18,11 +19,25 @@ function createCountingTransport(options?: {
     params: EgressTransportHttpsParams,
   ) => Promise<{ status: number; headers: Record<string, string>; body: Uint8Array }>;
   tls?: (params: { host: string; port: number }) => Promise<void>;
-}): EgressTransport & { callCount: number; lastHttps?: EgressTransportHttpsParams } {
+  tlsSession?: (params: { host: string; port: number }) => Promise<PassThrough>;
+}): EgressTransport & {
+  callCount: number;
+  lastHttps?: EgressTransportHttpsParams;
+  lastTlsSession?: { host: string; port: number };
+  handshakeEndedSocket: boolean;
+  sessionEndedOnEstablish: boolean;
+} {
   const state: {
     callCount: number;
     lastHttps?: EgressTransportHttpsParams;
-  } = { callCount: 0 };
+    lastTlsSession?: { host: string; port: number };
+    handshakeEndedSocket: boolean;
+    sessionEndedOnEstablish: boolean;
+  } = {
+    callCount: 0,
+    handshakeEndedSocket: false,
+    sessionEndedOnEstablish: false,
+  };
 
   return {
     get callCount() {
@@ -30,6 +45,15 @@ function createCountingTransport(options?: {
     },
     get lastHttps() {
       return state.lastHttps;
+    },
+    get lastTlsSession() {
+      return state.lastTlsSession;
+    },
+    get handshakeEndedSocket() {
+      return state.handshakeEndedSocket;
+    },
+    get sessionEndedOnEstablish() {
+      return state.sessionEndedOnEstablish;
     },
     async httpsRequest(params) {
       state.callCount += 1;
@@ -47,8 +71,24 @@ function createCountingTransport(options?: {
       state.callCount += 1;
       if (options?.tls !== undefined) {
         await options.tls(params);
+        state.handshakeEndedSocket = true;
         return;
       }
+      // Handshake-only path: connect then end (simulated by marking end).
+      state.handshakeEndedSocket = true;
+    },
+    async tlsSession(params) {
+      state.callCount += 1;
+      state.lastTlsSession = { host: params.host, port: params.port };
+      if (options?.tlsSession !== undefined) {
+        const duplex = await options.tlsSession(params);
+        state.sessionEndedOnEstablish = duplex.writableEnded;
+        return duplex;
+      }
+      const duplex = new PassThrough();
+      // Session path leaves the duplex open (does not end on establish).
+      state.sessionEndedOnEstablish = duplex.writableEnded;
+      return duplex;
     },
   };
 }
@@ -154,6 +194,56 @@ describe('native-egress: HTTPS request and TLS connect operations', () => {
 
     await client.tlsConnect({ host: 'imap.example.test', port: 993 });
     expect(transport.callCount).toBe(1);
+  });
+
+  it('Handshake tlsConnect still ends the socket after connect', async () => {
+    const transport = createCountingTransport();
+    const client = createEgressClient({
+      allowlist: [{ host: 'imap.example.test', port: 993 }],
+      transport,
+    });
+
+    await client.tlsConnect({ host: 'imap.example.test', port: 993 });
+    expect(transport.handshakeEndedSocket).toBe(true);
+
+    const sessionDuplex = await client.tlsSession({ host: 'imap.example.test', port: 993 });
+    expect(transport.sessionEndedOnEstablish).toBe(false);
+    expect(sessionDuplex.writableEnded).toBe(false);
+    expect(sessionDuplex.destroyed).toBe(false);
+    sessionDuplex.destroy();
+  });
+});
+
+describe('native-egress: TLS session operation returns an open duplex', () => {
+  it('TLS session to an allowed destination returns an open duplex once', async () => {
+    const transport = createCountingTransport();
+    const client = createEgressClient({
+      allowlist: [{ host: 'imap.example.test', port: 993 }],
+      transport,
+    });
+
+    const duplex = await client.tlsSession({ host: 'imap.example.test', port: 993 });
+    expect(transport.callCount).toBe(1);
+    expect(transport.lastTlsSession).toEqual({ host: 'imap.example.test', port: 993 });
+    expect(duplex.writableEnded).toBe(false);
+    expect(duplex.destroyed).toBe(false);
+    expect(transport.sessionEndedOnEstablish).toBe(false);
+    duplex.destroy();
+  });
+
+  it('Disallowed TLS session leaves transport call count at zero', async () => {
+    const transport = createCountingTransport();
+    const client = createEgressClient({
+      allowlist: [{ host: 'imap.example.test', port: 993 }],
+      transport,
+    });
+
+    await expect(client.tlsSession({ host: 'evil.example.test', port: 993 })).rejects.toMatchObject(
+      {
+        message: DESTINATION_NOT_ALLOWED_MESSAGE,
+      },
+    );
+    expect(transport.callCount).toBe(0);
   });
 });
 

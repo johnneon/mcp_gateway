@@ -1,10 +1,26 @@
-# connector-contract Specification
+# Spec Delta
 
-## Purpose
+## ADDED Requirements
 
-Defines the native connector module contract, account field and allowed-destination shapes, the connection-check function on the module, and the in-code registry that validates at build time and ships empty in production.
+### Requirement: Production registry includes registered product connectors
 
-## Requirements
+The production connector registry export SHALL be a built registry that includes every product connector module registered in code for this process (including Gmail when this change ships). Tests that need a fake connector SHALL pass their own registry into the admin or MCP app factory and SHALL NOT rely on the production export containing that fake.
+
+#### Scenario: Production export includes Gmail
+
+- **GIVEN** the production connector registry module
+- **WHEN** its public connector list is read
+- **THEN** the list length is at least 1
+- **AND** the list includes a connector with `id` `gmail`
+
+#### Scenario: Tests inject a fake instead of using production for fake assertions
+
+- **GIVEN** a test that needs a fake native connector id that is not a product connector
+- **WHEN** the admin or MCP app is created for that test
+- **THEN** the test passes a registry built with that fake into the app factory
+- **AND** the production registry export is not required to contain that fake
+
+## MODIFIED Requirements
 
 ### Requirement: Native connector module shape
 
@@ -24,16 +40,6 @@ A connector module SHALL declare `id` (string matching `^[a-z0-9]+$`), `name` (n
 - **THEN** the invocation completes without throwing
 - **AND** no HTTP route under `/api` invokes that function as a raw connector export bypassing the accounts service
 
-### Requirement: Account field description
-
-Each account field SHALL have `name` (string matching `^[a-z0-9]+$`, unique within the connector), `label` (non-empty display string), `type` equal to one of `text`, `secret`, or `host`, and `required` (boolean).
-
-#### Scenario: Valid fields are accepted
-
-- **GIVEN** a fake native connector whose fields are `{ name: "user", label: "User", type: "text", required: true }` and `{ name: "token", label: "Token", type: "secret", required: true }` and `{ name: "mailhost", label: "Mail host", type: "host", required: true }`
-- **WHEN** the registry is built with that connector
-- **THEN** registry build succeeds
-
 ### Requirement: Allowed destinations as host and port pairs
 
 Each allowed destination SHALL be either a constant `{ host, port }` where `host` is a non-empty hostname string and `port` is an integer port declared in connector code, or an operator-entered host `{ field, port }` where `field` is the `name` of an account field of type `host` on the same connector and `port` is an integer port declared in connector code. Product connectors such as Gmail MAY register constant destinations (for example `imap.gmail.com:993` and `smtp.gmail.com:465`).
@@ -49,47 +55,6 @@ Each allowed destination SHALL be either a constant `{ host, port }` where `host
 - **GIVEN** a fake native connector whose only fields are type `text` and whose allowed destinations include `{ field: "missing", port: 993 }`
 - **WHEN** the registry is built with that connector
 - **THEN** registry build fails
-
-### Requirement: Registry build validates and rejects proxy
-
-The process SHALL build the connector registry from a code array of connector modules. Building the registry SHALL fail when any connector has an invalid `id`, a duplicate `id` within the array, an invalid account field (bad `name`, duplicate `name` within the connector, bad `type`), an invalid allowed destination, or `kind` equal to `proxy`. There SHALL be no runtime connector catalog, no HTTP API that adds connectors, and no configuration file of connectors.
-
-#### Scenario: Duplicate id fails registry build
-
-- **GIVEN** two fake native connectors that both use `id` `fake`
-- **WHEN** the registry is built from an array containing both
-- **THEN** registry build fails
-
-#### Scenario: Bad id fails registry build
-
-- **GIVEN** a fake connector with `id` `Bad_Id` (does not match `^[a-z0-9]+$`) and otherwise valid native shape
-- **WHEN** the registry is built with that connector
-- **THEN** registry build fails
-
-#### Scenario: Proxy kind fails registry build
-
-- **GIVEN** a connector module with `kind` `proxy` and an otherwise complete description
-- **WHEN** the registry is built with that connector
-- **THEN** registry build fails
-- **AND** no child process is started
-
-### Requirement: Production registry includes registered product connectors
-
-The production connector registry export SHALL be a built registry that includes every product connector module registered in code for this process (including Gmail when this change ships). Tests that need a fake connector SHALL pass their own registry into the admin or MCP app factory and SHALL NOT rely on the production export containing that fake.
-
-#### Scenario: Production export includes Gmail
-
-- **GIVEN** the production connector registry module
-- **WHEN** its public connector list is read
-- **THEN** the list length is at least 1
-- **AND** the list includes a connector with `id` `gmail`
-
-#### Scenario: Tests inject a fake instead of using production for fake assertions
-
-- **GIVEN** a test that needs a fake native connector id that is not a product connector
-- **WHEN** the admin or MCP app is created for that test
-- **THEN** the test passes a registry built with that fake into the app factory
-- **AND** the production registry export is not required to contain that fake
 
 ### Requirement: Native connector tools
 
@@ -135,3 +100,11 @@ A native connector module SHALL declare a `tools` array. Each tool SHALL have a 
 - **WHEN** an MCP client authenticates with that bearer and calls `tools/list`
 - **THEN** the listed tools include the fake connector's tool under its MCP name
 - **AND** the production registry export still includes product connectors such as `gmail` and is not required to contain the fake
+
+## REMOVED Requirements
+
+### Requirement: Production registry is empty
+
+**Reason**: This change registers the Gmail product connector in the production registry export; an empty production registry is no longer correct.
+
+**Migration**: Use the added requirement "Production registry includes registered product connectors". Tests that need fakes continue to inject their own registry.

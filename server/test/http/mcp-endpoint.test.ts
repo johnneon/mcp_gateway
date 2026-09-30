@@ -4,7 +4,11 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import request from 'supertest';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ConnectorModule, NativeToolHandler } from '../../src/connectors/contract.js';
+import type {
+  ConnectorModule,
+  NativeEgressClient,
+  NativeToolHandler,
+} from '../../src/connectors/contract.js';
 import {
   buildConnectorRegistry,
   productionConnectorRegistry,
@@ -407,7 +411,7 @@ describe('mcp-endpoint: tools/list from eligible accounts only', () => {
     ]);
     const listed = await listToolsWithBearer(store, productionConnectorRegistry, ENABLED_TOKEN);
     expect(listed.tools).toEqual([]);
-    expect(productionConnectorRegistry.connectors).toHaveLength(0);
+    expect(productionConnectorRegistry.connectors.map((c) => c.id)).toContain('gmail');
   });
 });
 
@@ -458,7 +462,8 @@ describe('connector-contract: MCP app accepts an injectable connector registry',
 
     const listed = await listToolsWithBearer(store, registry, CONFIG_A_TOKEN);
     expect(listed.tools.map((tool) => tool.name)).toContain('fake_echo');
-    expect(productionConnectorRegistry.connectors).toHaveLength(0);
+    expect(productionConnectorRegistry.connectors.map((c) => c.id)).toContain('gmail');
+    expect(productionConnectorRegistry.connectors.map((c) => c.id)).not.toContain('fake');
   });
 });
 
@@ -707,6 +712,7 @@ describe('mcp-endpoint: tools/call validates, authorizes, then invokes handler',
       expect.objectContaining({
         httpsRequest: expect.any(Function) as unknown,
         tlsConnect: expect.any(Function) as unknown,
+        tlsSession: expect.any(Function) as unknown,
       }),
     );
   });
@@ -747,13 +753,13 @@ describe('mcp-endpoint: tools/call validates, authorizes, then invokes handler',
 describe('connector-contract: Native connector tools', () => {
   it('Handler receives egress client; checkConnection does not', async () => {
     let recordedEgress: unknown;
-    let checkConnectionArgCount = -1;
+    let checkConnectionSawEgress = false;
     const connector = createFakeEchoConnector((_args, _accountValues, egressClient) => {
       recordedEgress = egressClient;
       return { content: [{ type: 'text', text: 'ok' }] };
     });
-    connector.checkConnection = (...args: unknown[]) => {
-      checkConnectionArgCount = args.length;
+    connector.checkConnection = (_values, egressClient: NativeEgressClient) => {
+      checkConnectionSawEgress = typeof egressClient.tlsSession === 'function';
     };
     const registry = buildConnectorRegistry([connector]);
     const store = twoConfigStoreWithAccount({
@@ -772,13 +778,19 @@ describe('connector-contract: Native connector tools', () => {
       expect.objectContaining({
         httpsRequest: expect.any(Function) as unknown,
         tlsConnect: expect.any(Function) as unknown,
+        tlsSession: expect.any(Function) as unknown,
       }),
     );
 
+    const fakeEgress: NativeEgressClient = {
+      httpsRequest: () => Promise.resolve({ status: 200, headers: {}, body: new Uint8Array(0) }),
+      tlsConnect: () => Promise.resolve(),
+      tlsSession: () => Promise.reject(new Error('not used')),
+    };
     await Promise.resolve(
-      registry.connectors[0]?.checkConnection({ user: 'alice', token: FIXTURE_SECRET }),
+      registry.connectors[0]?.checkConnection({ user: 'alice', token: FIXTURE_SECRET }, fakeEgress),
     );
-    expect(checkConnectionArgCount).toBe(1);
+    expect(checkConnectionSawEgress).toBe(true);
   });
 });
 

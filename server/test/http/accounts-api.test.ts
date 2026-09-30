@@ -1,7 +1,11 @@
 import type { Express } from 'express';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
-import type { AccountFieldValues, ConnectorModule } from '../../src/connectors/contract.js';
+import type {
+  AccountFieldValues,
+  ConnectorModule,
+  NativeEgressClient,
+} from '../../src/connectors/contract.js';
 import { buildConnectorRegistry } from '../../src/connectors/registry.js';
 import { createAdminApp } from '../../src/http/createAdminApp.js';
 import type { JsonObject } from '../../src/store/codec.js';
@@ -214,6 +218,27 @@ describe('accounts-api: Create account after connection check', () => {
     expect(stored.values.token).toBe(FIXTURE_SECRET);
   });
 
+  it('Create passes egress client into checkConnection', async () => {
+    let sawEgress = false;
+    const checkConnection = vi.fn(
+      (_values: AccountFieldValues, egressClient: NativeEgressClient) => {
+        sawEgress = typeof egressClient.tlsSession === 'function';
+      },
+    );
+    const { app } = createApp({ checkConnection });
+    const response = await request(app)
+      .post('/api/accounts')
+      .set('Content-Type', 'application/json')
+      .send({
+        connector: 'fake',
+        label: 'Work',
+        values: validValues(),
+      });
+    expect(response.status).toBe(201);
+    expect(sawEgress).toBe(true);
+    expect(checkConnection).toHaveBeenCalledTimes(1);
+  });
+
   it('Unknown connector id is 400 without write', async () => {
     const { app } = createApp({});
     const response = await request(app)
@@ -286,13 +311,18 @@ describe('accounts-api: Create account after connection check', () => {
 describe('accounts-api: Patch account with secret keep semantics', () => {
   it('Empty secret on patch keeps stored value and rechecks', async () => {
     const seen: AccountFieldValues[] = [];
-    const checkConnection = vi.fn((values: AccountFieldValues) => {
-      seen.push({ ...values });
-    });
+    let sawEgress = false;
+    const checkConnection = vi.fn(
+      (values: AccountFieldValues, egressClient: NativeEgressClient) => {
+        seen.push({ ...values });
+        sawEgress = typeof egressClient.tlsSession === 'function';
+      },
+    );
     const { app, store } = createApp({ checkConnection });
     const created = await createAccount(app);
     checkConnection.mockClear();
     seen.length = 0;
+    sawEgress = false;
 
     const response = await request(app)
       .patch(`/api/accounts/${created.id}`)
@@ -302,6 +332,7 @@ describe('accounts-api: Patch account with secret keep semantics', () => {
     expect(response.status).toBe(200);
     expect(checkConnection).toHaveBeenCalledTimes(1);
     expect(seen[0]?.token).toBe(FIXTURE_SECRET);
+    expect(sawEgress).toBe(true);
     const body = asAccountPublic(parseJson(response.text));
     expect(body.values).not.toHaveProperty('token');
     expect(response.text).not.toContain(FIXTURE_SECRET);
@@ -351,6 +382,25 @@ describe('accounts-api: Check connection without write', () => {
     expect(response.status).toBe(200);
     expect(response.text).not.toContain(FIXTURE_SECRET);
     expect(JSON.stringify(store.read())).toBe(before);
+  });
+
+  it('Explicit check passes egress client', async () => {
+    let sawEgress = false;
+    const checkConnection = vi.fn(
+      (_values: AccountFieldValues, egressClient: NativeEgressClient) => {
+        sawEgress = typeof egressClient.tlsSession === 'function';
+      },
+    );
+    const { app } = createApp({ checkConnection });
+    const created = await createAccount(app);
+    sawEgress = false;
+    checkConnection.mockClear();
+    const response = await request(app)
+      .post(`/api/accounts/${created.id}/check`)
+      .set('Content-Type', 'application/json');
+    expect(response.status).toBe(200);
+    expect(sawEgress).toBe(true);
+    expect(checkConnection).toHaveBeenCalledTimes(1);
   });
 
   it('Check failure returns fixed body', async () => {

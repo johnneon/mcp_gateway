@@ -1,41 +1,6 @@
-# accounts-api Specification
+# Spec Delta
 
-## Purpose
-Defines the accounts domain on the encrypted store and the admin-port HTTP API that creates, lists, patches, checks, and deletes accounts, redacts secret field values from responses, and assigns accounts to configurations after a successful connector connection check.
-
-## Requirements
-
-### Requirement: Accounts document shape
-
-The state document SHALL hold accounts under the key `accounts` as an array of objects with fields `id` (string UUID), `connector` (string connector id from the in-code registry), `label` (non-empty string after trim), `values` (object of string field values keyed by connector field names), and `enabled` (boolean). When the in-memory document is `{}` or the `accounts` key is absent, the accounts list SHALL be treated as empty. After any successful accounts mutation, the persisted document SHALL contain an `accounts` array. A connector SHALL NOT be stored as a row in the state file; only account instances that reference a connector id SHALL be stored.
-
-#### Scenario: Empty document reads as an empty accounts list
-
-- **GIVEN** the store's in-memory document is `{}`
-- **WHEN** the client performs `GET /api/accounts` on the admin app
-- **THEN** the response status is 200
-- **AND** the body parsed as JSON is an empty array
-
-#### Scenario: Stored account keeps id, connector, label, values, and enabled
-
-- **GIVEN** the admin app is created with a registry containing one fake native connector and a store
-- **WHEN** the client successfully creates an account through `POST /api/accounts`
-- **THEN** the matching entry under `accounts` has string fields `id`, `connector`, and `label`, object field `values`, and boolean field `enabled`
-- **AND** `enabled` is `true`
-- **AND** `id` is a UUID string
-
-### Requirement: List accounts without secret values
-
-`GET /api/accounts` on the admin port SHALL return status 200 and a JSON array of public account objects. Each object SHALL include `id`, `connector`, `label`, `enabled`, and `values`. For every connector field whose type is `secret`, the corresponding key SHALL be absent from the `values` object in the response (not present as an empty string). Non-secret field values SHALL be included. The serialized response body SHALL NOT contain any stored secret field value.
-
-#### Scenario: Secret keys are absent from list values
-
-- **GIVEN** the admin app with a fake native connector that declares a required `secret` field named `token` and a required `text` field named `user`
-- **AND** an account was created with `values` containing `token` set to a fixture secret string known to the test and `user` set to `alice`
-- **WHEN** the client performs `GET /api/accounts`
-- **THEN** the response status is 200
-- **AND** the matching element's `values` has `user` equal to `alice` and has no `token` property
-- **AND** the serialized response body does not contain the fixture secret string
+## MODIFIED Requirements
 
 ### Requirement: Create account after connection check
 
@@ -144,58 +109,6 @@ The state document SHALL hold accounts under the key `accounts` as an array of o
 - **THEN** the response status is 400
 - **AND** the response body is exactly `Connection check failed`
 - **AND** the serialized response body does not contain the fixture secret
-
-### Requirement: Delete account removes it from configurations
-
-`DELETE /api/accounts/:id` on the admin port SHALL remove the matching account and remove that id from every configuration's `accountIds` array, then respond with status 204 and an empty body. A disabled account that remains in `accountIds` SHALL stay listed until delete. Unknown id SHALL yield status 404 with short English plain text and no secrets.
-
-#### Scenario: Delete cascades out of configuration accountIds
-
-- **GIVEN** an account with id `a1` exists and a configuration includes `a1` in `accountIds`
-- **WHEN** the client performs `DELETE /api/accounts/a1` with `Content-Type: application/json`
-- **THEN** the response status is 204
-- **AND** a subsequent `GET /api/accounts` does not include `a1`
-- **AND** a subsequent `GET /api/configurations` shows that configuration's `accountIds` without `a1`
-
-#### Scenario: Unknown account id on DELETE — 404
-
-- **GIVEN** the admin app with a store and no account with id `missing`
-- **WHEN** the client performs `DELETE /api/accounts/missing` with `Content-Type: application/json`
-- **THEN** the response status is 404
-- **AND** the response body is short English text with no secrets
-
-### Requirement: Assign accounts to a configuration
-
-`PUT /api/configurations/:id/accounts` on the admin port SHALL accept a JSON body `{ accountIds: string[] }` and replace that configuration's `accountIds` with the submitted list, preserving order. Duplicate ids in the submitted list SHALL yield status 400 and SHALL NOT write. An unknown account id SHALL yield status 400 and SHALL NOT write. Assigning a disabled account SHALL be allowed. Unknown configuration id SHALL yield status 404 with short English plain text. On success the response SHALL be status 200 with a public configuration object that includes `id`, `name`, `enabled`, and `accountIds`, and SHALL NOT include `token` or `tokenHash`.
-
-#### Scenario: Replace accountIds preserving order
-
-- **GIVEN** accounts `a1` and `a2` exist and a configuration `c1` exists with `accountIds` `[]`
-- **WHEN** the client performs `PUT /api/configurations/c1/accounts` with `Content-Type: application/json` and body `{ "accountIds": ["a2", "a1"] }`
-- **THEN** the response status is 200
-- **AND** the JSON body has `accountIds` equal to `["a2", "a1"]`
-- **AND** the store entry for `c1` has `accountIds` equal to `["a2", "a1"]`
-
-#### Scenario: Unknown account id rejects without write
-
-- **GIVEN** a configuration `c1` exists with `accountIds` `[]`
-- **WHEN** the client performs `PUT /api/configurations/c1/accounts` with body `{ "accountIds": ["missing"] }`
-- **THEN** the response status is 400
-- **AND** a subsequent `GET /api/configurations` still shows `c1` with `accountIds` equal to `[]`
-
-#### Scenario: Duplicate account ids rejected
-
-- **GIVEN** an account `a1` exists and a configuration `c1` exists
-- **WHEN** the client performs `PUT /api/configurations/c1/accounts` with body `{ "accountIds": ["a1", "a1"] }`
-- **THEN** the response status is 400
-- **AND** the configuration's stored `accountIds` are unchanged
-
-#### Scenario: Disabled account may be assigned
-
-- **GIVEN** an account `a1` exists with `enabled` false and a configuration `c1` exists
-- **WHEN** the client performs `PUT /api/configurations/c1/accounts` with body `{ "accountIds": ["a1"] }`
-- **THEN** the response status is 200
-- **AND** the JSON body has `accountIds` equal to `["a1"]`
 
 ### Requirement: Accounts API follows admin JSON and CORS rules
 
