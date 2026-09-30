@@ -18,4 +18,4 @@
 
 ## 5. Full package check
 
-- [ ] 5.1 From the repository root, `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, and `npm run build` exit 0. Do not introduce explicit `any`. Every new or replaced scenario in this change's delta specs has a test whose name includes the requirement and the scenario. Do not edit `mcp-gateway-spec.md` or files under `openspec/specs/`. Check: every command exits 0.
+- [x] 5.1 From the repository root, `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, and `npm run build` exit 0. Do not introduce explicit `any`. Every new or replaced scenario in this change's delta specs has a test whose name includes the requirement and the scenario. Do not edit `mcp-gateway-spec.md` or files under `openspec/specs/`. Check: every command exits 0.
