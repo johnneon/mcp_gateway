@@ -1,8 +1,13 @@
-import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
-import type { ConnectorModule, NativeEgressClient } from '../../src/connectors/contract.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import type {
+  NativeConnectorModule,
+  NativeEgressClient,
+  ProxyConnectorModule,
+} from '../../src/connectors/contract.js';
 import {
   buildConnectorRegistry,
   ConnectorRegistryError,
@@ -11,8 +16,36 @@ import {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-function createFakeNative(overrides: Partial<ConnectorModule> = {}): ConnectorModule {
-  const base: ConnectorModule = {
+const tempDirs: string[] = [];
+
+afterEach(async () => {
+  while (tempDirs.length > 0) {
+    const dir = tempDirs.pop();
+    if (dir !== undefined) {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+});
+
+async function makeLaunchCountFile(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), 'proxy-registry-'));
+  tempDirs.push(dir);
+  const countFile = path.join(dir, 'launches.txt');
+  await writeFile(countFile, '0', 'utf8');
+  return countFile;
+}
+
+async function readLaunchCount(filePath: string): Promise<number> {
+  const text = await readFile(filePath, 'utf8');
+  const parsed = Number.parseInt(text.trim(), 10);
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`Invalid launch count in ${filePath}`);
+  }
+  return parsed;
+}
+
+function createFakeNative(overrides: Partial<NativeConnectorModule> = {}): NativeConnectorModule {
+  const base: NativeConnectorModule = {
     id: 'fake',
     name: 'Fake',
     kind: 'native',
@@ -101,7 +134,115 @@ describe('connector-contract: Allowed destinations as host and port pairs', () =
   });
 });
 
-describe('connector-contract: Registry build validates and rejects proxy', () => {
+function createProxyModule(
+  countFile: string,
+  overrides: Partial<ProxyConnectorModule> = {},
+): ProxyConnectorModule {
+  const base: ProxyConnectorModule = {
+    id: 'proxyfake',
+    name: 'Proxy fake',
+    kind: 'proxy',
+    fields: [{ name: 'token', label: 'Token', type: 'secret', required: true }],
+    allowedDestinations: [{ host: 'example.test', port: 443 }],
+    checkConnection: () => undefined,
+    tools: [],
+    entryPath: countFile,
+    args: [],
+    env: [],
+  };
+  return {
+    ...base,
+    ...overrides,
+    fields: overrides.fields ?? base.fields,
+    allowedDestinations: overrides.allowedDestinations ?? base.allowedDestinations,
+    checkConnection: overrides.checkConnection ?? base.checkConnection,
+    tools: overrides.tools ?? base.tools,
+    args: overrides.args ?? base.args,
+    env: overrides.env ?? base.env,
+  };
+}
+
+describe('connector-contract: Proxy connector tool allowlist', () => {
+  it('Empty proxy allowlist registers and starts no child', async () => {
+    const countFile = await makeLaunchCountFile();
+    const proxyModule = createProxyModule(countFile);
+    const registry = buildConnectorRegistry([proxyModule]);
+    expect(registry.connectors.map((connector) => connector.id)).toContain('proxyfake');
+    expect(registry.tools.filter((tool) => tool.connectorId === 'proxyfake')).toEqual([]);
+    expect(await readLaunchCount(countFile)).toBe(0);
+  });
+
+  it('Proxy tool schema that declares account fails registry build', async () => {
+    const countFile = await makeLaunchCountFile();
+    const proxyModule = createProxyModule(countFile, {
+      args: [countFile],
+      tools: [
+        {
+          name: 'echo',
+          description: 'Echo arguments for tests',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              account: { type: 'string' },
+            },
+          },
+        },
+      ],
+    });
+    expect(() => buildConnectorRegistry([proxyModule])).toThrow(ConnectorRegistryError);
+    expect(await readLaunchCount(countFile)).toBe(0);
+  });
+
+  it('Proxy tool with a handler fails registry build', async () => {
+    const countFile = await makeLaunchCountFile();
+    const proxyModule = {
+      ...createProxyModule(countFile, { args: [countFile] }),
+      tools: [
+        {
+          name: 'echo',
+          description: 'Echo arguments for tests',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              note: { type: 'string' },
+            },
+          },
+          handler: () => ({ content: [{ type: 'text' as const, text: 'ok' }] }),
+        },
+      ],
+    } as ProxyConnectorModule;
+    expect(() => buildConnectorRegistry([proxyModule])).toThrow(ConnectorRegistryError);
+    expect(await readLaunchCount(countFile)).toBe(0);
+  });
+
+  it('Env binding must name a field on the connector', async () => {
+    const countFile = await makeLaunchCountFile();
+    const proxyModule = createProxyModule(countFile, {
+      args: [countFile],
+      env: [{ field: 'missing', variable: 'TOKEN' }],
+    });
+    expect(() => buildConnectorRegistry([proxyModule])).toThrow(ConnectorRegistryError);
+    expect(await readLaunchCount(countFile)).toBe(0);
+  });
+
+  it('Fake proxy checkConnection does not spawn', async () => {
+    const countFile = await makeLaunchCountFile();
+    const accountValues = { token: 'secret-value' };
+    const fakeEgress: NativeEgressClient = {
+      httpsRequest: () => Promise.resolve({ status: 200, headers: {}, body: new Uint8Array(0) }),
+      tlsConnect: () => Promise.resolve(),
+      tlsSession: () => Promise.reject(new Error('not used')),
+    };
+    const proxyModule = createProxyModule(countFile, { args: [countFile] });
+    const registry = buildConnectorRegistry([proxyModule]);
+    await expect(
+      Promise.resolve(registry.connectors[0]?.checkConnection(accountValues, fakeEgress)),
+    ).resolves.toBeUndefined();
+    expect(await readLaunchCount(countFile)).toBe(0);
+  });
+});
+
+describe('connector-contract: Registry build validates modules', () => {
   it('Duplicate id fails registry build', () => {
     const first = createFakeNative({ id: 'fake', name: 'First' });
     const second = createFakeNative({ id: 'fake', name: 'Second' });
@@ -113,11 +254,28 @@ describe('connector-contract: Registry build validates and rejects proxy', () =>
     expect(() => buildConnectorRegistry([fake])).toThrow(ConnectorRegistryError);
   });
 
-  it('Proxy kind fails registry build', async () => {
-    const proxyModule = createFakeNative({ kind: 'proxy' });
-    expect(() => buildConnectorRegistry([proxyModule])).toThrow(ConnectorRegistryError);
+  it('Valid proxy allowlist registers and starts no child', async () => {
+    const countFile = await makeLaunchCountFile();
+    const proxyModule = createProxyModule(countFile, {
+      args: [countFile],
+      tools: [
+        {
+          name: 'echo',
+          description: 'Echo arguments for tests',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              note: { type: 'string' },
+            },
+            required: ['note'],
+          },
+        },
+      ],
+    });
+    const registry = buildConnectorRegistry([proxyModule]);
+    expect(registry.getTool('proxyfake_echo')?.mcpName).toBe('proxyfake_echo');
+    expect(await readLaunchCount(countFile)).toBe(0);
 
-    // Build rejects proxy in-process; the registry module never starts a child.
     const registrySource = await readFile(
       path.join(here, '../../src/connectors/registry.ts'),
       'utf8',

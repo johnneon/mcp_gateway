@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type {
   AccountFieldValues,
   ConnectorModule,
+  NativeConnectorModule,
   NativeEgressClient,
 } from '../../src/connectors/contract.js';
 import { buildConnectorRegistry } from '../../src/connectors/registry.js';
@@ -88,8 +89,8 @@ function asConfigPublic(value: unknown): ConfigPublic {
   return value as ConfigPublic;
 }
 
-function createFakeNative(overrides: Partial<ConnectorModule> = {}): ConnectorModule {
-  const base: ConnectorModule = {
+function createFakeNative(overrides: Partial<NativeConnectorModule> = {}): NativeConnectorModule {
+  const base: NativeConnectorModule = {
     id: 'fake',
     name: 'Fake',
     kind: 'native',

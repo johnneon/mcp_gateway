@@ -124,6 +124,13 @@ export async function dispatchToolCall(options: {
 
   const secrets = collectNonEmptySecrets(connector.fields, account.values);
 
+  if (tool.kind !== 'native') {
+    throw new McpError(
+      ErrorCode.InternalError,
+      scrubSecretsInText(TOOL_EXECUTION_FAILED_MESSAGE, secrets),
+    );
+  }
+
   try {
     const result = await tool.handler(stripAccount(args), account.values, egressClient);
     return scrubSecretsInToolResult(result, secrets);
