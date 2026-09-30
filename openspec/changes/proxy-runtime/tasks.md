@@ -14,7 +14,7 @@
 
 ## 4. Idle stop
 
-- [ ] 4.1 Export `PROXY_IDLE_TIMEOUT_MS` as `300000`. Accept an injected clock, `schedule`, and timeout. Stop the child only when that account has no call in flight. Cover scenarios `Production idle timeout is 5 minutes` and `Injected clock stops the child and the next call starts a new one`. The idle test must not sleep. Check: those tests pass.
+- [x] 4.1 Export `PROXY_IDLE_TIMEOUT_MS` as `300000`. Accept an injected clock, `schedule`, and timeout. Stop the child only when that account has no call in flight. Cover scenarios `Production idle timeout is 5 minutes` and `Injected clock stops the child and the next call starts a new one`. The idle test must not sleep. Check: those tests pass.
 
 ## 5. Restart after exit
 

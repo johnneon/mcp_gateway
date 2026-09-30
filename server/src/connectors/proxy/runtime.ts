@@ -7,6 +7,14 @@ import { ChildPipeTransport } from './transport.js';
 
 export const MISSING_ENTRY_MESSAGE = 'The proxy server entry file is missing.';
 
+export const PROXY_IDLE_TIMEOUT_MS = 300000;
+
+export type ProxyScheduleHandle = {
+  cancel: () => void;
+};
+
+export type ProxySchedule = (callback: () => void, delayMs: number) => ProxyScheduleHandle;
+
 export type ProxyDescriptor = {
   accountId: string;
   entryPath: string;
@@ -21,6 +29,9 @@ export type ProxyCallResult = {
 export type ProxyRuntimeDeps = {
   platform: string;
   parentEnv: Readonly<Record<string, string>>;
+  idleTimeoutMs: number;
+  now: () => number;
+  schedule: ProxySchedule;
 };
 
 export type ProxyRuntime = {
@@ -36,6 +47,8 @@ type Session = {
   accountId: string;
   client: Client;
   exited: boolean;
+  inFlight: number;
+  idle: ProxyScheduleHandle | undefined;
 };
 
 function isTextBlock(block: unknown): block is { type: 'text'; text: string } {
@@ -136,7 +149,13 @@ export function createProxyRuntime(deps: ProxyRuntimeDeps): ProxyRuntime {
         throw error;
       }
 
-      const session: Session = { accountId: descriptor.accountId, client, exited: false };
+      const session: Session = {
+        accountId: descriptor.accountId,
+        client,
+        exited: false,
+        inFlight: 0,
+        idle: undefined,
+      };
       child.on('exit', () => {
         session.exited = true;
         if (sessions.get(descriptor.accountId) === session) {
@@ -150,17 +169,58 @@ export function createProxyRuntime(deps: ProxyRuntimeDeps): ProxyRuntime {
     }
   }
 
+  function cancelIdle(session: Session): void {
+    session.idle?.cancel();
+    session.idle = undefined;
+  }
+
+  function stopSession(session: Session): void {
+    if (session.exited) {
+      return;
+    }
+    session.exited = true;
+    cancelIdle(session);
+    if (sessions.get(session.accountId) === session) {
+      sessions.delete(session.accountId);
+    }
+    void session.client.close().catch(() => undefined);
+  }
+
+  function armIdle(session: Session): void {
+    cancelIdle(session);
+    const deadline = deps.now() + deps.idleTimeoutMs;
+    session.idle = deps.schedule(() => {
+      if (session.inFlight > 0 || session.exited || deps.now() < deadline) {
+        return;
+      }
+      stopSession(session);
+    }, deps.idleTimeoutMs);
+  }
+
   return {
     async call(descriptor, toolName, toolArguments) {
       const session = await claim(descriptor);
-      const result = await session.client.callTool({
-        name: toolName,
-        arguments: { ...toolArguments },
-      });
-      return { text: readToolText(result) };
+      session.inFlight += 1;
+      cancelIdle(session);
+      try {
+        const result = await session.client.callTool({
+          name: toolName,
+          arguments: { ...toolArguments },
+        });
+        return { text: readToolText(result) };
+      } finally {
+        session.inFlight -= 1;
+        if (session.inFlight === 0 && !session.exited) {
+          armIdle(session);
+        }
+      }
     },
 
     async close() {
+      for (const session of sessions.values()) {
+        cancelIdle(session);
+        session.exited = true;
+      }
       const open = clients.splice(0);
       sessions.clear();
       starting.clear();

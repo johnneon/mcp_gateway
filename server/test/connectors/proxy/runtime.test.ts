@@ -8,8 +8,10 @@ import { z } from 'zod';
 import { buildChildEnv } from '../../../src/connectors/proxy/env.js';
 import {
   createProxyRuntime,
+  PROXY_IDLE_TIMEOUT_MS,
   type ProxyRuntime,
   type ProxyRuntimeDeps,
+  type ProxySchedule,
 } from '../../../src/connectors/proxy/runtime.js';
 
 const require = createRequire(import.meta.url);
@@ -60,10 +62,73 @@ function installedEntryPath(): string {
   return require.resolve('@mcp-gateway/fake-stdio-mcp');
 }
 
-function openRuntime(deps: ProxyRuntimeDeps): ProxyRuntime {
-  const runtime = createProxyRuntime(deps);
+type ManualClock = {
+  now: () => number;
+  schedule: ProxySchedule;
+  advance: (ms: number) => void;
+};
+
+function createManualClock(start = 0): ManualClock {
+  let time = start;
+  const timers: Array<{ due: number; callback: () => void; cancelled: boolean }> = [];
+  return {
+    now: () => time,
+    schedule(callback, delayMs) {
+      const timer = { due: time + delayMs, callback, cancelled: false };
+      timers.push(timer);
+      return {
+        cancel() {
+          timer.cancelled = true;
+        },
+      };
+    },
+    advance(ms) {
+      time += ms;
+      const due = timers.filter((timer) => !timer.cancelled && timer.due <= time);
+      for (const timer of due) {
+        timer.cancelled = true;
+        timer.callback();
+      }
+    },
+  };
+}
+
+function openRuntime(
+  deps: Pick<ProxyRuntimeDeps, 'platform' | 'parentEnv'> & Partial<ProxyRuntimeDeps>,
+): ProxyRuntime {
+  const clock = createManualClock();
+  const runtime = createProxyRuntime({
+    idleTimeoutMs: PROXY_IDLE_TIMEOUT_MS,
+    now: clock.now,
+    schedule: clock.schedule,
+    ...deps,
+  });
   openRuntimes.push(runtime);
   return runtime;
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'EPERM') {
+      return true;
+    }
+    return false;
+  }
+}
+
+async function waitUntilExited(pid: number): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (!isProcessAlive(pid)) {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+  }
+  throw new Error(`Process ${String(pid)} is still running`);
 }
 
 async function makeTempDir(): Promise<string> {
@@ -343,5 +408,52 @@ describe('proxy-runtime: Child environment is built from scratch', () => {
     ]) {
       expect(envHas(report.env, name)).toBe(false);
     }
+  });
+});
+
+describe('proxy-runtime: Idle stop and restart', () => {
+  it('Production idle timeout is 5 minutes', async () => {
+    expect(PROXY_IDLE_TIMEOUT_MS).toBe(300000);
+    const runtimeSource = await readFile(path.join(proxyDir, 'runtime.ts'), 'utf8');
+    const envSource = await readFile(path.join(proxyDir, 'env.ts'), 'utf8');
+    const transportSource = await readFile(path.join(proxyDir, 'transport.ts'), 'utf8');
+    for (const source of [runtimeSource, envSource, transportSource]) {
+      expect(source).not.toMatch(/setTimeout/);
+      expect(source).not.toMatch(/Date\.now/);
+    }
+  });
+
+  it('Injected clock stops the child and the next call starts a new one', async () => {
+    const idleTimeoutMs = 1000;
+    const clock = createManualClock();
+    const dir = await makeTempDir();
+    const countFile = path.join(dir, 'launches.txt');
+    const runtime = openRuntime({
+      platform: 'linux',
+      parentEnv: { PATH: parentEnv.PATH },
+      idleTimeoutMs,
+      now: clock.now,
+      schedule: clock.schedule,
+    });
+    const descriptor = {
+      accountId: 'account-idle',
+      entryPath: installedEntryPath(),
+      args: [countFile],
+      variables: { TOKEN: token },
+    };
+    const first = parseReport((await runtime.call(descriptor, 'report_env', {})).text);
+
+    expect(isProcessAlive(first.pid)).toBe(true);
+    expect(await readLaunchCount(countFile)).toBe(1);
+
+    clock.advance(idleTimeoutMs);
+    await waitUntilExited(first.pid);
+
+    expect(isProcessAlive(first.pid)).toBe(false);
+    expect(await readLaunchCount(countFile)).toBe(1);
+
+    const second = parseReport((await runtime.call(descriptor, 'report_env', {})).text);
+    expect(await readLaunchCount(countFile)).toBe(2);
+    expect(second.pid).not.toBe(first.pid);
   });
 });
