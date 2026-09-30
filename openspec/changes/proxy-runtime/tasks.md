@@ -22,7 +22,7 @@
 
 ## 6. Registry stays unchanged
 
-- [ ] 6.1 Do not change registry build or the production connector list. Cover scenarios `Proxy kind fails registry build and starts no child` and `Production registry includes Gmail and no proxy connector`. Existing Gmail and MCP tool-list tests stay as they are. Check: those new scenarios pass; existing `server` registry, Gmail, and mcp-endpoint tests pass.
+- [x] 6.1 Do not change registry build or the production connector list. Cover scenarios `Proxy kind fails registry build and starts no child` and `Production registry includes Gmail and no proxy connector`. Existing Gmail and MCP tool-list tests stay as they are. Check: those new scenarios pass; existing `server` registry, Gmail, and mcp-endpoint tests pass.
 
 ## 7. Full package check
 
