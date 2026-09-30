@@ -10,6 +10,7 @@ export class ChildPipeTransport implements Transport {
 
   private readonly lines: Interface;
   private finished = false;
+  private stopping: Promise<void> | undefined;
 
   constructor(private readonly child: ChildProcess) {
     const stdout = child.stdout;
@@ -57,10 +58,29 @@ export class ChildPipeTransport implements Transport {
     });
   }
 
-  async close(): Promise<void> {
-    this.lines.close();
-    if (this.child.exitCode === null && this.child.signalCode === null) {
-      this.child.kill();
+  // SIGKILL, not a graceful stdio shutdown: SIGTERM leaves the pid alive on Linux.
+  forceKill(): void {
+    if (this.child.exitCode !== null || this.child.signalCode !== null) {
+      return;
+    }
+    try {
+      this.child.kill('SIGKILL');
+    } catch {
+      // The process exited before the signal was delivered.
+    }
+  }
+
+  close(): Promise<void> {
+    this.stopping ??= this.stopChild();
+    return this.stopping;
+  }
+
+  private async stopChild(): Promise<void> {
+    this.forceKill();
+    try {
+      this.lines.close();
+    } catch {
+      // The pipe may already be closed after the child is killed.
     }
     await waitForExit(this.child);
     this.finish();
@@ -95,8 +115,13 @@ function waitForExit(child: ChildProcess): Promise<void> {
     return Promise.resolve();
   }
   return new Promise((resolve) => {
-    child.once('exit', () => {
+    const onExit = (): void => {
       resolve();
-    });
+    };
+    child.once('exit', onExit);
+    if (child.exitCode !== null || child.signalCode !== null) {
+      child.off('exit', onExit);
+      resolve();
+    }
   });
 }

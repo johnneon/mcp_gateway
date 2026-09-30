@@ -48,6 +48,7 @@ export type ProxyRuntime = {
 type Session = {
   accountId: string;
   client: Client;
+  transport: ChildPipeTransport;
   exited: boolean;
   inFlight: number;
   idle: ProxyScheduleHandle | undefined;
@@ -155,6 +156,7 @@ export function createProxyRuntime(deps: ProxyRuntimeDeps): ProxyRuntime {
       const session: Session = {
         accountId: descriptor.accountId,
         client,
+        transport,
         exited: false,
         inFlight: 0,
         idle: undefined,
@@ -191,6 +193,8 @@ export function createProxyRuntime(deps: ProxyRuntimeDeps): ProxyRuntime {
     if (sessions.get(session.accountId) === session) {
       sessions.delete(session.accountId);
     }
+    session.transport.forceKill();
+    void session.transport.close().catch(() => undefined);
     void session.client.close().catch(() => undefined);
   }
 

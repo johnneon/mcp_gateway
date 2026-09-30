@@ -119,16 +119,19 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
+// The runtime has already killed the child. This only waits to observe that exit.
+// A child that is still alive when the bound passes was never killed, so the test fails.
+// The bound is not the production idle timeout.
 async function waitUntilExited(pid: number): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (!isProcessAlive(pid)) {
-      return;
+  const deadline = Date.now() + 2000;
+  while (isProcessAlive(pid)) {
+    if (Date.now() >= deadline) {
+      throw new Error(`Process ${String(pid)} is still running`);
     }
     await new Promise<void>((resolve) => {
-      setImmediate(resolve);
+      setTimeout(resolve, 10);
     });
   }
-  throw new Error(`Process ${String(pid)} is still running`);
 }
 
 async function makeTempDir(): Promise<string> {
