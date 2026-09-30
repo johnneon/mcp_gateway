@@ -6,7 +6,7 @@
 
 ## 2. Spawn and child environment
 
-- [ ] 2.1 Add `server/src/connectors/proxy/` with `buildChildEnv` and `createProxyRuntime` that spawn `process.execPath` plus the installed entry, pass a complete `env` (no `process.env` spread, no SDK transport that merges the parent environment), and do not read `process.env` or `process.platform`. Tests call the runtime with a descriptor resolved from the installed package. Cover scenarios `Child starts from the installed file`, `Missing entry file does not spawn`, `First call starts one process`, `Non-Windows child receives PATH and mapped variables only`, and `Windows child also receives SYSTEMROOT`. Check: those tests pass; `npm run typecheck -w server` exits 0.
+- [x] 2.1 Add `server/src/connectors/proxy/` with `buildChildEnv` and `createProxyRuntime` that spawn `process.execPath` plus the installed entry, pass a complete `env` (no `process.env` spread, no SDK transport that merges the parent environment), and do not read `process.env` or `process.platform`. Tests call the runtime with a descriptor resolved from the installed package. Cover scenarios `Child starts from the installed file`, `Missing entry file does not spawn`, `First call starts one process`, `Non-Windows child receives PATH and mapped variables only`, and `Windows child also receives SYSTEMROOT`. Check: those tests pass; `npm run typecheck -w server` exits 0.
 
 ## 3. One process per account
 
