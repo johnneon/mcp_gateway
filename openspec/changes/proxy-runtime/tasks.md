@@ -18,7 +18,7 @@
 
 ## 5. Restart after exit
 
-- [ ] 5.1 When the child exits, fail the in-flight call with fixed English text that does not include mapped account values, and start a new child only on the next call. Cover scenarios `Next call after exit starts a new process` and `In-flight call fails without the account secret`. Check: those tests pass.
+- [x] 5.1 When the child exits, fail the in-flight call with fixed English text that does not include mapped account values, and start a new child only on the next call. Cover scenarios `Next call after exit starts a new process` and `In-flight call fails without the account secret`. Check: those tests pass.
 
 ## 6. Registry stays unchanged
 

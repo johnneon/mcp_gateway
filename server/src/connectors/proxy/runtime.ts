@@ -9,6 +9,8 @@ export const MISSING_ENTRY_MESSAGE = 'The proxy server entry file is missing.';
 
 export const PROXY_IDLE_TIMEOUT_MS = 300000;
 
+export const PROXY_STOPPED_MESSAGE = 'The proxy server stopped.';
+
 export type ProxyScheduleHandle = {
   cancel: () => void;
 };
@@ -49,6 +51,7 @@ type Session = {
   exited: boolean;
   inFlight: number;
   idle: ProxyScheduleHandle | undefined;
+  exitWaiters: Array<() => void>;
 };
 
 function isTextBlock(block: unknown): block is { type: 'text'; text: string } {
@@ -155,11 +158,16 @@ export function createProxyRuntime(deps: ProxyRuntimeDeps): ProxyRuntime {
         exited: false,
         inFlight: 0,
         idle: undefined,
+        exitWaiters: [],
       };
       child.on('exit', () => {
         session.exited = true;
         if (sessions.get(descriptor.accountId) === session) {
           sessions.delete(descriptor.accountId);
+        }
+        const waiters = session.exitWaiters.splice(0);
+        for (const waiter of waiters) {
+          waiter();
         }
       });
       sessions.set(descriptor.accountId, session);
@@ -202,13 +210,43 @@ export function createProxyRuntime(deps: ProxyRuntimeDeps): ProxyRuntime {
       const session = await claim(descriptor);
       session.inFlight += 1;
       cancelIdle(session);
+      let settled = false;
+      let stopReject: (error: Error) => void = () => undefined;
+      const fail = (): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        stopReject(new Error(PROXY_STOPPED_MESSAGE));
+      };
+      const stopped = new Promise<never>((_resolve, reject) => {
+        stopReject = reject;
+        if (session.exited) {
+          fail();
+          return;
+        }
+        session.exitWaiters.push(fail);
+      });
       try {
-        const result = await session.client.callTool({
-          name: toolName,
-          arguments: { ...toolArguments },
-        });
+        const result = await Promise.race([
+          session.client.callTool({
+            name: toolName,
+            arguments: { ...toolArguments },
+          }),
+          stopped,
+        ]);
         return { text: readToolText(result) };
+      } catch (error) {
+        if (session.exited) {
+          throw new Error(PROXY_STOPPED_MESSAGE);
+        }
+        throw error;
       } finally {
+        settled = true;
+        const index = session.exitWaiters.indexOf(fail);
+        if (index >= 0) {
+          session.exitWaiters.splice(index, 1);
+        }
         session.inFlight -= 1;
         if (session.inFlight === 0 && !session.exited) {
           armIdle(session);

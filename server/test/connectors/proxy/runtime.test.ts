@@ -457,3 +457,54 @@ describe('proxy-runtime: Idle stop and restart', () => {
     expect(second.pid).not.toBe(first.pid);
   });
 });
+
+describe('proxy-runtime: Restart after the child exits', () => {
+  it('Next call after exit starts a new process', async () => {
+    const dir = await makeTempDir();
+    const countFile = path.join(dir, 'launches.txt');
+    const runtime = openRuntime({ platform: 'linux', parentEnv: { PATH: parentEnv.PATH } });
+    const descriptor = {
+      accountId: 'account-exit',
+      entryPath: installedEntryPath(),
+      args: [countFile],
+      variables: { TOKEN: token },
+    };
+    await runtime.call(descriptor, 'report_env', {});
+    expect(await readLaunchCount(countFile)).toBe(1);
+
+    await expect(runtime.call(descriptor, 'crash', {})).rejects.toThrow(
+      'The proxy server stopped.',
+    );
+    expect(await readLaunchCount(countFile)).toBe(1);
+
+    await runtime.call(descriptor, 'report_env', {});
+    expect(await readLaunchCount(countFile)).toBe(2);
+  });
+
+  it('In-flight call fails without the account secret', async () => {
+    const secret = 'proxy-mapped-secret-VALUE';
+    const dir = await makeTempDir();
+    const countFile = path.join(dir, 'launches.txt');
+    const runtime = openRuntime({ platform: 'linux', parentEnv: { PATH: parentEnv.PATH } });
+    const descriptor = {
+      accountId: 'account-secret',
+      entryPath: installedEntryPath(),
+      args: [countFile],
+      variables: { TOKEN: secret },
+    };
+    await runtime.call(descriptor, 'report_env', {});
+
+    let caught: unknown;
+    try {
+      await runtime.call(descriptor, 'crash', {});
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    const message = caught instanceof Error ? caught.message : String(caught);
+    expect(message).toBe('The proxy server stopped.');
+    expect(message).not.toContain(secret);
+    expect(message).toMatch(/^[A-Za-z][A-Za-z .]*$/);
+  });
+});
