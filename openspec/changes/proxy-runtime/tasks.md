@@ -26,4 +26,4 @@
 
 ## 7. Full package check
 
-- [ ] 7.1 From the repository root, `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, and `npm run build` exit 0. Every scenario in `specs/proxy-runtime/spec.md` has a test whose name includes the requirement and the scenario. Check: every command exits 0.
+- [x] 7.1 From the repository root, `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, and `npm run build` exit 0. Every scenario in `specs/proxy-runtime/spec.md` has a test whose name includes the requirement and the scenario. Check: every command exits 0.
