@@ -10,7 +10,7 @@
 
 ## 3. tools/list from the allowlist
 
-- [ ] 3.1 List proxy tools through the existing `listToolsForConfiguration` path (prefix and injected `account`). `tools/list` must not take or call the proxy runtime. The test connector allowlist is only `echo_args` and `leak_secret`. Cover mcp-endpoint scenarios `Allowlisted tools are listed with prefix and account and list starts no child`, `Tools off the allowlist do not appear`, and `No eligible account hides proxy tools`. Check: those tests pass.
+- [x] 3.1 List proxy tools through the existing `listToolsForConfiguration` path (prefix and injected `account`). `tools/list` must not take or call the proxy runtime. The test connector allowlist is only `echo_args` and `leak_secret`. Cover mcp-endpoint scenarios `Allowlisted tools are listed with prefix and account and list starts no child`, `Tools off the allowlist do not appear`, and `No eligible account hides proxy tools`. Check: those tests pass.
 
 ## 4. tools/call, scrub, and stderr
 
