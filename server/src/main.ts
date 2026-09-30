@@ -1,4 +1,5 @@
 import { writeSync } from 'node:fs';
+import { createProxyRuntime, PROXY_IDLE_TIMEOUT_MS } from './connectors/proxy/runtime.js';
 import { productionConnectorRegistry } from './connectors/registry.js';
 import { MissingEnvError, parseEnv } from './env.js';
 import { createAdminApp } from './http/createAdminApp.js';
@@ -9,6 +10,16 @@ import { open } from './store/store.js';
 function exitWithMessage(message: string): never {
   writeSync(process.stderr.fd, `${message}\n`);
   process.exit(1);
+}
+
+function parentEnvFromProcess(env: NodeJS.ProcessEnv): Record<string, string> {
+  const parent: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value === 'string') {
+      parent[key] = value;
+    }
+  }
+  return parent;
 }
 
 async function start(): Promise<void> {
@@ -32,9 +43,25 @@ async function start(): Promise<void> {
     throw error;
   }
 
+  const proxyRuntime = createProxyRuntime({
+    platform: process.platform,
+    parentEnv: parentEnvFromProcess(process.env),
+    idleTimeoutMs: PROXY_IDLE_TIMEOUT_MS,
+    now: () => Date.now(),
+    schedule: (callback, delayMs) => {
+      const timer = setTimeout(callback, delayMs);
+      return {
+        cancel() {
+          clearTimeout(timer);
+        },
+      };
+    },
+  });
+
   const mcpApp = createMcpApp({
     store,
     connectorRegistry: productionConnectorRegistry,
+    proxyRuntime,
   });
   const adminApp = createAdminApp({
     store,

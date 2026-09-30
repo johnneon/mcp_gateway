@@ -8,6 +8,7 @@ import { createAccountsService } from '../../src/accounts/service.js';
 import type {
   AccountFieldValues,
   ConnectorModule,
+  NativeConnectorModule,
   NativeEgressClient,
 } from '../../src/connectors/contract.js';
 import { buildConnectorRegistry } from '../../src/connectors/registry.js';
@@ -32,8 +33,10 @@ function createMemoryStore(initial: JsonObject = {}): EncryptedStore {
   };
 }
 
-function createFakeConnector(overrides: Partial<ConnectorModule> = {}): ConnectorModule {
-  const base: ConnectorModule = {
+function createFakeConnector(
+  overrides: Partial<NativeConnectorModule> = {},
+): NativeConnectorModule {
+  const base: NativeConnectorModule = {
     id: 'fake',
     name: 'Fake',
     kind: 'native',

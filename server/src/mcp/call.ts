@@ -1,6 +1,7 @@
 import { Ajv, type ValidateFunction } from 'ajv';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import type { NativeToolResult, RegistryTool } from '../connectors/contract.js';
+import type { AccountFieldValues, NativeToolResult, RegistryTool } from '../connectors/contract.js';
+import type { ProxyRuntime } from '../connectors/proxy/runtime.js';
 import {
   CONNECTION_FAILED_MESSAGE,
   createEgressClientForAccount,
@@ -67,8 +68,23 @@ function isEgressNetworkMessage(message: string): boolean {
   return EGRESS_MCP_MESSAGES.has(message);
 }
 
+function proxyVariables(
+  bindings: ReadonlyArray<{ field: string; variable: string }>,
+  values: AccountFieldValues,
+): Record<string, string> {
+  const variables: Record<string, string> = {};
+  for (const binding of bindings) {
+    const value = values[binding.field];
+    if (typeof value === 'string') {
+      variables[binding.variable] = value;
+    }
+  }
+  return variables;
+}
+
 /**
- * Validate, authorize, and invoke a native connector tool for the active configuration.
+ * Validate, authorize, and invoke a connector tool for the active configuration.
+ * Proxy calls use the allowlist schema and the short tool name. They do not build an egress request.
  */
 export async function dispatchToolCall(options: {
   connectorRegistry: ConnectorRegistry;
@@ -77,8 +93,10 @@ export async function dispatchToolCall(options: {
   toolName: string;
   args: Record<string, unknown>;
   egressTransport?: EgressTransport;
+  proxyRuntime?: ProxyRuntime;
 }): Promise<NativeToolResult> {
-  const { connectorRegistry, configuration, store, toolName, args, egressTransport } = options;
+  const { connectorRegistry, configuration, store, toolName, args, egressTransport, proxyRuntime } =
+    options;
 
   const tool: RegistryTool | undefined = connectorRegistry.getTool(toolName);
   if (tool === undefined) {
@@ -116,16 +134,44 @@ export async function dispatchToolCall(options: {
     throw new McpError(ErrorCode.InvalidParams, ACCOUNT_NOT_ALLOWED_MESSAGE);
   }
 
+  const secrets = collectNonEmptySecrets(connector.fields, account.values);
+  const forwarded = stripAccount(args);
+
+  if (tool.kind === 'proxy') {
+    if (connector.kind !== 'proxy' || proxyRuntime === undefined) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        scrubSecretsInText(TOOL_EXECUTION_FAILED_MESSAGE, secrets),
+      );
+    }
+    try {
+      const called = await proxyRuntime.call(
+        {
+          accountId: account.id,
+          entryPath: connector.entryPath,
+          args: connector.args,
+          variables: proxyVariables(connector.env, account.values),
+        },
+        tool.name,
+        forwarded,
+      );
+      return scrubSecretsInToolResult({ content: [{ type: 'text', text: called.text }] }, secrets);
+    } catch {
+      throw new McpError(
+        ErrorCode.InternalError,
+        scrubSecretsInText(TOOL_EXECUTION_FAILED_MESSAGE, secrets),
+      );
+    }
+  }
+
   const egressClient = createEgressClientForAccount({
     destinations: connector.allowedDestinations,
     accountValues: account.values,
     ...(egressTransport !== undefined ? { transport: egressTransport } : {}),
   });
 
-  const secrets = collectNonEmptySecrets(connector.fields, account.values);
-
   try {
-    const result = await tool.handler(stripAccount(args), account.values, egressClient);
+    const result = await tool.handler(forwarded, account.values, egressClient);
     return scrubSecretsInToolResult(result, secrets);
   } catch (error) {
     if (isEgressError(error) && isEgressNetworkMessage(error.message)) {

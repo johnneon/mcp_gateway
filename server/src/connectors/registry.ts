@@ -5,7 +5,10 @@ import type {
   ConnectorModule,
   ConstantAllowedDestination,
   FieldAllowedDestination,
+  NativeConnectorModule,
   NativeConnectorTool,
+  ProxyConnectorModule,
+  ProxyConnectorTool,
   PublicConnector,
   RegistryTool,
   ToolArgumentsSchema,
@@ -137,12 +140,8 @@ function assertValidModule(module: ConnectorModule, seenIds: Set<string>): void 
     throw new ConnectorRegistryError(`Connector "${module.id}" has empty name`);
   }
 
-  // Runtime guard: kind is typed as native|proxy, but reject anything else without a child process.
   const kind: string = module.kind;
-  if (kind === 'proxy') {
-    throw new ConnectorRegistryError(`Connector "${module.id}" kind "proxy" is not registrable`);
-  }
-  if (kind !== 'native') {
+  if (kind !== 'native' && kind !== 'proxy') {
     throw new ConnectorRegistryError(`Connector "${module.id}" has invalid kind`);
   }
 
@@ -172,10 +171,11 @@ function assertValidModule(module: ConnectorModule, seenIds: Set<string>): void 
     throw new ConnectorRegistryError(`Connector "${module.id}" must declare checkConnection`);
   }
 
-  const seenToolNames = new Set<string>();
-  for (const tool of module.tools) {
-    assertValidTool(tool, module.id, seenToolNames);
+  if (module.kind === 'proxy') {
+    assertValidProxyModule(module, fieldsByName);
+    return;
   }
+  assertValidNativeTools(module);
 }
 
 function schemaDeclaresAccount(schema: ToolArgumentsSchema): boolean {
@@ -186,8 +186,8 @@ function schemaDeclaresAccount(schema: ToolArgumentsSchema): boolean {
   return Object.prototype.hasOwnProperty.call(props, 'account');
 }
 
-function assertValidTool(
-  tool: NativeConnectorTool,
+function assertToolIdentity(
+  tool: { name: string; description: string; inputSchema: ToolArgumentsSchema },
   connectorId: string,
   seenNames: Set<string>,
 ): void {
@@ -209,14 +209,114 @@ function assertValidTool(
     );
   }
 
+  const schemaType: string = tool.inputSchema.type;
+  if (schemaType !== 'object') {
+    throw new ConnectorRegistryError(
+      `Connector "${connectorId}" tool "${tool.name}" must declare an object arguments schema`,
+    );
+  }
+
   if (schemaDeclaresAccount(tool.inputSchema)) {
     throw new ConnectorRegistryError(
       `Connector "${connectorId}" tool "${tool.name}" must not declare property "account"`,
     );
   }
+}
+
+function assertValidNativeTools(module: NativeConnectorModule): void {
+  const seenToolNames = new Set<string>();
+  for (const tool of module.tools) {
+    assertValidNativeTool(tool, module.id, seenToolNames);
+  }
+}
+
+function assertValidNativeTool(
+  tool: NativeConnectorTool,
+  connectorId: string,
+  seenNames: Set<string>,
+): void {
+  assertToolIdentity(tool, connectorId, seenNames);
   if (typeof tool.handler !== 'function') {
     throw new ConnectorRegistryError(
       `Connector "${connectorId}" tool "${tool.name}" must declare a handler`,
+    );
+  }
+}
+
+function isUnknownList(value: unknown): value is readonly unknown[] {
+  return Array.isArray(value);
+}
+
+function isStringList(value: unknown): value is readonly string[] {
+  return isUnknownList(value) && value.every((item) => typeof item === 'string');
+}
+
+function readStringProperty(value: unknown, key: string): string {
+  if (typeof value !== 'object' || value === null || !(key in value)) {
+    return '';
+  }
+  const property = (value as Record<string, unknown>)[key];
+  return typeof property === 'string' ? property : '';
+}
+
+function assertValidProxyModule(
+  module: ProxyConnectorModule,
+  fieldsByName: Map<string, AccountField>,
+): void {
+  if (!isNonEmptyString(module.entryPath)) {
+    throw new ConnectorRegistryError(
+      `Connector "${module.id}" must declare a non-empty entry path`,
+    );
+  }
+  const args: unknown = module.args;
+  if (!isStringList(args)) {
+    throw new ConnectorRegistryError(`Connector "${module.id}" has invalid extra arguments`);
+  }
+  const env: unknown = module.env;
+  if (!isUnknownList(env)) {
+    throw new ConnectorRegistryError(`Connector "${module.id}" has invalid env bindings`);
+  }
+  for (const binding of env) {
+    assertValidEnvBinding(binding, module.id, fieldsByName);
+  }
+
+  const seenToolNames = new Set<string>();
+  for (const tool of module.tools) {
+    assertValidProxyTool(tool, module.id, seenToolNames);
+  }
+}
+
+function assertValidEnvBinding(
+  binding: unknown,
+  connectorId: string,
+  fieldsByName: Map<string, AccountField>,
+): void {
+  const fieldName = readStringProperty(binding, 'field');
+  if (!fieldsByName.has(fieldName)) {
+    throw new ConnectorRegistryError(
+      `Connector "${connectorId}" env binding field "${fieldName}" must name a field on the connector`,
+    );
+  }
+  if (!isNonEmptyString(readStringProperty(binding, 'variable'))) {
+    throw new ConnectorRegistryError(
+      `Connector "${connectorId}" env binding has an empty variable name`,
+    );
+  }
+}
+
+function toolDeclaresHandler(tool: object): boolean {
+  return 'handler' in tool && typeof tool.handler === 'function';
+}
+
+function assertValidProxyTool(
+  tool: ProxyConnectorTool,
+  connectorId: string,
+  seenNames: Set<string>,
+): void {
+  assertToolIdentity(tool, connectorId, seenNames);
+  if (toolDeclaresHandler(tool)) {
+    throw new ConnectorRegistryError(
+      `Connector "${connectorId}" tool "${tool.name}" must not declare a handler`,
     );
   }
 }
@@ -235,9 +335,81 @@ function toPublicConnector(module: ConnectorModule): PublicConnector {
   };
 }
 
+function freezeInputSchema(schema: ToolArgumentsSchema): ToolArgumentsSchema {
+  return Object.freeze({
+    ...schema,
+    ...(schema.properties !== undefined
+      ? { properties: Object.freeze({ ...schema.properties }) }
+      : {}),
+    ...(schema.required !== undefined ? { required: Object.freeze([...schema.required]) } : {}),
+  });
+}
+
+function freezeModule(module: ConnectorModule): ConnectorModule {
+  const fields = Object.freeze([...module.fields]);
+  const allowedDestinations = Object.freeze([...module.allowedDestinations]);
+  if (module.kind === 'proxy') {
+    return Object.freeze({
+      ...module,
+      fields,
+      allowedDestinations,
+      args: Object.freeze([...module.args]),
+      env: Object.freeze(module.env.map((binding) => Object.freeze({ ...binding }))),
+      tools: Object.freeze(
+        module.tools.map((tool) =>
+          Object.freeze({
+            name: tool.name,
+            description: tool.description,
+            inputSchema: freezeInputSchema(tool.inputSchema),
+          }),
+        ),
+      ),
+    });
+  }
+  return Object.freeze({
+    ...module,
+    fields,
+    allowedDestinations,
+    tools: Object.freeze(
+      module.tools.map((tool) =>
+        Object.freeze({
+          ...tool,
+          inputSchema: freezeInputSchema(tool.inputSchema),
+        }),
+      ),
+    ),
+  });
+}
+
+function toRegistryTools(module: ConnectorModule): RegistryTool[] {
+  if (module.kind === 'proxy') {
+    return module.tools.map((tool) =>
+      Object.freeze({
+        kind: 'proxy',
+        mcpName: mcpToolName(module.id, tool.name),
+        connectorId: module.id,
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+      }),
+    );
+  }
+  return module.tools.map((tool) =>
+    Object.freeze({
+      kind: 'native',
+      mcpName: mcpToolName(module.id, tool.name),
+      connectorId: module.id,
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+      handler: tool.handler,
+    }),
+  );
+}
+
 /**
  * Validates connector modules and returns an immutable registry.
- * Rejects invalid descriptions and kind `proxy` (no child process path).
+ * Does not read a proxy entry file and does not start a child process.
  */
 export function buildConnectorRegistry(modules: readonly ConnectorModule[]): ConnectorRegistry {
   const seenIds = new Set<string>();
@@ -245,46 +417,9 @@ export function buildConnectorRegistry(modules: readonly ConnectorModule[]): Con
     assertValidModule(module, seenIds);
   }
 
-  const connectors: readonly ConnectorModule[] = Object.freeze(
-    modules.map((module) =>
-      Object.freeze({
-        ...module,
-        fields: Object.freeze([...module.fields]),
-        allowedDestinations: Object.freeze([...module.allowedDestinations]),
-        tools: Object.freeze(
-          module.tools.map((tool) =>
-            Object.freeze({
-              ...tool,
-              inputSchema: Object.freeze({
-                ...tool.inputSchema,
-                ...(tool.inputSchema.properties !== undefined
-                  ? { properties: Object.freeze({ ...tool.inputSchema.properties }) }
-                  : {}),
-                ...(tool.inputSchema.required !== undefined
-                  ? { required: Object.freeze([...tool.inputSchema.required]) }
-                  : {}),
-              }),
-            }),
-          ),
-        ),
-      }),
-    ),
-  );
+  const connectors: readonly ConnectorModule[] = Object.freeze(modules.map(freezeModule));
 
-  const tools: readonly RegistryTool[] = Object.freeze(
-    connectors.flatMap((module) =>
-      module.tools.map((tool) =>
-        Object.freeze({
-          mcpName: mcpToolName(module.id, tool.name),
-          connectorId: module.id,
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.inputSchema,
-          handler: tool.handler,
-        }),
-      ),
-    ),
-  );
+  const tools: readonly RegistryTool[] = Object.freeze(connectors.flatMap(toRegistryTools));
 
   const toolsByMcpName = new Map(tools.map((tool) => [tool.mcpName, tool]));
 

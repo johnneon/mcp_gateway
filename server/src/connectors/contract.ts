@@ -91,24 +91,58 @@ export type NativeConnectorTool = {
   handler: NativeToolHandler;
 };
 
-export type ConnectorModule = {
+export type ProxyConnectorTool = {
+  name: string;
+  description: string;
+  inputSchema: ToolArgumentsSchema;
+};
+
+export type ProxyEnvBinding = {
+  field: string;
+  variable: string;
+};
+
+type ConnectorModuleBase = {
   id: string;
   name: string;
-  kind: ConnectorKind;
   fields: readonly AccountField[];
   allowedDestinations: readonly AllowedDestination[];
   checkConnection: CheckConnection;
+};
+
+export type NativeConnectorModule = ConnectorModuleBase & {
+  kind: 'native';
   tools: readonly NativeConnectorTool[];
 };
 
-export type RegistryTool = {
+export type ProxyConnectorModule = ConnectorModuleBase & {
+  kind: 'proxy';
+  tools: readonly ProxyConnectorTool[];
+  entryPath: string;
+  args: readonly string[];
+  env: readonly ProxyEnvBinding[];
+};
+
+export type ConnectorModule = NativeConnectorModule | ProxyConnectorModule;
+
+type RegistryToolBase = {
   mcpName: string;
   connectorId: string;
   name: string;
   description: string;
   inputSchema: ToolArgumentsSchema;
+};
+
+export type NativeRegistryTool = RegistryToolBase & {
+  kind: 'native';
   handler: NativeToolHandler;
 };
+
+export type ProxyRegistryTool = RegistryToolBase & {
+  kind: 'proxy';
+};
+
+export type RegistryTool = NativeRegistryTool | ProxyRegistryTool;
 
 export type PublicConnectorField = {
   name: string;

@@ -1,6 +1,6 @@
 import type {
   AccountFieldValues,
-  ConnectorModule,
+  NativeConnectorModule,
   NativeEgressClient,
   NativeToolHandler,
   NativeToolResult,
@@ -159,7 +159,7 @@ const readMessage: NativeToolHandler = async (args, accountValues, egressClient)
 /**
  * Native Gmail connector: app-password IMAP/SMTP over egress TLS sessions.
  */
-export const gmailConnector: ConnectorModule = {
+export const gmailConnector: NativeConnectorModule = {
   id: 'gmail',
   name: 'Gmail',
   kind: 'native',
