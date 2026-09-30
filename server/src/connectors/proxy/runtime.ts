@@ -32,9 +32,10 @@ export type ProxyRuntime = {
   close(): Promise<void>;
 };
 
-type LiveChild = {
+type Session = {
   accountId: string;
   client: Client;
+  exited: boolean;
 };
 
 function isTextBlock(block: unknown): block is { type: 'text'; text: string } {
@@ -84,10 +85,26 @@ function waitForSpawn(child: ChildProcess): Promise<void> {
 }
 
 export function createProxyRuntime(deps: ProxyRuntimeDeps): ProxyRuntime {
-  const lives: LiveChild[] = [];
+  const sessions = new Map<string, Session>();
+  const starting = new Map<string, Promise<Session>>();
+  const clients: Client[] = [];
 
-  return {
-    async call(descriptor, toolName, toolArguments) {
+  function claim(descriptor: ProxyDescriptor): Promise<Session> {
+    const existing = sessions.get(descriptor.accountId);
+    if (existing !== undefined && !existing.exited) {
+      return Promise.resolve(existing);
+    }
+    const inflight = starting.get(descriptor.accountId);
+    if (inflight !== undefined) {
+      return inflight;
+    }
+    const pending = launch(descriptor);
+    starting.set(descriptor.accountId, pending);
+    return pending;
+  }
+
+  async function launch(descriptor: ProxyDescriptor): Promise<Session> {
+    try {
       if (!(await entryFileExists(descriptor.entryPath))) {
         throw new Error(MISSING_ENTRY_MESSAGE);
       }
@@ -110,6 +127,7 @@ export function createProxyRuntime(deps: ProxyRuntimeDeps): ProxyRuntime {
 
       const transport = new ChildPipeTransport(child);
       const client = new Client({ name: 'mcp-gateway-proxy', version: '1.0.0' });
+      clients.push(client);
       try {
         await waitForSpawn(child);
         await client.connect(transport);
@@ -118,8 +136,24 @@ export function createProxyRuntime(deps: ProxyRuntimeDeps): ProxyRuntime {
         throw error;
       }
 
-      lives.push({ accountId: descriptor.accountId, client });
-      const result = await client.callTool({
+      const session: Session = { accountId: descriptor.accountId, client, exited: false };
+      child.on('exit', () => {
+        session.exited = true;
+        if (sessions.get(descriptor.accountId) === session) {
+          sessions.delete(descriptor.accountId);
+        }
+      });
+      sessions.set(descriptor.accountId, session);
+      return session;
+    } finally {
+      starting.delete(descriptor.accountId);
+    }
+  }
+
+  return {
+    async call(descriptor, toolName, toolArguments) {
+      const session = await claim(descriptor);
+      const result = await session.client.callTool({
         name: toolName,
         arguments: { ...toolArguments },
       });
@@ -127,9 +161,11 @@ export function createProxyRuntime(deps: ProxyRuntimeDeps): ProxyRuntime {
     },
 
     async close() {
-      const open = lives.splice(0);
-      for (const live of open) {
-        await live.client.close();
+      const open = clients.splice(0);
+      sessions.clear();
+      starting.clear();
+      for (const client of open) {
+        await client.close();
       }
     },
   };

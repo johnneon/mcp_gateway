@@ -10,7 +10,7 @@
 
 ## 3. One process per account
 
-- [ ] 3.1 Reuse a live child for the same account, keep a separate child per account id, and share one in-flight start when two calls overlap. Cover scenarios `Second call reuses the running child`, `Two accounts get two processes`, and `Overlapping calls share one process`. Check: those tests pass.
+- [x] 3.1 Reuse a live child for the same account, keep a separate child per account id, and share one in-flight start when two calls overlap. Cover scenarios `Second call reuses the running child`, `Two accounts get two processes`, and `Overlapping calls share one process`. Check: those tests pass.
 
 ## 4. Idle stop
 

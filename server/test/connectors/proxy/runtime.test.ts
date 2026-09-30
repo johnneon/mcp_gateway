@@ -171,6 +171,86 @@ describe('proxy-runtime: One child process per account', () => {
     expect(report.env.PATH).toBe(parentEnv.PATH);
     expect(report.env.TOKEN).toBe(token);
   });
+
+  it('Second call reuses the running child', async () => {
+    const dir = await makeTempDir();
+    const countFile = path.join(dir, 'launches.txt');
+    const runtime = openRuntime({ platform: 'linux', parentEnv: { PATH: parentEnv.PATH } });
+    const descriptor = {
+      accountId: 'account-reuse',
+      entryPath: installedEntryPath(),
+      args: [countFile],
+      variables: { TOKEN: token },
+    };
+    const first = parseReport((await runtime.call(descriptor, 'report_env', {})).text);
+    const second = parseReport((await runtime.call(descriptor, 'report_env', {})).text);
+
+    expect(await readLaunchCount(countFile)).toBe(1);
+    expect(second.pid).toBe(first.pid);
+  });
+
+  it('Two accounts get two processes', async () => {
+    const dir = await makeTempDir();
+    const countFile = path.join(dir, 'launches.txt');
+    const runtime = openRuntime({ platform: 'linux', parentEnv: { PATH: parentEnv.PATH } });
+    const entryPath = installedEntryPath();
+    const alpha = parseReport(
+      (
+        await runtime.call(
+          {
+            accountId: 'account-alpha',
+            entryPath,
+            args: [countFile],
+            variables: { TOKEN: 'alpha-token' },
+          },
+          'report_env',
+          {},
+        )
+      ).text,
+    );
+    const beta = parseReport(
+      (
+        await runtime.call(
+          {
+            accountId: 'account-beta',
+            entryPath,
+            args: [countFile],
+            variables: { TOKEN: 'beta-token' },
+          },
+          'report_env',
+          {},
+        )
+      ).text,
+    );
+
+    expect(await readLaunchCount(countFile)).toBe(2);
+    expect(alpha.env.TOKEN).toBe('alpha-token');
+    expect(beta.env.TOKEN).toBe('beta-token');
+    expect(JSON.stringify(alpha.env)).not.toContain('beta-token');
+    expect(JSON.stringify(beta.env)).not.toContain('alpha-token');
+    expect(alpha.pid).not.toBe(beta.pid);
+  });
+
+  it('Overlapping calls share one process', async () => {
+    const dir = await makeTempDir();
+    const countFile = path.join(dir, 'launches.txt');
+    const runtime = openRuntime({ platform: 'linux', parentEnv: { PATH: parentEnv.PATH } });
+    const descriptor = {
+      accountId: 'account-overlap',
+      entryPath: installedEntryPath(),
+      args: [countFile],
+      variables: { TOKEN: token },
+    };
+    const [firstResult, secondResult] = await Promise.all([
+      runtime.call(descriptor, 'report_env', {}),
+      runtime.call(descriptor, 'report_env', {}),
+    ]);
+    const first = parseReport(firstResult.text);
+    const second = parseReport(secondResult.text);
+
+    expect(await readLaunchCount(countFile)).toBe(1);
+    expect(second.pid).toBe(first.pid);
+  });
 });
 
 describe('proxy-runtime: Child environment is built from scratch', () => {
