@@ -19,6 +19,7 @@ import {
   eligibleAccountsForConnector,
   type EligibleAccount,
 } from './tools.js';
+import { ToolFailure } from '../connectors/tool-failure.js';
 import { collectNonEmptySecrets, scrubSecretsInText, scrubSecretsInToolResult } from './scrub.js';
 
 export const TOOL_EXECUTION_FAILED_MESSAGE = 'Tool execution failed';
@@ -178,6 +179,9 @@ export async function dispatchToolCall(options: {
       throw new McpError(ErrorCode.InternalError, scrubSecretsInText(error.message, secrets));
     }
     if (error instanceof Error && isEgressNetworkMessage(error.message)) {
+      throw new McpError(ErrorCode.InternalError, scrubSecretsInText(error.message, secrets));
+    }
+    if (error instanceof ToolFailure) {
       throw new McpError(ErrorCode.InternalError, scrubSecretsInText(error.message, secrets));
     }
     throw new McpError(

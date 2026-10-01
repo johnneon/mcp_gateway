@@ -1,4 +1,5 @@
 import type { Duplex } from 'node:stream';
+import { ToolFailure } from '../tool-failure.js';
 import { DuplexLineSession } from './duplex-lines.js';
 import {
   ATTACHMENT_INDEX_REQUIRED_MESSAGE,
@@ -47,11 +48,11 @@ function quoteAtom(value: string): string {
  */
 export function buildImapSearchCriteria(filter: unknown): string {
   if (typeof filter !== 'object' || filter === null || Array.isArray(filter)) {
-    throw new Error(INVALID_SEARCH_FILTER_MESSAGE);
+    throw new ToolFailure(INVALID_SEARCH_FILTER_MESSAGE);
   }
   for (const key of Object.keys(filter)) {
     if (!ALLOWED_FILTER_KEYS.has(key)) {
-      throw new Error(INVALID_SEARCH_FILTER_MESSAGE);
+      throw new ToolFailure(INVALID_SEARCH_FILTER_MESSAGE);
     }
   }
 
@@ -80,7 +81,7 @@ export function buildImapSearchCriteria(filter: unknown): string {
  */
 export function assertNotFreeFormSearch(value: unknown): void {
   if (typeof value === 'string') {
-    throw new Error(INVALID_SEARCH_FILTER_MESSAGE);
+    throw new ToolFailure(INVALID_SEARCH_FILTER_MESSAGE);
   }
 }
 
@@ -93,7 +94,7 @@ function resolveMessageOrder(order: unknown): MessageOrder {
   if (order === 'newest' || order === 'oldest') {
     return order;
   }
-  throw new Error(INVALID_ORDER_MESSAGE);
+  throw new ToolFailure(INVALID_ORDER_MESSAGE);
 }
 
 function resolveOffset(offset: unknown): number {
@@ -323,14 +324,14 @@ export function extractTextBody(rawBody: string): { textBody: string; attachment
 
 function requireUid(uid: unknown): number {
   if (typeof uid !== 'number' || !Number.isInteger(uid) || uid < 1) {
-    throw new Error(UID_REQUIRED_MESSAGE);
+    throw new ToolFailure(UID_REQUIRED_MESSAGE);
   }
   return uid;
 }
 
 function requireAttachmentIndex(index: unknown): number {
   if (typeof index !== 'number' || !Number.isInteger(index) || index < 0) {
-    throw new Error(ATTACHMENT_INDEX_REQUIRED_MESSAGE);
+    throw new ToolFailure(ATTACHMENT_INDEX_REQUIRED_MESSAGE);
   }
   return index;
 }
@@ -493,7 +494,7 @@ export function createImapClient(duplex: Duplex): ImapClient {
           return { fetches, listed };
         }
         if (line.startsWith(`${tag} NO`) || line.startsWith(`${tag} BAD`)) {
-          throw new Error(line.slice(tag.length + 1));
+          throw new ToolFailure(line.slice(tag.length + 1));
         }
         throw new Error(line);
       }
@@ -534,7 +535,7 @@ export function createImapClient(duplex: Duplex): ImapClient {
     );
     const fetch = fetches[0];
     if (fetch === undefined) {
-      throw new Error(MESSAGE_NOT_FOUND_MESSAGE);
+      throw new ToolFailure(MESSAGE_NOT_FOUND_MESSAGE);
     }
     const headerSection = fetch.sections.find((section) =>
       section.name.startsWith('BODY[HEADER.FIELDS'),
@@ -559,7 +560,7 @@ export function createImapClient(duplex: Duplex): ImapClient {
 
   async function createMailbox(name: string): Promise<{ name: string }> {
     if (isBlankMailboxName(name)) {
-      throw new Error(MAILBOX_NAME_REQUIRED_MESSAGE);
+      throw new ToolFailure(MAILBOX_NAME_REQUIRED_MESSAGE);
     }
     await runTagged(`CREATE ${quoteAtom(name)}`);
     return { name };
@@ -570,15 +571,15 @@ export function createImapClient(duplex: Duplex): ImapClient {
     newName: string,
   ): Promise<{ name: string; newName: string }> {
     if (isBlankMailboxName(name) || isBlankMailboxName(newName)) {
-      throw new Error(MAILBOX_NAME_REQUIRED_MESSAGE);
+      throw new ToolFailure(MAILBOX_NAME_REQUIRED_MESSAGE);
     }
     if (isInboxMailboxName(name)) {
-      throw new Error(INBOX_CANNOT_BE_RENAMED_MESSAGE);
+      throw new ToolFailure(INBOX_CANNOT_BE_RENAMED_MESSAGE);
     }
     const listed = await listMailboxes();
     const source = listed.find((mailbox) => mailbox.name === name);
     if (source?.specialUse === 'inbox') {
-      throw new Error(INBOX_CANNOT_BE_RENAMED_MESSAGE);
+      throw new ToolFailure(INBOX_CANNOT_BE_RENAMED_MESSAGE);
     }
     await runTagged(`RENAME ${quoteAtom(name)} ${quoteAtom(newName)}`);
     return { name, newName };
@@ -586,15 +587,15 @@ export function createImapClient(duplex: Duplex): ImapClient {
 
   async function deleteMailbox(name: string): Promise<{ name: string }> {
     if (isBlankMailboxName(name)) {
-      throw new Error(MAILBOX_NAME_REQUIRED_MESSAGE);
+      throw new ToolFailure(MAILBOX_NAME_REQUIRED_MESSAGE);
     }
     if (isInboxMailboxName(name)) {
-      throw new Error(INBOX_CANNOT_BE_DELETED_MESSAGE);
+      throw new ToolFailure(INBOX_CANNOT_BE_DELETED_MESSAGE);
     }
     const listed = await listMailboxes();
     const source = listed.find((mailbox) => mailbox.name === name);
     if (source?.specialUse === 'inbox') {
-      throw new Error(INBOX_CANNOT_BE_DELETED_MESSAGE);
+      throw new ToolFailure(INBOX_CANNOT_BE_DELETED_MESSAGE);
     }
     await runTagged(`DELETE ${quoteAtom(name)}`);
     return { name };
@@ -612,14 +613,14 @@ export function createImapClient(duplex: Duplex): ImapClient {
   async function requirePresent(uid: number): Promise<void> {
     const uids = await uidsInSelected();
     if (!uids.includes(uid)) {
-      throw new Error(MESSAGE_NOT_FOUND_MESSAGE);
+      throw new ToolFailure(MESSAGE_NOT_FOUND_MESSAGE);
     }
   }
 
   async function requireDestination(name: string): Promise<void> {
     const listed = await listMailboxes();
     if (!listed.some((mailbox) => mailbox.name === name)) {
-      throw new Error(DESTINATION_MAILBOX_DOES_NOT_EXIST_MESSAGE);
+      throw new ToolFailure(DESTINATION_MAILBOX_DOES_NOT_EXIST_MESSAGE);
     }
   }
 
@@ -658,7 +659,7 @@ export function createImapClient(duplex: Duplex): ImapClient {
     requireUid(uid);
     const trash = await trashMailbox();
     if (trash === undefined) {
-      throw new Error(TRASH_MAILBOX_IS_NOT_AVAILABLE_MESSAGE);
+      throw new ToolFailure(TRASH_MAILBOX_IS_NOT_AVAILABLE_MESSAGE);
     }
     return moveMessage(uid, source, trash.name);
   }
@@ -667,13 +668,13 @@ export function createImapClient(duplex: Duplex): ImapClient {
     requireUid(uid);
     const trash = await trashMailbox();
     if (trash === undefined) {
-      throw new Error(TRASH_MAILBOX_IS_NOT_AVAILABLE_MESSAGE);
+      throw new ToolFailure(TRASH_MAILBOX_IS_NOT_AVAILABLE_MESSAGE);
     }
     const target =
       destination === undefined || destination.trim().length === 0 ? 'INBOX' : destination;
     const listed = await listMailboxes();
     if (!listed.some((mailbox) => mailbox.name === target)) {
-      throw new Error(DESTINATION_MAILBOX_DOES_NOT_EXIST_MESSAGE);
+      throw new ToolFailure(DESTINATION_MAILBOX_DOES_NOT_EXIST_MESSAGE);
     }
     return moveMessage(uid, trash.name, target);
   }
@@ -682,7 +683,7 @@ export function createImapClient(duplex: Duplex): ImapClient {
     const { fetches } = await runTagged(`UID FETCH ${String(uid)} (FLAGS)`);
     const fetch = fetches[0];
     if (fetch === undefined) {
-      throw new Error(MESSAGE_NOT_FOUND_MESSAGE);
+      throw new ToolFailure(MESSAGE_NOT_FOUND_MESSAGE);
     }
     return {
       seen: hasImapFlag(fetch.flags, 'Seen'),
@@ -699,7 +700,7 @@ export function createImapClient(duplex: Duplex): ImapClient {
     const seen = flags.seen;
     const flagged = flags.flagged;
     if (typeof seen !== 'boolean' && typeof flagged !== 'boolean') {
-      throw new Error(FLAG_IS_REQUIRED_MESSAGE);
+      throw new ToolFailure(FLAG_IS_REQUIRED_MESSAGE);
     }
     await selectMailbox(mailbox);
     await requirePresent(parsedUid);
@@ -720,7 +721,7 @@ export function createImapClient(duplex: Duplex): ImapClient {
       try {
         await runTagged(`LOGIN ${quoteAtom(user)} ${quoteAtom(password)}`);
       } catch {
-        throw new Error(IMAP_LOGIN_FAILED_MESSAGE);
+        throw new ToolFailure(IMAP_LOGIN_FAILED_MESSAGE);
       }
     },
 
@@ -796,7 +797,7 @@ export function createImapClient(duplex: Duplex): ImapClient {
       const loaded = await loadParsed(parsedUid);
       const part = loaded.attachments.find((entry) => entry.index === parsedIndex);
       if (part === undefined) {
-        throw new Error(ATTACHMENT_NOT_FOUND_MESSAGE);
+        throw new ToolFailure(ATTACHMENT_NOT_FOUND_MESSAGE);
       }
       return {
         index: part.index,
