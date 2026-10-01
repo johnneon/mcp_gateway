@@ -1579,4 +1579,97 @@ describe('connector-mail-ru: Password never appears in Mail.ru tool or admin sur
       await client.close();
     }
   });
+
+  it('Fixture password absent from move_message failure', async () => {
+    await withMailruMcpClient(
+      [note(7, 'Stay')],
+      async (client) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'mailru_move_message',
+            arguments: { account: ACCOUNT_ID, uid: 7, destination: 'Archive' },
+          }),
+        );
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        expect(await listMessageText(client)).toContain('"uid":7');
+      },
+      { mailboxes: archiveMailbox, moveNo: FIXTURE_PASSWORD },
+    );
+  });
+
+  it('Fixture password absent from copy_message failure', async () => {
+    await withMailruMcpClient(
+      [note(7, 'Copy me')],
+      async (client) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'mailru_copy_message',
+            arguments: { account: ACCOUNT_ID, uid: 7, destination: 'Archive' },
+          }),
+        );
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        expect(await listMessageText(client)).toContain('"uid":7');
+        expect(await listMessageText(client, 'Archive')).not.toContain('Copy me');
+      },
+      { mailboxes: archiveMailbox, copyNo: FIXTURE_PASSWORD },
+    );
+  });
+
+  it('Fixture password absent from update_flags failure', async () => {
+    await withMailruMcpClient(
+      [{ ...note(7, 'plain'), seen: false, flagged: false }],
+      async (client, egress) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'mailru_update_flags',
+            arguments: { account: ACCOUNT_ID, uid: 7, seen: true },
+          }),
+        );
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        expect(egress.messageFlags('INBOX', 7)).toEqual({ seen: false, flagged: false });
+        const listed = await listMessageText(client);
+        expect(inboxSummary(listed, 7)).toMatchObject({ seen: false, unread: true });
+      },
+      { storeNo: FIXTURE_PASSWORD },
+    );
+  });
+
+  it('Fixture password absent from delete_mailbox failure', async () => {
+    await withMailruMcpClient(
+      [],
+      async (client) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'mailru_delete_mailbox',
+            arguments: { account: ACCOUNT_ID, name: 'Projects' },
+          }),
+        );
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        const names = parseMailboxes(await listMailboxText(client)).map((mailbox) => mailbox.name);
+        expect(names).toContain('Projects');
+      },
+      {
+        mailboxes: [{ name: 'Projects', attributes: [], messages: [] }],
+        deleteNo: FIXTURE_PASSWORD,
+      },
+    );
+  });
+
+  it('Fixture password absent from get_attachment failure', async () => {
+    await withMailruMcpClient(
+      [attachedMessage(42)],
+      async (client) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'mailru_get_attachment',
+            arguments: { account: ACCOUNT_ID, uid: 42, index: 0 },
+          }),
+        );
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        expect(message).not.toContain('ZmlsZS1ieXRlcw==');
+        expect(message).not.toContain('"data"');
+      },
+      { attachmentNo: FIXTURE_PASSWORD },
+    );
+  });
 });
