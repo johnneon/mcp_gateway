@@ -11,6 +11,7 @@ import {
   ATTACHMENT_INDEX_REQUIRED_MESSAGE,
   createImapClient,
   createSmtpClient,
+  FLAG_IS_REQUIRED_MESSAGE,
   INVALID_ORDER_MESSAGE,
   UID_REQUIRED_MESSAGE,
   INVALID_SEARCH_FILTER_MESSAGE,
@@ -187,6 +188,21 @@ const readMessage: NativeToolHandler = async (args, accountValues, egressClient)
   });
 };
 
+const updateFlags: NativeToolHandler = async (args, accountValues, egressClient) => {
+  assertUid(args.uid);
+  if (typeof args.seen !== 'boolean' && typeof args.flagged !== 'boolean') {
+    throw new ToolFailure(FLAG_IS_REQUIRED_MESSAGE);
+  }
+  const mailbox = readMailbox(args);
+  return await withImapSession(accountValues, egressClient, mailbox, async (imap) => {
+    const state = await imap.updateFlags(args.uid, mailbox, {
+      seen: args.seen,
+      flagged: args.flagged,
+    });
+    return jsonResult(state);
+  });
+};
+
 const getAttachment: NativeToolHandler = async (args, accountValues, egressClient) => {
   assertUid(args.uid);
   assertAttachmentIndex(args.index);
@@ -317,6 +333,23 @@ export const mailruConnector: NativeConnectorModule = {
         additionalProperties: false,
       },
       handler: getAttachment,
+    },
+    {
+      name: 'update_flags',
+      description:
+        'Set or clear the seen and flagged flags on one message. Omitted flags stay unchanged. Does not return a body.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          mailbox: { type: 'string', description: 'Mailbox name; defaults to INBOX' },
+          uid: { type: 'number', description: 'IMAP UID of the message' },
+          seen: { type: 'boolean', description: 'True adds Seen, false removes it' },
+          flagged: { type: 'boolean', description: 'True adds Flagged, false removes it' },
+        },
+        required: ['uid'],
+        additionalProperties: false,
+      },
+      handler: updateFlags,
     },
   ],
 };
