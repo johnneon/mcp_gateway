@@ -40,4 +40,4 @@
 
 ## 4. Full package check
 
-- [ ] 4.1 From the repository root, `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, and `npm run build` exit 0. Every scenario name in the `connector-gmail` and `connector-mail-ru` deltas appears in a Vitest test name. No test contacts a live mailbox. No new explicit `any`. No second IMAP stack.
+- [x] 4.1 From the repository root, `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, and `npm run build` exit 0. Every scenario name in the `connector-gmail` and `connector-mail-ru` deltas appears in a Vitest test name. No test contacts a live mailbox. No new explicit `any`. No second IMAP stack.
