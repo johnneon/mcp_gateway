@@ -2,23 +2,28 @@
 
 ## Context
 
-See `proposal.md` — Why. On `main` today: `Dockerfile` runs one process (`node server/dist/main.js`) and listens on `3100` and `3200`; `docker-compose.yml` builds that file locally as image `mcp-gateway`; `.github/workflows/ci.yml` runs checks on `pull_request` into `main` and does not push an image. Capability `pull-request-checks` covers that checks workflow only. This machine has no Docker. The image name, tags, platform, public package, and push-to-`main` trigger are already decided.
+See `proposal.md` — Why. On `main` today: `Dockerfile` runs one process (`node server/dist/main.js`) and listens on `3100` and `3200`; `docker-compose.yml` builds that file locally as image `mcp-gateway`; `.github/workflows/ci.yml` runs checks on `pull_request` into `main` and does not push an image. Capability `pull-request-checks` covers that checks workflow only. Root `package.json` has no `version` field. `server/package.json` and `web/package.json` have none. `packages/fake-stdio-mcp/package.json` already has `version` `1.0.0` and is not the image version. This machine has no Docker. The image name, tags (`latest`, 7-character SHA, exact root package version), platform, public package, push-to-`main` trigger, and the finish-time version bump are already decided.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
 - One new workflow file publishes on every push to `main`.
-- Tags `latest` and a fixed 7-character SHA. Platform `linux/amd64` only.
+- Tags `latest`, a fixed 7-character SHA, and the exact root `package.json` `version` (MAJOR.MINOR.PATCH, digits only). Platform `linux/amd64` only.
+- The job fails when that field is missing or is not exactly three numeric components, and it does not invent a tag.
 - `GITHUB_TOKEN` with `contents: read` and `packages: write`. No other token.
 - After the push, the user-owned package `mcp_gateway` becomes public, and a later run still succeeds.
-- README documents anonymous pull and run. Compose still builds locally.
-- Vitest reads the YAML and the README. No GHCR call, no `docker` CLI.
+- README documents anonymous pull and run, including the semver tag next to `latest` and the short SHA. Compose still builds locally.
+- Finish, after the archive commit and before push, writes the root version in one `chore` commit. This change's finish sets `0.1.0` because the field is absent. The commits skill, `docs/workflow.md`, and `.cursor/agents/developer.md` state the same rule.
+- Vitest reads the YAML, the README, and those three files. No GHCR call, no `docker` CLI.
 
 **Non-Goals:**
 
 - Editing `.github/workflows/ci.yml`, the Dockerfile, or `docker-compose.yml`.
-- Multi-arch, semver tags, tag-push or `workflow_dispatch` publishes, another registry.
+- Multi-arch, floating MAJOR or MAJOR.MINOR tags, a `v` prefix, prerelease, build metadata, git tags, tag-push or `workflow_dispatch` publishes, another registry.
+- Writing `version` during propose or apply, or adding `version` to `server/package.json` or `web/package.json`.
+- Editing `packages/fake-stdio-mcp/package.json`.
+- Editing generated `openspec-*` skills, or adding a skill file.
 - Attestations that need `id-token: write`.
 
 ## Decisions
@@ -45,7 +50,7 @@ permissions:
   packages: write
 ```
 
-- Checkout with `actions/checkout@v7`, matching `ci.yml`. Default fetch depth is enough: the short tag comes from `GITHUB_SHA`, not from git history.
+- Checkout with `actions/checkout@v7`, matching `ci.yml`. Default fetch depth is enough: the short tag comes from `GITHUB_SHA`, not from git history. The version comes from the checked-out root `package.json`, which is the commit being built.
 
 **Alternative:** add a publish job to `ci.yml` — rejected. That file is the pull-request checks contract. A pull request must not push.
 
@@ -53,11 +58,13 @@ permissions:
 
 - Login: `docker/login-action` at the current v3 major, registry `ghcr.io`, username `${{ github.repository_owner }}`, password `${{ secrets.GITHUB_TOKEN }}`.
 - Build: `docker/setup-buildx-action` and `docker/build-push-action` at their current majors (v3 and v6 as of this proposal). Do not add `docker/setup-qemu-action`. The runner is already amd64.
+- Node 22 before the version step: `actions/setup-node@v7` with `node-version: '22'`, matching `ci.yml`, so the read does not depend on whatever Node the runner image happens to ship.
 - Inputs that the spec checks: `push: true`, `platforms: linux/amd64`, `file: Dockerfile`, `context: .`, tags:
 
 ```text
 ghcr.io/johnneon/mcp_gateway:latest
 ghcr.io/johnneon/mcp_gateway:${{ steps.image.outputs.short_sha }}
+ghcr.io/johnneon/mcp_gateway:${{ steps.version.outputs.version }}
 ```
 
 - Short SHA, fixed length 7, from the Actions environment (always 40 hex characters):
@@ -73,7 +80,7 @@ ghcr.io/johnneon/mcp_gateway:${{ steps.image.outputs.short_sha }}
 - `provenance: false` and `sbom: false` so the job does not request `id-token: write`.
 - Label `org.opencontainers.image.source=https://github.com/${{ github.repository }}` so the package links to this repository. Linking inherits repository access; it does not set visibility. The package is still private on first create.
 
-**Alternative:** `docker/metadata-action` for tags — rejected. It exists to emit semver and floating tags this change does not want.
+**Alternative:** `docker/metadata-action` for tags — rejected. It also emits floating major and minor tags, which stay non-goals. The job reads the root `package.json` itself and pushes that one exact version tag.
 
 ### 3. Make the package public, and allow a repeat
 
@@ -99,7 +106,7 @@ Under the existing "Run in a container" section, add a published-image subsectio
 Document:
 
 - No registry login. `docker pull ghcr.io/johnneon/mcp_gateway:latest`.
-- The other tag is `ghcr.io/johnneon/mcp_gateway:` plus the 7-character commit SHA.
+- The other tags are `ghcr.io/johnneon/mcp_gateway:` plus the 7-character commit SHA, and `ghcr.io/johnneon/mcp_gateway:` plus the root `package.json` version (example shape `0.1.0`). Name the semver tag next to `latest` and the short SHA. No `v` prefix. Do not document a tag that is only MAJOR or only MAJOR.MINOR.
 - `docker run` passes only `ENCRYPTION_KEY`. The image already sets `MCP_HOST`, `MCP_PORT`, `ADMIN_HOST`, `ADMIN_PORT`, and `DATA_DIR`. Do not tell the operator to pass the host `.env` from the non-container "Run" section: that file binds different hosts and ports.
 - Ports: `-p 3100:3100` and `-p 127.0.0.1:3200:3200`. Volume: a named volume mounted at `/data` (the same role as Compose's `gateway-data`).
 - Admin stays on loopback. MCP health is `GET http://127.0.0.1:3100/health`. The UI is `http://127.0.0.1:3200`.
@@ -108,7 +115,7 @@ Document:
 
 New Vitest file `server/test/ci/publish-image.test.ts`. Reuse the `yaml` parser style from `server/test/ci/workflow.test.ts`. Do not change that file's parser so it still requires a `pull_request` trigger; the publish file has no such trigger.
 
-One test per delta scenario. The test name includes the requirement name and the scenario name, as the `tests` skill requires. Assertions read the workflow YAML and `README.md`. They do not spawn `docker` and do not call `gh` or GHCR.
+One test per delta scenario. The test name includes the requirement name and the scenario name, as the `tests` skill requires. Assertions read the workflow YAML, `README.md`, and the three instruction files. They do not spawn `docker` and do not call `gh` or GHCR. They do not assert that root `package.json` already contains `0.1.0`: apply does not write that field, and finish writes it after verification.
 
 The visibility scenario asserts, from the step script text, that:
 
@@ -117,9 +124,73 @@ The visibility scenario asserts, from the step script text, that:
 - when visibility is already `public` the script takes a path that `exit 0`;
 - the script does not request visibility `private`.
 
+The version scenarios assert, from the workflow file, that:
+
+- the tags are `latest`, the fixed 7-character SHA, and `steps.version.outputs.version`;
+- there is no floating MAJOR or MAJOR.MINOR tag and no `v` prefix on the version tag;
+- a step reads the root `package.json` `version` before the image push;
+- that step fails when the field is missing or is not exactly three numeric components, and it does not write a replacement version before failing.
+
+The finish scenario asserts the exact instruction sentences in decision 7. `docs/workflow.md` is Russian and carries the Russian sentence. The commits skill and `.cursor/agents/developer.md` carry the same English sentence.
+
 The pull-request file assertion reads `.github/workflows/ci.yml` and checks its `on` mapping and that the image name is absent. Do not edit that file.
 
 `npm run format:check` includes `.github/workflows/*.{yml,yaml}`. Format the new workflow with the project Prettier before the task is done. README is outside that script.
+
+### 6. Read the root version, and fail closed
+
+The image version is only the root `package.json` field `version`. Do not read `server/package.json`, `web/package.json`, or `packages/fake-stdio-mcp/package.json`.
+
+Root `package.json` is `"type": "module"`, so the step uses Node ESM, not `require`. A step id `version` runs after setup-node and before build-push:
+
+```yaml
+- name: Package version
+  id: version
+  run: |
+    version="$(node --input-type=module -e "import { readFileSync } from 'node:fs'; const version = JSON.parse(readFileSync('package.json', 'utf8')).version; if (typeof version !== 'string' || !/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version)) { console.error('root package.json version must be MAJOR.MINOR.PATCH'); process.exit(1); } process.stdout.write(version);")"
+    echo "version=${version}" >> "$GITHUB_OUTPUT"
+```
+
+`process.exit(1)` runs before anything is written to `GITHUB_OUTPUT`. Do not default the version, do not strip a `v`, and do not drop a prerelease and continue. A missing field makes `version` not a string, so the same check fails the job.
+
+Apply does not add the field. Finish of this change finds it absent and sets `0.1.0`. The first publish from `main` therefore tags `0.1.0`, which is the example tag. A later change's finish bumps before push, so the same tag is not moved.
+
+**Alternative:** set `0.1.0` in an apply commit — rejected. Finish would then see a present field and bump patch to `0.1.1` before the first push, and the example tag would never be published.
+
+**Alternative:** a git tag as the version — rejected. Git tags stay a non-goal.
+
+### 7. Finish bumps the root version
+
+The same rule goes in three places so they do not contradict. Do not edit generated `openspec-*` skills. Do not add a skill file. Do not bump during propose or apply.
+
+English sentence, copied into `.cursor/skills/commits/SKILL.md` (in the push section, and as a `chore:` row in the when-to-commit table) and into the finish list of `.cursor/agents/developer.md`:
+
+```text
+At finish, after the archive commit and before push, create one chore commit that sets the root package.json version. Keep that commit separate from the archive docs commit. If the version field is absent, set 0.1.0. If the person named major, minor, or patch for this change, bump that component and reset lower components to 0. Otherwise bump patch. Do not bump the version during propose or apply. Do not add or change version in a workspace package.json.
+```
+
+Russian sentence, copied into the finish step of `docs/workflow.md` (that file is Russian; the step names stay the English words the file already uses):
+
+```text
+После коммита archive и до push — один отдельный коммит chore, который задаёт version в корневом package.json. Если поля нет, записать 0.1.0. Если человек для этого изменения назвал major, minor или patch, увеличить этот компонент и обнулить младшие до 0. Иначе увеличить patch. Во время propose и apply версию не менять. В package.json воркспейсов поле version не добавлять и не менять. Коммит archive (docs) остаётся отдельным.
+```
+
+Finish order where the files already list steps:
+
+- Archive stays a `docs:` commit.
+- The version `chore:` commit comes after that archive commit and before push.
+- In `.cursor/agents/developer.md`, the existing full test suite run stays before push and moves after the version commit, so the suite that gates push sees the version that will be pushed.
+- `docs/workflow.md` does not gain a test-suite step; it gains the version step between archive and push.
+
+Bump arithmetic when the field is already `MAJOR.MINOR.PATCH`:
+
+- `major` → `MAJOR+1.0.0`
+- `minor` → `MAJOR.MINOR+1.0`
+- `patch`, or no component named → `MAJOR.MINOR.PATCH+1`
+
+The person names the component for that change. This change names none, and the field is absent at its finish, so the commit sets `0.1.0` and does not then bump patch.
+
+**Alternative:** bump during apply — rejected. Propose and apply stay free of version commits. The archive commit stays separate from the version commit.
 
 ## Risks / Trade-offs
 
@@ -127,14 +198,17 @@ The pull-request file assertion reads `.github/workflows/ci.yml` and checks its 
 - [PUT is no longer the update verb] → The same step falls back to PATCH on the same path. The spec checks the outcome, not the verb.
 - [Public cannot be reversed] → The step never sends `private`. Rollback of the workflow does not make the package private.
 - [Two pushes finish out of order, so `latest` can briefly point at the older SHA] → Accepted. The SHA tag stays exact. This repository does not publish concurrently often enough to add a queue.
+- [Pushing the same version tag again moves it] → Finish bumps the root version on every later change before push. This change's finish sets `0.1.0` once, because the field is absent, and does not bump that value in the same commit.
+- [Apply writes `0.1.0` and finish then bumps to `0.1.1`] → Apply does not write the field. Only the finish chore does.
+- [The version commit lands after verification] → The instruction files are what verification reads. The `0.1.0` write is the finish step those files require, after `blockers: 0`, same as the archive commit.
 - [No Docker on the apply machine] → Tests never run the daemon. The anonymous pull is checked by a person after the workflow has run on `main`.
 
 ## Migration Plan
 
-Adding the workflow and the README does not change the running process. The image appears on GHCR only after this change is on `main`.
+Adding the workflow and the README does not change the running process. The image appears on GHCR only after this change is on `main`. The commit that is pushed includes root `package.json` `version` `0.1.0`, set at finish because the field was absent.
 
-Rollback: remove the workflow. Images already pushed remain. A public package stays public; deleting versions is a separate GitHub action and is not part of this change.
+Rollback: remove the workflow. Images already pushed remain. A public package stays public; deleting versions is a separate GitHub action and is not part of this change. Leaving `version` in the root `package.json` is harmless if the workflow is removed.
 
 ## Open Questions
 
-None. Trigger, tags, platform, image name, token, and public visibility are decided. The PUT-then-PATCH fallback stays inside the visibility step and does not change the spec or the task split.
+None. Trigger, tags, platform, image name, token, public visibility, the exact semver tag, fail-closed version read, and the finish-time bump are decided. Apply does not write `version`; this change's finish sets `0.1.0`.

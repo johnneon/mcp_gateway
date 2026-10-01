@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines how the repository publishes the gateway container image to GHCR on a push to `main`, makes that package public, and documents pull and run. The contract is checked by reading the workflow file and the README, without calling GHCR.
+Defines how the repository publishes the gateway container image to GHCR on a push to main, including the exact root package version tag, makes that package public, documents pull and run, and requires finish to bump that version. The contract is checked by reading files, without calling GHCR.
 
 ## ADDED Requirements
 
@@ -23,17 +23,30 @@ The repository SHALL contain a GitHub Actions workflow file under `.github/workf
 
 ### Requirement: Image tags and platform
 
-The publish workflow SHALL build the repository Dockerfile and push `ghcr.io/johnneon/mcp_gateway` for platform `linux/amd64` only. The pushed tags SHALL be `latest` and the first 7 hexadecimal characters of the commit SHA. The workflow SHALL NOT target `linux/arm64` or any other platform.
+The publish workflow SHALL build the repository Dockerfile and push `ghcr.io/johnneon/mcp_gateway` for platform `linux/amd64` only. The pushed tags SHALL be `latest`, the first 7 hexadecimal characters of the commit SHA, and the exact `version` value from the root `package.json` of the commit being built. That version SHALL match MAJOR.MINOR.PATCH using digits only: no `v` prefix, no prerelease, and no build metadata. The workflow SHALL NOT push a tag that is only MAJOR or only MAJOR.MINOR. The workflow SHALL NOT target `linux/arm64` or any other platform. When the root `package.json` has no `version` field, or that field is not exactly three numeric components, the publish job SHALL fail and SHALL NOT invent a version tag.
 
-#### Scenario: Workflow declares latest, a 7-character SHA, and amd64
+#### Scenario: Workflow declares latest, a 7-character SHA, the package version, and amd64
 
 - **GIVEN** the publish workflow file
 - **WHEN** the test reads that file without calling GHCR
 - **THEN** the pushed image name is `ghcr.io/johnneon/mcp_gateway`
 - **AND** one tag is `latest`
-- **AND** the other tag is the first 7 characters of the commit SHA, expressed as a fixed length of 7 rather than a variable-length short revision
+- **AND** one tag is the first 7 characters of the commit SHA, expressed as a fixed length of 7 rather than a variable-length short revision
+- **AND** one tag is the exact `version` field of the root `package.json` of the commit being built
+- **AND** that version tag has no `v` prefix
+- **AND** the file does not push a tag that is only MAJOR or only MAJOR.MINOR
 - **AND** the platform is `linux/amd64`
 - **AND** the file does not mention `arm64`
+
+#### Scenario: Job fails when the package version is missing or not three numeric components
+
+- **GIVEN** the publish workflow file
+- **WHEN** the test reads that file without calling GHCR
+- **THEN** the job reads the `version` field from the root `package.json` of the commit being built
+- **AND** that read happens before the image push
+- **AND** the job fails when that field is missing
+- **AND** the job fails when that field is not exactly three numeric components
+- **AND** the job does not write a replacement version when the field is missing or invalid
 
 ### Requirement: Package visibility is public and repeatable
 
@@ -50,12 +63,25 @@ After the image push in the same job, the workflow SHALL set the user-owned cont
 
 ### Requirement: README documents pull and run
 
-The repository README SHALL document an anonymous `docker pull` of `ghcr.io/johnneon/mcp_gateway:latest` and a `docker run` of that image. The run instructions SHALL supply `ENCRYPTION_KEY`, publish MCP on port `3100`, publish the admin port on host loopback port `3200`, and mount a volume for the data directory. The README SHALL still document running through Compose by building the image locally.
+The repository README SHALL document an anonymous `docker pull` of `ghcr.io/johnneon/mcp_gateway:latest` and a `docker run` of that image. The README SHALL document the semver tag next to `latest` and the 7-character SHA: `ghcr.io/johnneon/mcp_gateway` plus the root `package.json` version, with no `v` prefix. The README SHALL NOT document a floating tag that is only MAJOR or only MAJOR.MINOR. The run instructions SHALL supply `ENCRYPTION_KEY`, publish MCP on port `3100`, publish the admin port on host loopback port `3200`, and mount a volume for the data directory. The README SHALL still document running through Compose by building the image locally.
 
 #### Scenario: README shows the published image and the local compose build
 
 - **GIVEN** the repository README
 - **WHEN** the test reads that file without calling GHCR
 - **THEN** it documents `docker pull` of `ghcr.io/johnneon/mcp_gateway:latest`
+- **AND** it documents the semver tag of `ghcr.io/johnneon/mcp_gateway` next to `latest` and the 7-character SHA, with no `v` prefix
+- **AND** it does not document a floating tag that is only MAJOR or only MAJOR.MINOR
 - **AND** it documents `docker run` with `ENCRYPTION_KEY`, port `3100`, loopback port `3200`, and a data volume
 - **AND** it still documents `docker compose` building the image locally
+
+### Requirement: Finish bumps the root package version
+
+`.cursor/skills/commits/SKILL.md`, the finish step of `docs/workflow.md`, and the finish list of `.cursor/agents/developer.md` SHALL require one `chore` commit that sets the root `package.json` `version`, after the archive commit and before push. That commit SHALL stay separate from the archive `docs` commit. Those files SHALL require: if the field is absent, set `0.1.0`; if the person named `major`, `minor`, or `patch` for the change, bump that component and reset lower components to `0`; otherwise bump `patch`. Those files SHALL require that propose and apply do not bump the version, and that a workspace `package.json` `version` is not added or changed. The commits skill and the developer finish list SHALL contain the same English sentence. The workflow finish step SHALL contain the Russian sentence that states that same rule.
+
+#### Scenario: Finish instructions bump the root version before push
+
+- **GIVEN** `.cursor/skills/commits/SKILL.md`, `docs/workflow.md`, and `.cursor/agents/developer.md`
+- **WHEN** the test reads those files without calling GHCR
+- **THEN** `.cursor/skills/commits/SKILL.md` and `.cursor/agents/developer.md` each contain the sentence `At finish, after the archive commit and before push, create one chore commit that sets the root package.json version. Keep that commit separate from the archive docs commit. If the version field is absent, set 0.1.0. If the person named major, minor, or patch for this change, bump that component and reset lower components to 0. Otherwise bump patch. Do not bump the version during propose or apply. Do not add or change version in a workspace package.json.`
+- **AND** the finish step of `docs/workflow.md` contains the sentence `После коммита archive и до push — один отдельный коммит chore, который задаёт version в корневом package.json. Если поля нет, записать 0.1.0. Если человек для этого изменения назвал major, minor или patch, увеличить этот компонент и обнулить младшие до 0. Иначе увеличить patch. Во время propose и apply версию не менять. В package.json воркспейсов поле version не добавлять и не менять. Коммит archive (docs) остаётся отдельным.`
