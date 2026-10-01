@@ -42,13 +42,30 @@ export type MessageHeaders = {
   date: string;
 };
 
+export type MessageAttachment = {
+  index: number;
+  name: string;
+  contentType: string;
+  size: number;
+};
+
+export type AttachmentDownload = MessageAttachment & {
+  data: string;
+};
+
 export type ReadMessageResult = {
   headers: MessageHeaders;
   textBody: string;
+  htmlBody: string;
+  attachments: MessageAttachment[];
   attachmentNames?: string[];
 };
 
 export const INVALID_SEARCH_FILTER_MESSAGE = 'Invalid search filter';
 export const INVALID_ORDER_MESSAGE = 'Invalid order';
+export const UID_REQUIRED_MESSAGE = 'uid is required';
+export const ATTACHMENT_INDEX_REQUIRED_MESSAGE = 'Attachment index is required';
+export const ATTACHMENT_NOT_FOUND_MESSAGE = 'Attachment not found';
+export const MESSAGE_NOT_FOUND_MESSAGE = 'Message not found';
 export const IMAP_LOGIN_FAILED_MESSAGE = 'IMAP login failed';
 export const SMTP_AUTH_FAILED_MESSAGE = 'SMTP authentication failed';

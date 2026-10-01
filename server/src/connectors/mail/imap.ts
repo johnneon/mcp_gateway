@@ -1,10 +1,16 @@
 import type { Duplex } from 'node:stream';
 import { DuplexLineSession } from './duplex-lines.js';
 import {
+  ATTACHMENT_INDEX_REQUIRED_MESSAGE,
+  ATTACHMENT_NOT_FOUND_MESSAGE,
   IMAP_LOGIN_FAILED_MESSAGE,
   INVALID_ORDER_MESSAGE,
   INVALID_SEARCH_FILTER_MESSAGE,
+  MESSAGE_NOT_FOUND_MESSAGE,
+  UID_REQUIRED_MESSAGE,
+  type AttachmentDownload,
   type ImapSearchFilter,
+  type MessageAttachment,
   type MessageHeaders,
   type MessagePage,
   type MessagePageQuery,
@@ -160,60 +166,172 @@ function parseHeaderBlock(raw: string): MessageHeaders {
   return headers;
 }
 
+type ParsedAttachment = MessageAttachment & {
+  bytes: Buffer;
+};
+
+type ParsedMessageBody = {
+  textBody: string;
+  htmlBody: string;
+  attachments: ParsedAttachment[];
+};
+
+function headerField(headers: string, name: string): string {
+  const match = new RegExp(`^${name}:\\s*([^\\r\\n]*)`, 'im').exec(headers);
+  return match?.[1]?.trim() ?? '';
+}
+
+function mediaType(headers: string): string {
+  const raw = headerField(headers, 'Content-Type');
+  return raw.split(';')[0]?.trim().toLowerCase() ?? '';
+}
+
+function contentDisposition(headers: string): string {
+  const raw = headerField(headers, 'Content-Disposition');
+  return raw.split(';')[0]?.trim().toLowerCase() ?? '';
+}
+
+function boundaryOf(headers: string): string | undefined {
+  const raw = headerField(headers, 'Content-Type');
+  const match = /boundary="?([^";\r\n]+)"?/i.exec(raw);
+  return match?.[1];
+}
+
+function partName(headers: string): string {
+  const filename = /filename\*?=(?:UTF-8''|")?([^";\r\n]+)"?/i.exec(headers);
+  if (filename?.[1] !== undefined) {
+    return filename[1].replace(/"/g, '');
+  }
+  const named = /(?:^|[;\s])name="?([^";\r\n]+)"?/im.exec(headers);
+  if (named?.[1] !== undefined) {
+    return named[1].replace(/"/g, '');
+  }
+  return '';
+}
+
+function splitHeaderBody(raw: string): { headers: string; body: string } {
+  const crlf = raw.indexOf('\r\n\r\n');
+  const lf = raw.indexOf('\n\n');
+  if (crlf >= 0 && (lf < 0 || crlf <= lf)) {
+    return { headers: raw.slice(0, crlf), body: raw.slice(crlf + 4) };
+  }
+  if (lf >= 0) {
+    return { headers: raw.slice(0, lf), body: raw.slice(lf + 2) };
+  }
+  return { headers: '', body: raw };
+}
+
+function splitMultipart(body: string, boundary: string): string[] {
+  const parts: string[] = [];
+  for (const chunk of body.split(`--${boundary}`)) {
+    let part = chunk;
+    if (part.startsWith('\r\n')) {
+      part = part.slice(2);
+    } else if (part.startsWith('\n')) {
+      part = part.slice(1);
+    }
+    if (part.endsWith('\r\n')) {
+      part = part.slice(0, -2);
+    } else if (part.endsWith('\n')) {
+      part = part.slice(0, -1);
+    }
+    const trimmed = part.trim();
+    if (trimmed === '' || trimmed === '--' || trimmed.startsWith('--')) {
+      continue;
+    }
+    parts.push(part);
+  }
+  return parts;
+}
+
+function decodePartBody(headers: string, body: string): Buffer {
+  const encoding = headerField(headers, 'Content-Transfer-Encoding').toLowerCase();
+  if (encoding === 'base64') {
+    return Buffer.from(body.replace(/\s+/g, ''), 'base64');
+  }
+  return Buffer.from(body, 'utf8');
+}
+
+function parseMessageBody(raw: string): ParsedMessageBody {
+  const parsed: ParsedMessageBody = { textBody: '', htmlBody: '', attachments: [] };
+  let textTaken = false;
+  let htmlTaken = false;
+
+  const walk = (entity: string): void => {
+    const { headers, body } = splitHeaderBody(entity);
+    const type = mediaType(headers);
+    if (type.startsWith('multipart/')) {
+      const boundary = boundaryOf(headers);
+      if (boundary === undefined) {
+        return;
+      }
+      for (const part of splitMultipart(body, boundary)) {
+        walk(part);
+      }
+      return;
+    }
+    const bytes = decodePartBody(headers, body);
+    const disposition = contentDisposition(headers);
+    if (disposition !== 'attachment' && (type === 'text/plain' || type === '') && !textTaken) {
+      parsed.textBody = bytes.toString('utf8').trim();
+      textTaken = true;
+      return;
+    }
+    if (disposition !== 'attachment' && type === 'text/html' && !htmlTaken) {
+      parsed.htmlBody = bytes.toString('utf8').trim();
+      htmlTaken = true;
+      return;
+    }
+    const contentType = type.length > 0 ? type : 'application/octet-stream';
+    parsed.attachments.push({
+      index: parsed.attachments.length,
+      name: partName(headers),
+      contentType,
+      size: bytes.length,
+      bytes,
+    });
+  };
+
+  if (!/^content-type:/im.test(raw)) {
+    parsed.textBody = raw.trim();
+    return parsed;
+  }
+  walk(raw);
+  return parsed;
+}
+
 /**
  * Extract a text/plain body from a simple message body; skip attachment payloads.
  */
 export function extractTextBody(rawBody: string): { textBody: string; attachmentNames: string[] } {
-  const attachmentNames: string[] = [];
-  const contentTypeMatch = /^Content-Type:\s*([^\r\n;]+)/im.exec(rawBody);
-  const contentType = contentTypeMatch?.[1]?.trim().toLowerCase() ?? '';
+  const parsed = parseMessageBody(rawBody);
+  return {
+    textBody: parsed.textBody,
+    attachmentNames: parsed.attachments.map((part) => part.name).filter((name) => name.length > 0),
+  };
+}
 
-  if (contentType.startsWith('multipart/')) {
-    const boundaryMatch = /boundary="?([^";\r\n]+)"?/i.exec(rawBody);
-    const boundary = boundaryMatch?.[1];
-    if (boundary === undefined) {
-      return { textBody: '', attachmentNames };
-    }
-    const parts = rawBody.split(`--${boundary}`);
-    let textBody = '';
-    for (const part of parts) {
-      if (part.trim() === '' || part.trim() === '--') {
-        continue;
-      }
-      const headerEnd = part.indexOf('\r\n\r\n');
-      const headerEndAlt = part.indexOf('\n\n');
-      const splitAt = headerEnd >= 0 ? headerEnd : headerEndAlt;
-      if (splitAt < 0) {
-        continue;
-      }
-      const partHeaders = part.slice(0, splitAt);
-      let partBody = part.slice(splitAt);
-      partBody = partBody.replace(/^\r?\n\r?\n/, '').replace(/\r?\n--\s*$/, '');
-      const partType = /^Content-Type:\s*([^\r\n;]+)/im
-        .exec(partHeaders)?.[1]
-        ?.trim()
-        .toLowerCase();
-      const disposition = /^Content-Disposition:\s*([^\r\n;]+)/im
-        .exec(partHeaders)?.[1]
-        ?.trim()
-        .toLowerCase();
-      const filenameMatch =
-        /filename\*?=(?:UTF-8''|")?([^";\r\n]+)"?/i.exec(partHeaders) ??
-        /name="?([^";\r\n]+)"?/i.exec(partHeaders);
-      if (disposition === 'attachment' || (filenameMatch !== null && partType !== 'text/plain')) {
-        if (filenameMatch?.[1] !== undefined) {
-          attachmentNames.push(filenameMatch[1].replace(/"/g, ''));
-        }
-        continue;
-      }
-      if ((partType === 'text/plain' || partType === undefined) && textBody.length === 0) {
-        textBody = partBody.trim();
-      }
-    }
-    return { textBody, attachmentNames };
+function requireUid(uid: unknown): number {
+  if (typeof uid !== 'number' || !Number.isInteger(uid) || uid < 1) {
+    throw new Error(UID_REQUIRED_MESSAGE);
   }
+  return uid;
+}
 
-  return { textBody: rawBody.trim(), attachmentNames };
+function requireAttachmentIndex(index: unknown): number {
+  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0) {
+    throw new Error(ATTACHMENT_INDEX_REQUIRED_MESSAGE);
+  }
+  return index;
+}
+
+function attachmentMetadata(part: ParsedAttachment): MessageAttachment {
+  return {
+    index: part.index,
+    name: part.name,
+    contentType: part.contentType,
+    size: part.size,
+  };
 }
 
 export type ImapClient = {
@@ -222,7 +340,8 @@ export type ImapClient = {
   search(filter: ImapSearchFilter): Promise<number[]>;
   fetchSummaries(uids: readonly number[]): Promise<MessageSummary[]>;
   pageMessages(query?: MessagePageQuery): Promise<MessagePage>;
-  fetchMessage(uid: number): Promise<ReadMessageResult>;
+  fetchMessage(uid: unknown): Promise<ReadMessageResult>;
+  getAttachment(uid: unknown, index: unknown): Promise<AttachmentDownload>;
   logout(): Promise<void>;
   close(): void;
 };
@@ -314,6 +433,32 @@ export function createImapClient(duplex: Duplex): ImapClient {
     }
   }
 
+  async function loadParsed(uid: number): Promise<{
+    headers: MessageHeaders;
+    textBody: string;
+    htmlBody: string;
+    attachments: ParsedAttachment[];
+  }> {
+    const fetches = await runTagged(
+      `UID FETCH ${String(uid)} (BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE)] BODY.PEEK[TEXT])`,
+    );
+    const fetch = fetches[0];
+    if (fetch === undefined) {
+      throw new Error(MESSAGE_NOT_FOUND_MESSAGE);
+    }
+    const headerSection = fetch.sections.find((section) =>
+      section.name.startsWith('BODY[HEADER.FIELDS'),
+    );
+    const textSection = fetch.sections.find((section) => section.name === 'BODY[TEXT]');
+    const body = parseMessageBody(textSection?.data ?? '');
+    return {
+      headers: parseHeaderBlock(headerSection?.data ?? ''),
+      textBody: body.textBody,
+      htmlBody: body.htmlBody,
+      attachments: body.attachments,
+    };
+  }
+
   return {
     async login(user, password) {
       try {
@@ -375,24 +520,35 @@ export function createImapClient(duplex: Duplex): ImapClient {
     },
 
     async fetchMessage(uid) {
-      const fetches = await runTagged(
-        `UID FETCH ${String(uid)} (BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE)] BODY.PEEK[TEXT])`,
-      );
-      const fetch = fetches[0];
-      if (fetch === undefined) {
-        throw new Error('Message not found');
-      }
-      const headerSection = fetch.sections.find((section) =>
-        section.name.startsWith('BODY[HEADER.FIELDS'),
-      );
-      const textSection = fetch.sections.find((section) => section.name === 'BODY[TEXT]');
-      const headers = parseHeaderBlock(headerSection?.data ?? '');
-      const { textBody, attachmentNames } = extractTextBody(textSection?.data ?? '');
+      const parsedUid = requireUid(uid);
+      const loaded = await loadParsed(parsedUid);
+      const attachmentNames = loaded.attachments
+        .map((part) => part.name)
+        .filter((name) => name.length > 0);
       return {
-        headers,
-        textBody,
+        headers: loaded.headers,
+        textBody: loaded.textBody,
+        htmlBody: loaded.htmlBody,
+        attachments: loaded.attachments.map(attachmentMetadata),
         ...(attachmentNames.length > 0 ? { attachmentNames } : {}),
       } satisfies ReadMessageResult;
+    },
+
+    async getAttachment(uid, index) {
+      const parsedUid = requireUid(uid);
+      const parsedIndex = requireAttachmentIndex(index);
+      const loaded = await loadParsed(parsedUid);
+      const part = loaded.attachments.find((entry) => entry.index === parsedIndex);
+      if (part === undefined) {
+        throw new Error(ATTACHMENT_NOT_FOUND_MESSAGE);
+      }
+      return {
+        index: part.index,
+        name: part.name,
+        contentType: part.contentType,
+        size: part.size,
+        data: part.bytes.toString('base64'),
+      } satisfies AttachmentDownload;
     },
 
     async logout() {

@@ -9,9 +9,15 @@ export type FakeImapMessage = {
   date: string;
   seen: boolean;
   textBody: string;
+  htmlBody?: string;
   /** When set, TEXT part is multipart with this attachment name (bytes not returned to client). */
   attachmentName?: string;
   attachmentBytes?: string;
+  attachments?: Array<{
+    name: string;
+    contentType: string;
+    bytes: string;
+  }>;
 };
 
 export type FakeMailbox = {
@@ -37,6 +43,7 @@ export type FakeImapOptions = {
 export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
   searchCommandCount: number;
   lastSearchCriteria: string | undefined;
+  fetchCommandCount: number;
 } {
   const acceptLogin = options.acceptLogin !== false;
   const mailboxes = initialMailboxes(options);
@@ -46,6 +53,7 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
   const state = {
     searchCommandCount: 0,
     lastSearchCriteria: undefined as string | undefined,
+    fetchCommandCount: 0,
   };
 
   const duplex = new Duplex({
@@ -64,6 +72,9 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
   });
   Object.defineProperty(duplex, 'lastSearchCriteria', {
     get: () => state.lastSearchCriteria,
+  });
+  Object.defineProperty(duplex, 'fetchCommandCount', {
+    get: () => state.fetchCommandCount,
   });
 
   const sendLine = (line: string): void => {
@@ -152,6 +163,7 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
     }
 
     if (upper.startsWith('UID FETCH ')) {
+      state.fetchCommandCount += 1;
       if (selected === undefined) {
         sendLine(`${tag} NO mailbox not selected`);
         return;
@@ -170,6 +182,9 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
         const message = selected.messages.find((entry) => entry.uid === uid);
         if (message === undefined) {
           continue;
+        }
+        if (fetchMarksSeen(items)) {
+          message.seen = true;
         }
         emitFetch(message, items);
       }
@@ -197,20 +212,7 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
         : `From: ${message.from}\r\nSubject: ${message.subject}\r\nDate: ${message.date}\r\n\r\n`
       : '';
 
-    let textBody = message.textBody;
-    if (message.attachmentName !== undefined) {
-      const boundary = 'bound123';
-      textBody =
-        `Content-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n` +
-        `--${boundary}\r\n` +
-        `Content-Type: text/plain; charset=utf-8\r\n\r\n` +
-        `${message.textBody}\r\n` +
-        `--${boundary}\r\n` +
-        `Content-Type: application/octet-stream\r\n` +
-        `Content-Disposition: attachment; filename="${message.attachmentName}"\r\n\r\n` +
-        `${message.attachmentBytes ?? 'ATTACHMENT-BYTES-SECRET'}\r\n` +
-        `--${boundary}--\r\n`;
-    }
+    const textBody = renderMessageText(message);
 
     if (wantHeaders && wantText) {
       const headerSize = Buffer.byteLength(headerFields, 'utf8');
@@ -237,11 +239,53 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
   return duplex as Duplex & {
     searchCommandCount: number;
     lastSearchCriteria: string | undefined;
+    fetchCommandCount: number;
   };
 }
 
+function fetchMarksSeen(items: string): boolean {
+  const withoutPeek = items.replace(/BODY\.PEEK\[/g, '');
+  return /BODY\[/.test(withoutPeek);
+}
+
+function renderMessageText(message: FakeImapMessage): string {
+  const files = [
+    ...(message.attachments ?? []),
+    ...(message.attachmentName !== undefined
+      ? [
+          {
+            name: message.attachmentName,
+            contentType: 'application/octet-stream',
+            bytes: message.attachmentBytes ?? 'ATTACHMENT-BYTES-SECRET',
+          },
+        ]
+      : []),
+  ];
+  if (message.htmlBody === undefined && files.length === 0) {
+    return message.textBody;
+  }
+  const boundary = 'bound123';
+  const parts = [
+    `Content-Type: text/plain; charset=utf-8\r\n\r\n${message.textBody}`,
+    ...(message.htmlBody !== undefined
+      ? [`Content-Type: text/html; charset=utf-8\r\n\r\n${message.htmlBody}`]
+      : []),
+    ...files.map(
+      (file) =>
+        `Content-Type: ${file.contentType}\r\nContent-Disposition: attachment; filename="${file.name}"\r\n\r\n${file.bytes}`,
+    ),
+  ];
+  const body = parts.map((part) => `--${boundary}\r\n${part}\r\n`).join('');
+  return `Content-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n${body}--${boundary}--\r\n`;
+}
+
 function cloneMessage(message: FakeImapMessage): FakeImapMessage {
-  return { ...message };
+  return {
+    ...message,
+    ...(message.attachments !== undefined
+      ? { attachments: message.attachments.map((part) => ({ ...part })) }
+      : {}),
+  };
 }
 
 function initialMailboxes(options: FakeImapOptions): FakeMailbox[] {
