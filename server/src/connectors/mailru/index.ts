@@ -11,6 +11,7 @@ import {
   ATTACHMENT_INDEX_REQUIRED_MESSAGE,
   createImapClient,
   createSmtpClient,
+  DESTINATION_MAILBOX_DOES_NOT_EXIST_MESSAGE,
   FLAG_IS_REQUIRED_MESSAGE,
   INBOX_CANNOT_BE_DELETED_MESSAGE,
   INBOX_CANNOT_BE_RENAMED_MESSAGE,
@@ -194,6 +195,47 @@ const deleteMailbox: NativeToolHandler = async (args, accountValues, egressClien
   }
   return await withImapSession(accountValues, egressClient, 'INBOX', async (imap) => {
     return jsonResult(await imap.deleteMailbox(name));
+  });
+};
+
+function readDestination(value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new ToolFailure(DESTINATION_MAILBOX_DOES_NOT_EXIST_MESSAGE);
+  }
+  return value;
+}
+
+const moveMessage: NativeToolHandler = async (args, accountValues, egressClient) => {
+  assertUid(args.uid);
+  const destination = readDestination(args.destination);
+  const source = readMailbox(args);
+  return await withImapSession(accountValues, egressClient, source, async (imap) => {
+    return jsonResult(await imap.moveMessage(args.uid, source, destination));
+  });
+};
+
+const copyMessage: NativeToolHandler = async (args, accountValues, egressClient) => {
+  assertUid(args.uid);
+  const destination = readDestination(args.destination);
+  const source = readMailbox(args);
+  return await withImapSession(accountValues, egressClient, source, async (imap) => {
+    return jsonResult(await imap.copyMessage(args.uid, source, destination));
+  });
+};
+
+const deleteMessage: NativeToolHandler = async (args, accountValues, egressClient) => {
+  assertUid(args.uid);
+  const source = readMailbox(args);
+  return await withImapSession(accountValues, egressClient, source, async (imap) => {
+    return jsonResult(await imap.deleteMessage(args.uid, source));
+  });
+};
+
+const restoreMessage: NativeToolHandler = async (args, accountValues, egressClient) => {
+  assertUid(args.uid);
+  const destination = typeof args.destination === 'string' ? args.destination : undefined;
+  return await withImapSession(accountValues, egressClient, 'INBOX', async (imap) => {
+    return jsonResult(await imap.restoreMessage(args.uid, destination));
   });
 };
 
@@ -381,6 +423,68 @@ export const mailruConnector: NativeConnectorModule = {
         additionalProperties: false,
       },
       handler: deleteMailbox,
+    },
+    {
+      name: 'move_message',
+      description: 'Move one message into an existing mailbox. Does not return a body.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          mailbox: { type: 'string', description: 'Source mailbox name; defaults to INBOX' },
+          uid: { type: 'number', description: 'IMAP UID of the message' },
+          destination: { type: 'string', description: 'Existing destination mailbox name' },
+        },
+        required: ['uid', 'destination'],
+        additionalProperties: false,
+      },
+      handler: moveMessage,
+    },
+    {
+      name: 'copy_message',
+      description: 'Copy one message into an existing mailbox. The source message stays.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          mailbox: { type: 'string', description: 'Source mailbox name; defaults to INBOX' },
+          uid: { type: 'number', description: 'IMAP UID of the message' },
+          destination: { type: 'string', description: 'Existing destination mailbox name' },
+        },
+        required: ['uid', 'destination'],
+        additionalProperties: false,
+      },
+      handler: copyMessage,
+    },
+    {
+      name: 'delete_message',
+      description: 'Move one message into the trash mailbox. Does not expunge.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          mailbox: { type: 'string', description: 'Source mailbox name; defaults to INBOX' },
+          uid: { type: 'number', description: 'IMAP UID of the message' },
+        },
+        required: ['uid'],
+        additionalProperties: false,
+      },
+      handler: deleteMessage,
+    },
+    {
+      name: 'restore_message',
+      description:
+        'Move one message out of the trash mailbox. Omitted destination defaults to INBOX.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          uid: { type: 'number', description: 'IMAP UID of the message in trash' },
+          destination: {
+            type: 'string',
+            description: 'Existing destination mailbox; defaults to INBOX',
+          },
+        },
+        required: ['uid'],
+        additionalProperties: false,
+      },
+      handler: restoreMessage,
     },
     {
       name: 'read_message',
