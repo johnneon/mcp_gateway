@@ -829,6 +829,132 @@ describe('connector-gmail: Gmail get_attachment tool', () => {
   });
 });
 
+function inboxSummary(text: string, uid: number): Record<string, unknown> {
+  const found = parseEnvelope(text).messages.find((message) => message.uid === uid);
+  if (found === undefined) {
+    throw new Error(`missing uid ${String(uid)}`);
+  }
+  return found;
+}
+
+describe('connector-gmail: Gmail update_flags tool', () => {
+  it('Set seen and flagged', async () => {
+    await withGmailMcpClient([note(7, 'flag me')], async (client) => {
+      const text = toolText(
+        await client.callTool({
+          name: 'gmail_update_flags',
+          arguments: { account: ACCOUNT_ID, uid: 7, seen: true, flagged: true },
+        }),
+      );
+      expect(text).not.toContain(FIXTURE_PASSWORD);
+      expect(parseObject(text)).toEqual({ uid: 7, seen: true, flagged: true });
+      const listed = toolText(
+        await client.callTool({
+          name: 'gmail_list_messages',
+          arguments: { account: ACCOUNT_ID },
+        }),
+      );
+      expect(inboxSummary(listed, 7)).toMatchObject({ seen: true, unread: false });
+    });
+  });
+
+  it('Clear seen and flagged', async () => {
+    await withGmailMcpClient(
+      [{ ...note(7, 'clear me'), seen: true, flagged: true }],
+      async (client) => {
+        const text = toolText(
+          await client.callTool({
+            name: 'gmail_update_flags',
+            arguments: { account: ACCOUNT_ID, uid: 7, seen: false, flagged: false },
+          }),
+        );
+        expect(text).not.toContain(FIXTURE_PASSWORD);
+        expect(parseObject(text)).toEqual({ uid: 7, seen: false, flagged: false });
+        const listed = toolText(
+          await client.callTool({
+            name: 'gmail_list_messages',
+            arguments: { account: ACCOUNT_ID },
+          }),
+        );
+        expect(inboxSummary(listed, 7)).toMatchObject({ seen: false, unread: true });
+      },
+    );
+  });
+
+  it('Omitted flag stays unchanged', async () => {
+    await withGmailMcpClient(
+      [{ ...note(7, 'keep seen'), seen: true, flagged: false }],
+      async (client) => {
+        const flagged = toolText(
+          await client.callTool({
+            name: 'gmail_update_flags',
+            arguments: { account: ACCOUNT_ID, uid: 7, flagged: true },
+          }),
+        );
+        expect(parseObject(flagged)).toMatchObject({ uid: 7, seen: true, flagged: true });
+        const cleared = toolText(
+          await client.callTool({
+            name: 'gmail_update_flags',
+            arguments: { account: ACCOUNT_ID, uid: 7, seen: false },
+          }),
+        );
+        expect(cleared).not.toContain(FIXTURE_PASSWORD);
+        expect(parseObject(cleared)).toMatchObject({ seen: false, flagged: true });
+      },
+    );
+  });
+
+  it('Flag is required', async () => {
+    await withGmailMcpClient(
+      [{ ...note(7, 'stay seen'), seen: true, flagged: false }],
+      async (client) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_update_flags',
+            arguments: { account: ACCOUNT_ID, uid: 7 },
+          }),
+        );
+        expect(message).toContain('Flag is required');
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        const listed = toolText(
+          await client.callTool({
+            name: 'gmail_list_messages',
+            arguments: { account: ACCOUNT_ID },
+          }),
+        );
+        expect(inboxSummary(listed, 7)).toMatchObject({ seen: true, unread: false });
+        const after = toolText(
+          await client.callTool({
+            name: 'gmail_update_flags',
+            arguments: { account: ACCOUNT_ID, uid: 7, seen: true },
+          }),
+        );
+        expect(parseObject(after).flagged).toBe(false);
+      },
+    );
+  });
+
+  it('Update flags uid below 1 is rejected', async () => {
+    await withGmailMcpClient([note(7, 'unseen')], async (client) => {
+      const message = await expectCallFailure(() =>
+        client.callTool({
+          name: 'gmail_update_flags',
+          arguments: { account: ACCOUNT_ID, uid: 0, seen: true },
+        }),
+      );
+      expect(message).toContain('uid is required');
+      expect(message).not.toContain(FIXTURE_PASSWORD);
+      const listed = toolText(
+        await client.callTool({
+          name: 'gmail_list_messages',
+          arguments: { account: ACCOUNT_ID },
+        }),
+      );
+      expect(inboxSummary(listed, 7)).toMatchObject({ seen: false });
+    });
+  });
+});
+
 describe('connector-gmail: Password never appears in Gmail tool or admin surfaces', () => {
   it('Fixture password absent from tool result and MCP error', async () => {
     const messages = manyMessages(3);

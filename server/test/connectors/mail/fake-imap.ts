@@ -45,6 +45,11 @@ export type FakeImapOptions = {
   storeNo?: string;
   /** When set, a body FETCH replies NO with this text and leaves the message unchanged. */
   attachmentNo?: string;
+  /**
+   * Mailbox list reused by every duplex created with this array.
+   * Omit it to give each duplex its own copy.
+   */
+  sharedMailboxes?: FakeMailbox[];
 };
 
 /**
@@ -58,7 +63,7 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
   commands: readonly string[];
 } {
   const acceptLogin = options.acceptLogin !== false;
-  const mailboxes = initialMailboxes(options);
+  const mailboxes = options.sharedMailboxes ?? initialMailboxes(options);
   let buffer = '';
   let selected: FakeMailbox | undefined;
   let loggedIn = false;
@@ -494,6 +499,10 @@ function cloneMessage(message: FakeImapMessage): FakeImapMessage {
       ? { attachments: message.attachments.map((part) => ({ ...part })) }
       : {}),
   };
+}
+
+export function createSharedFakeImapMailboxes(options: FakeImapOptions): FakeMailbox[] {
+  return initialMailboxes(options);
 }
 
 function initialMailboxes(options: FakeImapOptions): FakeMailbox[] {

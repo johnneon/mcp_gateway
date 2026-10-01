@@ -6,7 +6,11 @@ import {
   GMAIL_SMTP_HOST,
   GMAIL_SMTP_PORT,
 } from '../../../src/connectors/gmail/index.js';
-import { createFakeImapDuplex, type FakeImapOptions } from '../mail/fake-imap.js';
+import {
+  createFakeImapDuplex,
+  createSharedFakeImapMailboxes,
+  type FakeImapOptions,
+} from '../mail/fake-imap.js';
 import { createFakeSmtpDuplex, type FakeSmtpOptions } from '../mail/fake-smtp.js';
 
 type FakeImapDuplex = ReturnType<typeof createFakeImapDuplex>;
@@ -20,6 +24,7 @@ export function createGmailFakeEgressTransport(options: {
 }): EgressTransport & { tlsSessionCallCount: number; searchCommandCount: number } {
   const state = { tlsSessionCallCount: 0 };
   const imapSessions: FakeImapDuplex[] = [];
+  const sharedMailboxes = createSharedFakeImapMailboxes(options.imap);
 
   return {
     get tlsSessionCallCount() {
@@ -37,7 +42,7 @@ export function createGmailFakeEgressTransport(options: {
     tlsSession(params): Promise<Duplex> {
       state.tlsSessionCallCount += 1;
       if (params.host === GMAIL_IMAP_HOST && params.port === GMAIL_IMAP_PORT) {
-        const duplex = createFakeImapDuplex(options.imap);
+        const duplex = createFakeImapDuplex({ ...options.imap, sharedMailboxes });
         imapSessions.push(duplex);
         return Promise.resolve(duplex);
       }
