@@ -52,7 +52,7 @@ Each allowed destination SHALL be either a constant `{ host, port }` where `host
 
 ### Requirement: Production registry includes registered product connectors
 
-The production connector registry export SHALL be a built registry that includes every product connector module registered in code for this process (including Gmail when this change ships). Tests that need a fake connector SHALL pass their own registry into the admin or MCP app factory and SHALL NOT rely on the production export containing that fake.
+The production connector registry export SHALL be a built registry that includes every product connector module registered in code for this process (including Gmail and Mail.ru). Tests that need a fake connector SHALL pass their own registry into the admin or MCP app factory and SHALL NOT rely on the production export containing that fake.
 
 #### Scenario: Production export includes Gmail
 
@@ -67,6 +67,13 @@ The production connector registry export SHALL be a built registry that includes
 - **WHEN** the admin or MCP app is created for that test
 - **THEN** the test passes a registry built with that fake into the app factory
 - **AND** the production registry export is not required to contain that fake
+
+#### Scenario: Production export includes Mail.ru alongside Gmail
+
+- **GIVEN** the production connector registry module
+- **WHEN** its public connector list is read
+- **THEN** the list includes a connector with `id` `mailru`
+- **AND** the list includes a connector with `id` `gmail`
 
 ### Requirement: Native connector tools
 

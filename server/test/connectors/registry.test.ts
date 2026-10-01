@@ -292,6 +292,12 @@ describe('connector-contract: Production registry includes registered product co
     expect(productionConnectorRegistry.connectors.map((c) => c.id)).toContain('gmail');
     expect(productionConnectorRegistry.listPublic().map((c) => c.id)).toContain('gmail');
   });
+
+  it('Production export includes Mail.ru alongside Gmail', () => {
+    const listed = productionConnectorRegistry.listPublic();
+    expect(listed.map((connector) => connector.id)).toContain('mailru');
+    expect(listed.map((connector) => connector.id)).toContain('gmail');
+  });
 });
 
 describe('connector-contract: Native connector tools', () => {
