@@ -92,10 +92,26 @@ function manyMessages(count: number): FakeImapMessage[] {
 
 type GmailEgress = EgressTransport & { tlsSessionCallCount: number; searchCommandCount: number };
 
+type GmailImapExtras = Partial<
+  Pick<FakeImapOptions, 'mailboxes' | 'deleteNo' | 'moveNo' | 'copyNo' | 'storeNo' | 'attachmentNo'>
+>;
+
+function resolveImapExtras(
+  extra?: FakeImapOptions['mailboxes'] | GmailImapExtras,
+): GmailImapExtras {
+  if (extra === undefined) {
+    return {};
+  }
+  if (Array.isArray(extra)) {
+    return { mailboxes: extra };
+  }
+  return extra;
+}
+
 async function withGmailMcpClient<T>(
   messages: FakeImapMessage[],
   run: (client: Client, transport: GmailEgress) => Promise<T>,
-  mailboxes?: FakeImapOptions['mailboxes'],
+  extra?: FakeImapOptions['mailboxes'] | GmailImapExtras,
 ): Promise<T> {
   const registry = buildConnectorRegistry([gmailConnector]);
   const store = gmailStore();
@@ -104,7 +120,7 @@ async function withGmailMcpClient<T>(
       user: FIXTURE_ADDRESS,
       password: FIXTURE_PASSWORD,
       messages,
-      ...(mailboxes !== undefined ? { mailboxes } : {}),
+      ...resolveImapExtras(extra),
     },
     smtp: { user: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD },
   });
@@ -829,6 +845,32 @@ describe('connector-gmail: Gmail get_attachment tool', () => {
   });
 });
 
+function parseMailboxes(text: string): Array<{ name: string; specialUse: string }> {
+  const parsed: unknown = JSON.parse(text);
+  if (!Array.isArray(parsed)) {
+    throw new Error('expected a mailbox array');
+  }
+  return parsed.map((entry) => {
+    if (
+      !isRecord(entry) ||
+      typeof entry.name !== 'string' ||
+      typeof entry.specialUse !== 'string'
+    ) {
+      throw new Error('expected a mailbox entry');
+    }
+    return { name: entry.name, specialUse: entry.specialUse };
+  });
+}
+
+async function listMailboxText(client: Client): Promise<string> {
+  return toolText(
+    await client.callTool({
+      name: 'gmail_list_mailboxes',
+      arguments: { account: ACCOUNT_ID },
+    }),
+  );
+}
+
 function inboxSummary(text: string, uid: number): Record<string, unknown> {
   const found = parseEnvelope(text).messages.find((message) => message.uid === uid);
   if (found === undefined) {
@@ -952,6 +994,285 @@ describe('connector-gmail: Gmail update_flags tool', () => {
       );
       expect(inboxSummary(listed, 7)).toMatchObject({ seen: false });
     });
+  });
+});
+
+describe('connector-gmail: Gmail list_mailboxes tool', () => {
+  it('List mailboxes returns name and special use', async () => {
+    await withGmailMcpClient(
+      [],
+      async (client) => {
+        const text = await listMailboxText(client);
+        expect(text).not.toContain(FIXTURE_PASSWORD);
+        expect(text).not.toContain('imap.gmail.com');
+        expect(text).not.toContain('[Gmail]/');
+        const listed = parseMailboxes(text);
+        expect(listed).toEqual([
+          { name: 'INBOX', specialUse: 'inbox' },
+          { name: 'Sent Items', specialUse: 'sent' },
+          { name: 'Drafts', specialUse: 'drafts' },
+          { name: 'Spam', specialUse: 'junk' },
+          { name: 'Deleted Items', specialUse: 'trash' },
+          { name: 'Old Mail', specialUse: 'archive' },
+          { name: 'Starred', specialUse: 'flagged' },
+          { name: 'Everything', specialUse: 'all' },
+          { name: 'Projects', specialUse: 'none' },
+        ]);
+      },
+      [
+        { name: 'Sent Items', attributes: ['\\Sent'], messages: [] },
+        { name: 'Drafts', attributes: ['\\Drafts'], messages: [] },
+        { name: 'Spam', attributes: ['\\Junk'], messages: [] },
+        { name: 'Deleted Items', attributes: ['\\Trash'], messages: [] },
+        { name: 'Old Mail', attributes: ['\\Archive'], messages: [] },
+        { name: 'Starred', attributes: ['\\Flagged'], messages: [] },
+        { name: 'Everything', attributes: ['\\All'], messages: [] },
+        { name: 'Projects', attributes: [], messages: [] },
+      ],
+    );
+  });
+});
+
+describe('connector-gmail: Gmail create_mailbox tool', () => {
+  it('Create mailbox adds a folder', async () => {
+    await withGmailMcpClient([], async (client) => {
+      const text = toolText(
+        await client.callTool({
+          name: 'gmail_create_mailbox',
+          arguments: { account: ACCOUNT_ID, name: 'Projects' },
+        }),
+      );
+      expect(text).not.toContain(FIXTURE_PASSWORD);
+      expect(parseObject(text)).toEqual({ name: 'Projects' });
+      const listed = parseMailboxes(await listMailboxText(client));
+      expect(listed).toContainEqual({ name: 'Projects', specialUse: 'none' });
+    });
+  });
+
+  it('Empty mailbox name is rejected', async () => {
+    await withGmailMcpClient([], async (client) => {
+      const empty = await expectCallFailure(() =>
+        client.callTool({
+          name: 'gmail_create_mailbox',
+          arguments: { account: ACCOUNT_ID, name: '' },
+        }),
+      );
+      expect(empty).toContain('Mailbox name is required');
+      expect(empty).not.toContain(FIXTURE_PASSWORD);
+      const spaces = await expectCallFailure(() =>
+        client.callTool({
+          name: 'gmail_create_mailbox',
+          arguments: { account: ACCOUNT_ID, name: '   ' },
+        }),
+      );
+      expect(spaces).toContain('Mailbox name is required');
+      const names = parseMailboxes(await listMailboxText(client)).map((mailbox) => mailbox.name);
+      expect(names).not.toContain('');
+      expect(names).not.toContain('   ');
+    });
+  });
+});
+
+describe('connector-gmail: Gmail rename_mailbox tool', () => {
+  it('Rename mailbox changes the folder name', async () => {
+    await withGmailMcpClient(
+      [],
+      async (client) => {
+        const text = toolText(
+          await client.callTool({
+            name: 'gmail_rename_mailbox',
+            arguments: { account: ACCOUNT_ID, name: 'Projects', newName: 'Archive' },
+          }),
+        );
+        expect(text).not.toContain(FIXTURE_PASSWORD);
+        expect(parseObject(text)).toEqual({ name: 'Projects', newName: 'Archive' });
+        const names = parseMailboxes(await listMailboxText(client)).map((mailbox) => mailbox.name);
+        expect(names).toContain('Archive');
+        expect(names).not.toContain('Projects');
+        const listed = toolText(
+          await client.callTool({
+            name: 'gmail_list_messages',
+            arguments: { account: ACCOUNT_ID, mailbox: 'Archive' },
+          }),
+        );
+        expect(listed).toContain('Keep me');
+      },
+      [{ name: 'Projects', attributes: [], messages: [note(1, 'Keep me')] }],
+    );
+  });
+
+  it('Empty rename is rejected', async () => {
+    await withGmailMcpClient(
+      [],
+      async (client) => {
+        const empty = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_rename_mailbox',
+            arguments: { account: ACCOUNT_ID, name: '', newName: 'Archive' },
+          }),
+        );
+        expect(empty).toContain('Mailbox name is required');
+        let names = parseMailboxes(await listMailboxText(client)).map((mailbox) => mailbox.name);
+        expect(names).toContain('Projects');
+        expect(names).not.toContain('Archive');
+        const spaces = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_rename_mailbox',
+            arguments: { account: ACCOUNT_ID, name: 'Projects', newName: '   ' },
+          }),
+        );
+        expect(spaces).toContain('Mailbox name is required');
+        expect(spaces).not.toContain(FIXTURE_PASSWORD);
+        names = parseMailboxes(await listMailboxText(client)).map((mailbox) => mailbox.name);
+        expect(names).toContain('Projects');
+      },
+      [{ name: 'Projects', attributes: [], messages: [] }],
+    );
+  });
+
+  it('Inbox cannot be renamed', async () => {
+    await withGmailMcpClient(
+      [],
+      async (client) => {
+        const inbox = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_rename_mailbox',
+            arguments: { account: ACCOUNT_ID, name: 'INBOX', newName: 'Elsewhere' },
+          }),
+        );
+        expect(inbox).toContain('Inbox cannot be renamed');
+        expect(inbox).not.toContain(FIXTURE_PASSWORD);
+        let names = parseMailboxes(await listMailboxText(client)).map((mailbox) => mailbox.name);
+        expect(names).toContain('INBOX');
+        expect(names).not.toContain('Elsewhere');
+        const lower = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_rename_mailbox',
+            arguments: { account: ACCOUNT_ID, name: 'inbox', newName: 'Elsewhere' },
+          }),
+        );
+        expect(lower).toContain('Inbox cannot be renamed');
+        const incoming = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_rename_mailbox',
+            arguments: { account: ACCOUNT_ID, name: 'Incoming', newName: 'Elsewhere' },
+          }),
+        );
+        expect(incoming).toContain('Inbox cannot be renamed');
+        names = parseMailboxes(await listMailboxText(client)).map((mailbox) => mailbox.name);
+        expect(names).toContain('Incoming');
+      },
+      [{ name: 'Incoming', attributes: ['\\Inbox'], messages: [] }],
+    );
+  });
+});
+
+describe('connector-gmail: Gmail delete_mailbox tool', () => {
+  it('Delete mailbox removes the folder', async () => {
+    await withGmailMcpClient(
+      [],
+      async (client) => {
+        const text = toolText(
+          await client.callTool({
+            name: 'gmail_delete_mailbox',
+            arguments: { account: ACCOUNT_ID, name: 'Projects' },
+          }),
+        );
+        expect(text).not.toContain(FIXTURE_PASSWORD);
+        expect(parseObject(text)).toEqual({ name: 'Projects' });
+        const names = parseMailboxes(await listMailboxText(client)).map((mailbox) => mailbox.name);
+        expect(names).not.toContain('Projects');
+        const trash = toolText(
+          await client.callTool({
+            name: 'gmail_list_messages',
+            arguments: { account: ACCOUNT_ID, mailbox: 'Deleted Items' },
+          }),
+        );
+        expect(trash).not.toContain('Gone with the folder');
+      },
+      [
+        { name: 'Projects', attributes: [], messages: [note(1, 'Gone with the folder')] },
+        { name: 'Deleted Items', attributes: ['\\Trash'], messages: [] },
+      ],
+    );
+  });
+
+  it('Empty delete name is rejected', async () => {
+    await withGmailMcpClient([], async (client) => {
+      const empty = await expectCallFailure(() =>
+        client.callTool({
+          name: 'gmail_delete_mailbox',
+          arguments: { account: ACCOUNT_ID, name: '' },
+        }),
+      );
+      expect(empty).toContain('Mailbox name is required');
+      expect(empty).not.toContain(FIXTURE_PASSWORD);
+      const spaces = await expectCallFailure(() =>
+        client.callTool({
+          name: 'gmail_delete_mailbox',
+          arguments: { account: ACCOUNT_ID, name: '   ' },
+        }),
+      );
+      expect(spaces).toContain('Mailbox name is required');
+      const names = parseMailboxes(await listMailboxText(client)).map((mailbox) => mailbox.name);
+      expect(names).toContain('INBOX');
+    });
+  });
+
+  it('Inbox cannot be deleted', async () => {
+    await withGmailMcpClient(
+      [],
+      async (client) => {
+        const inbox = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_delete_mailbox',
+            arguments: { account: ACCOUNT_ID, name: 'INBOX' },
+          }),
+        );
+        expect(inbox).toContain('Inbox cannot be deleted');
+        expect(inbox).not.toContain(FIXTURE_PASSWORD);
+        let names = parseMailboxes(await listMailboxText(client)).map((mailbox) => mailbox.name);
+        expect(names).toContain('INBOX');
+        const lower = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_delete_mailbox',
+            arguments: { account: ACCOUNT_ID, name: 'inbox' },
+          }),
+        );
+        expect(lower).toContain('Inbox cannot be deleted');
+        const incoming = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_delete_mailbox',
+            arguments: { account: ACCOUNT_ID, name: 'Incoming' },
+          }),
+        );
+        expect(incoming).toContain('Inbox cannot be deleted');
+        names = parseMailboxes(await listMailboxText(client)).map((mailbox) => mailbox.name);
+        expect(names).toContain('Incoming');
+      },
+      [{ name: 'Incoming', attributes: ['\\Inbox'], messages: [] }],
+    );
+  });
+
+  it('Server refusal leaves the mailbox', async () => {
+    await withGmailMcpClient(
+      [],
+      async (client) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_delete_mailbox',
+            arguments: { account: ACCOUNT_ID, name: 'Projects' },
+          }),
+        );
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        const names = parseMailboxes(await listMailboxText(client)).map((mailbox) => mailbox.name);
+        expect(names).toContain('Projects');
+      },
+      {
+        mailboxes: [{ name: 'Projects', attributes: [], messages: [] }],
+        deleteNo: FIXTURE_PASSWORD,
+      },
+    );
   });
 });
 

@@ -12,8 +12,11 @@ import {
   createSmtpClient,
   ATTACHMENT_INDEX_REQUIRED_MESSAGE,
   FLAG_IS_REQUIRED_MESSAGE,
+  INBOX_CANNOT_BE_DELETED_MESSAGE,
+  INBOX_CANNOT_BE_RENAMED_MESSAGE,
   INVALID_ORDER_MESSAGE,
   INVALID_SEARCH_FILTER_MESSAGE,
+  MAILBOX_NAME_REQUIRED_MESSAGE,
   UID_REQUIRED_MESSAGE,
   type ImapClient,
   type ImapSearchFilter,
@@ -159,6 +162,34 @@ const listMailboxes: NativeToolHandler = async (_args, accountValues, egressClie
   });
 };
 
+const createMailbox: NativeToolHandler = async (args, accountValues, egressClient) => {
+  const name = assertMailboxName(args.name);
+  return await withImapSession(accountValues, egressClient, 'INBOX', async (imap) => {
+    return jsonResult(await imap.createMailbox(name));
+  });
+};
+
+const renameMailbox: NativeToolHandler = async (args, accountValues, egressClient) => {
+  const name = assertMailboxName(args.name);
+  const newName = assertMailboxName(args.newName);
+  if (name.toUpperCase() === 'INBOX') {
+    throw new ToolFailure(INBOX_CANNOT_BE_RENAMED_MESSAGE);
+  }
+  return await withImapSession(accountValues, egressClient, 'INBOX', async (imap) => {
+    return jsonResult(await imap.renameMailbox(name, newName));
+  });
+};
+
+const deleteMailbox: NativeToolHandler = async (args, accountValues, egressClient) => {
+  const name = assertMailboxName(args.name);
+  if (name.toUpperCase() === 'INBOX') {
+    throw new ToolFailure(INBOX_CANNOT_BE_DELETED_MESSAGE);
+  }
+  return await withImapSession(accountValues, egressClient, 'INBOX', async (imap) => {
+    return jsonResult(await imap.deleteMailbox(name));
+  });
+};
+
 function assertUid(uid: unknown): void {
   if (typeof uid !== 'number' || !Number.isInteger(uid) || uid < 1) {
     throw new ToolFailure(UID_REQUIRED_MESSAGE);
@@ -169,6 +200,13 @@ function assertAttachmentIndex(index: unknown): void {
   if (typeof index !== 'number' || !Number.isInteger(index) || index < 0) {
     throw new ToolFailure(ATTACHMENT_INDEX_REQUIRED_MESSAGE);
   }
+}
+
+function assertMailboxName(name: unknown): string {
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    throw new ToolFailure(MAILBOX_NAME_REQUIRED_MESSAGE);
+  }
+  return name;
 }
 
 const readMessage: NativeToolHandler = async (args, accountValues, egressClient) => {
@@ -302,6 +340,47 @@ export const gmailConnector: NativeConnectorModule = {
         additionalProperties: false,
       },
       handler: listMailboxes,
+    },
+    {
+      name: 'create_mailbox',
+      description: 'Create a mailbox by name. An empty name is rejected.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Mailbox name to create' },
+        },
+        required: ['name'],
+        additionalProperties: false,
+      },
+      handler: createMailbox,
+    },
+    {
+      name: 'rename_mailbox',
+      description: 'Rename a mailbox. Inbox cannot be renamed.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Current mailbox name' },
+          newName: { type: 'string', description: 'New mailbox name' },
+        },
+        required: ['name', 'newName'],
+        additionalProperties: false,
+      },
+      handler: renameMailbox,
+    },
+    {
+      name: 'delete_mailbox',
+      description:
+        'Delete a mailbox by name. Does not move messages to trash. Inbox cannot be deleted.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Mailbox name to delete' },
+        },
+        required: ['name'],
+        additionalProperties: false,
+      },
+      handler: deleteMailbox,
     },
     {
       name: 'read_message',
