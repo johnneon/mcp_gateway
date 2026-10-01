@@ -118,9 +118,10 @@ Apply начинается только после явного «принято
 `blockers: 0` — основной агент запускает `developer` в режиме finish:
 
 1. Archive — `openspec-archive-change`: delta сливается в `openspec/specs/`, изменение переезжает в `openspec/changes/archive/`. Коммит `docs:`.
-2. Push — `git push -u origin change/<name>`.
-3. PR в `main` через `gh pr create` по шаблону из скилла `commits`. В описании — `Closes #<n>`.
-4. Карточка issue переходит в In review.
+2. После коммита archive и до push — один отдельный коммит chore, который задаёт version в корневом package.json. Если поля нет, записать 0.1.0. Если человек для этого изменения назвал major, minor или patch, увеличить этот компонент и обнулить младшие до 0. Иначе увеличить patch. Во время propose и apply версию не менять. В package.json воркспейсов поле version не добавлять и не менять. Коммит archive (docs) остаётся отдельным.
+3. Push — `git push -u origin change/<name>`.
+4. PR в `main` через `gh pr create` по шаблону из скилла `commits`. В описании — `Closes #<n>`.
+5. Карточка issue переходит в In review.
 
 Основной агент отдаёт человеку ссылку на PR и итог отчёта.
 

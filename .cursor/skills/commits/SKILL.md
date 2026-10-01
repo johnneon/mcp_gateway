@@ -29,6 +29,7 @@ Apply and fix continue on the same branch. Before starting, `git switch change/<
 | verification round written | validator | `docs:` | `verification.md` and `e2e/` of this change only |
 | a blocker fixed | developer | `fix:` | code and tests for that blocker |
 | change archived | developer | `docs:` | archived change and updated `openspec/specs/` |
+| root version set at finish | developer | `chore:` | At finish, after the archive commit and before push, create one chore commit that sets the root package.json version. Keep that commit separate from the archive docs commit. If the version field is absent, set 0.1.0. If the person named major, minor, or patch for this change, bump that component and reset lower components to 0. Otherwise bump patch. Do not bump the version during propose or apply. Do not add or change version in a workspace package.json. |
 
 One task is one commit. Do not batch several tasks, and do not commit a task whose tests fail.
 
@@ -92,9 +93,10 @@ Keep double quotes out of the message; Windows PowerShell breaks native argument
 
 Only after `verification.md` says `blockers: 0` and the change is archived.
 
-1. The tree is clean and the full test suite passes.
-2. `git push -u origin change/<name>`.
-3. Create the pull request into `main`. Write the body to a file as `tracker` shows; an inline `--body` breaks on double quotes in Windows PowerShell.
+1. At finish, after the archive commit and before push, create one chore commit that sets the root package.json version. Keep that commit separate from the archive docs commit. If the version field is absent, set 0.1.0. If the person named major, minor, or patch for this change, bump that component and reset lower components to 0. Otherwise bump patch. Do not bump the version during propose or apply. Do not add or change version in a workspace package.json.
+2. The tree is clean and the full test suite passes.
+3. `git push -u origin change/<name>`.
+4. Create the pull request into `main`. Write the body to a file as `tracker` shows; an inline `--body` breaks on double quotes in Windows PowerShell.
 
 PowerShell (Windows): write the body with `New-TemporaryFile` / a here-string, then:
 
@@ -134,8 +136,8 @@ blockers: 0 — see verification.md in the archived change.
 <commands to run the process and the tests>
 ```
 
-4. Move the issue card to In review per `tracker`.
-5. Report the pull request link to the person.
+5. Move the issue card to In review per `tracker`.
+6. Report the pull request link to the person.
 
 `Closes #<n>` is what closes the issue on merge; a pull request without it leaves the card in In review.
 

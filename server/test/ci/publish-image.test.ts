@@ -9,6 +9,15 @@ const repoRoot = path.resolve(here, '..', '..', '..');
 const publishPath = path.join(repoRoot, '.github', 'workflows', 'publish-image.yml');
 const checksPath = path.join(repoRoot, '.github', 'workflows', 'ci.yml');
 const readmePath = path.join(repoRoot, 'README.md');
+const commitsSkillPath = path.join(repoRoot, '.cursor', 'skills', 'commits', 'SKILL.md');
+const workflowDocPath = path.join(repoRoot, 'docs', 'workflow.md');
+const developerPath = path.join(repoRoot, '.cursor', 'agents', 'developer.md');
+
+const finishVersionEnglish =
+  'At finish, after the archive commit and before push, create one chore commit that sets the root package.json version. Keep that commit separate from the archive docs commit. If the version field is absent, set 0.1.0. If the person named major, minor, or patch for this change, bump that component and reset lower components to 0. Otherwise bump patch. Do not bump the version during propose or apply. Do not add or change version in a workspace package.json.';
+
+const finishVersionRussian =
+  'После коммита archive и до push — один отдельный коммит chore, который задаёт version в корневом package.json. Если поля нет, записать 0.1.0. Если человек для этого изменения назвал major, minor или patch, увеличить этот компонент и обнулить младшие до 0. Иначе увеличить patch. Во время propose и apply версию не менять. В package.json воркспейсов поле version не добавлять и не менять. Коммит archive (docs) остаётся отдельным.';
 
 type StepInput = string | boolean;
 
@@ -369,5 +378,56 @@ describe('ghcr-image-publish: README documents pull and run', () => {
     expect(run.match(/-e \S+/g)).toEqual(['-e ENCRYPTION_KEY']);
     expect(run).not.toContain('--env-file');
     expect(run).not.toContain('MCP_HOST');
+  });
+});
+
+describe('ghcr-image-publish: Finish bumps the root package version', () => {
+  it('Finish instructions bump the root version before push', () => {
+    const commits = readFileSync(commitsSkillPath, 'utf8').replace(/\r\n/g, '\n');
+    const workflow = readFileSync(workflowDocPath, 'utf8').replace(/\r\n/g, '\n');
+    const developer = readFileSync(developerPath, 'utf8').replace(/\r\n/g, '\n');
+
+    expect(commits).toContain(finishVersionEnglish);
+    expect(developer).toContain(finishVersionEnglish);
+
+    const table = commits.slice(
+      commits.indexOf('## When to commit'),
+      commits.indexOf('## Message'),
+    );
+    expect(table).toContain('| `chore:` |');
+    expect(table).toContain(finishVersionEnglish);
+
+    const pushSection = commits.slice(commits.indexOf('## Push and pull request'));
+    const versionInPush = pushSection.indexOf(finishVersionEnglish);
+    const suiteInPush = pushSection.indexOf('The tree is clean and the full test suite passes.');
+    const gitPush = pushSection.indexOf('git push -u origin');
+    expect(versionInPush).toBeGreaterThanOrEqual(0);
+    expect(suiteInPush).toBeGreaterThan(versionInPush);
+    expect(gitPush).toBeGreaterThan(suiteInPush);
+
+    const devFinish = developer.slice(developer.indexOf('## Finish'));
+    const archiveAt = devFinish.indexOf('commit the archive with `docs:`');
+    const versionAt = devFinish.indexOf(finishVersionEnglish);
+    const suiteAt = devFinish.indexOf('Run the full test suite once more.');
+    const pushAt = devFinish.indexOf('Push and open the pull request');
+    expect(archiveAt).toBeGreaterThanOrEqual(0);
+    expect(versionAt).toBeGreaterThan(archiveAt);
+    expect(suiteAt).toBeGreaterThan(versionAt);
+    expect(pushAt).toBeGreaterThan(suiteAt);
+
+    const finishStart = workflow.indexOf('### 6. Finish');
+    const finishEnd = workflow.indexOf('### 7. Merge');
+    expect(finishStart).toBeGreaterThanOrEqual(0);
+    expect(finishEnd).toBeGreaterThan(finishStart);
+    const finish = workflow.slice(finishStart, finishEnd);
+    expect(finish).toContain(finishVersionRussian);
+    const archiveStep = finish.indexOf('Коммит `docs:`');
+    const versionStep = finish.indexOf(finishVersionRussian);
+    const pushStep = finish.indexOf('git push -u origin');
+    expect(archiveStep).toBeGreaterThanOrEqual(0);
+    expect(versionStep).toBeGreaterThan(archiveStep);
+    expect(pushStep).toBeGreaterThan(versionStep);
+    expect(finish).not.toContain('full test suite');
+    expect(finish).not.toContain('npm test');
   });
 });
