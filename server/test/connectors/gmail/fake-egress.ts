@@ -21,7 +21,11 @@ type FakeImapDuplex = ReturnType<typeof createFakeImapDuplex>;
 export function createGmailFakeEgressTransport(options: {
   imap: FakeImapOptions;
   smtp: FakeSmtpOptions;
-}): EgressTransport & { tlsSessionCallCount: number; searchCommandCount: number } {
+}): EgressTransport & {
+  tlsSessionCallCount: number;
+  searchCommandCount: number;
+  messageFlags(mailboxName: string, uid: number): { seen: boolean; flagged: boolean } | undefined;
+} {
   const state = { tlsSessionCallCount: 0 };
   const imapSessions: FakeImapDuplex[] = [];
   const sharedMailboxes = createSharedFakeImapMailboxes(options.imap);
@@ -32,6 +36,14 @@ export function createGmailFakeEgressTransport(options: {
     },
     get searchCommandCount() {
       return imapSessions.reduce((sum, duplex) => sum + duplex.searchCommandCount, 0);
+    },
+    messageFlags(mailboxName: string, uid: number) {
+      const mailbox = sharedMailboxes.find((entry) => entry.name === mailboxName);
+      const message = mailbox?.messages.find((entry) => entry.uid === uid);
+      if (message === undefined) {
+        return undefined;
+      }
+      return { seen: message.seen, flagged: message.flagged === true };
     },
     httpsRequest() {
       return Promise.reject(new Error('https not used in gmail tests'));

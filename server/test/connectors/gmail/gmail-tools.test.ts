@@ -90,7 +90,11 @@ function manyMessages(count: number): FakeImapMessage[] {
   return messages;
 }
 
-type GmailEgress = EgressTransport & { tlsSessionCallCount: number; searchCommandCount: number };
+type GmailEgress = EgressTransport & {
+  tlsSessionCallCount: number;
+  searchCommandCount: number;
+  messageFlags(mailboxName: string, uid: number): { seen: boolean; flagged: boolean } | undefined;
+};
 
 type GmailImapExtras = Partial<
   Pick<FakeImapOptions, 'mailboxes' | 'deleteNo' | 'moveNo' | 'copyNo' | 'storeNo' | 'attachmentNo'>
@@ -1598,5 +1602,98 @@ describe('connector-gmail: Password never appears in Gmail tool or admin surface
     } finally {
       await client.close();
     }
+  });
+
+  it('Fixture password absent from move_message failure', async () => {
+    await withGmailMcpClient(
+      [note(7, 'Stay')],
+      async (client) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_move_message',
+            arguments: { account: ACCOUNT_ID, uid: 7, destination: 'Archive' },
+          }),
+        );
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        expect(await listMessageText(client)).toContain('"uid":7');
+      },
+      { mailboxes: archiveMailbox, moveNo: FIXTURE_PASSWORD },
+    );
+  });
+
+  it('Fixture password absent from copy_message failure', async () => {
+    await withGmailMcpClient(
+      [note(7, 'Copy me')],
+      async (client) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_copy_message',
+            arguments: { account: ACCOUNT_ID, uid: 7, destination: 'Archive' },
+          }),
+        );
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        expect(await listMessageText(client)).toContain('"uid":7');
+        expect(await listMessageText(client, 'Archive')).not.toContain('Copy me');
+      },
+      { mailboxes: archiveMailbox, copyNo: FIXTURE_PASSWORD },
+    );
+  });
+
+  it('Fixture password absent from update_flags failure', async () => {
+    await withGmailMcpClient(
+      [{ ...note(7, 'plain'), seen: false, flagged: false }],
+      async (client, egress) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_update_flags',
+            arguments: { account: ACCOUNT_ID, uid: 7, seen: true },
+          }),
+        );
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        expect(egress.messageFlags('INBOX', 7)).toEqual({ seen: false, flagged: false });
+        const listed = await listMessageText(client);
+        expect(inboxSummary(listed, 7)).toMatchObject({ seen: false, unread: true });
+      },
+      { storeNo: FIXTURE_PASSWORD },
+    );
+  });
+
+  it('Fixture password absent from delete_mailbox failure', async () => {
+    await withGmailMcpClient(
+      [],
+      async (client) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_delete_mailbox',
+            arguments: { account: ACCOUNT_ID, name: 'Projects' },
+          }),
+        );
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        const names = parseMailboxes(await listMailboxText(client)).map((mailbox) => mailbox.name);
+        expect(names).toContain('Projects');
+      },
+      {
+        mailboxes: [{ name: 'Projects', attributes: [], messages: [] }],
+        deleteNo: FIXTURE_PASSWORD,
+      },
+    );
+  });
+
+  it('Fixture password absent from get_attachment failure', async () => {
+    await withGmailMcpClient(
+      [attachedMessage(42)],
+      async (client) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_get_attachment',
+            arguments: { account: ACCOUNT_ID, uid: 42, index: 0 },
+          }),
+        );
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        expect(message).not.toContain('ZmlsZS1ieXRlcw==');
+        expect(message).not.toContain('"data"');
+      },
+      { attachmentNo: FIXTURE_PASSWORD },
+    );
   });
 });
