@@ -14,4 +14,4 @@
 
 ## 4. Full package check
 
-- [ ] 4.1 From the repository root, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm test`, and `npm run build` all exit 0. The existing pull-request checks tests still pass. No live GHCR call.
+- [x] 4.1 From the repository root, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm test`, and `npm run build` all exit 0. The existing pull-request checks tests still pass. No live GHCR call.
