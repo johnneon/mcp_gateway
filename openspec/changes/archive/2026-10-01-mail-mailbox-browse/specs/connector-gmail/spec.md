@@ -1,57 +1,6 @@
-# connector-gmail Specification
+# Spec Delta
 
-## Purpose
-
-Defines the native Gmail connector: mailbox credentials, constant IMAP and SMTP hosts, connection check over the egress TLS session, and MCP tools that list, search, and read messages without exposing the app password or contacting a live mailbox in tests.
-
-## Requirements
-
-### Requirement: Gmail connector module identity and fields
-
-The process SHALL register a native connector with `id` exactly `gmail`, display `name` exactly `Gmail`, and `kind` exactly `native`. The connector SHALL declare exactly these account fields: `address` with type `text`, `required` true, and English label `Address`; and `password` with type `secret`, `required` true, and English label `App password`. The connector SHALL declare `allowedDestinations` as the constant pairs `{ host: "imap.gmail.com", port: 993 }` and `{ host: "smtp.gmail.com", port: 465 }` and SHALL NOT take hosts from model arguments or from account fields of type `host`.
-
-#### Scenario: Production registry lists Gmail with Address and App password fields
-
-- **GIVEN** the production connector registry module
-- **WHEN** its public connector list is read
-- **THEN** the list includes a connector with `id` `gmail`, `name` `Gmail`, and `kind` `native`
-- **AND** that connector's fields include `{ name: "address", label: "Address", type: "text", required: true }` and `{ name: "password", label: "App password", type: "secret", required: true }`
-
-#### Scenario: Gmail allowlist is the two constant hosts
-
-- **GIVEN** the Gmail connector module from the production registry
-- **WHEN** its `allowedDestinations` are read
-- **THEN** they are exactly `{ host: "imap.gmail.com", port: 993 }` and `{ host: "smtp.gmail.com", port: 465 }`
-
-### Requirement: Gmail connection check uses IMAP LOGIN and SMTP AUTH over egress
-
-The Gmail connector's `checkConnection` SHALL receive account field values and the gateway-built egress client. It SHALL open a TLS session to `imap.gmail.com:993` and perform IMAP LOGIN with `address` and `password`, and SHALL open a TLS session to `smtp.gmail.com:465` and perform SMTP AUTH with the same credentials. The check SHALL succeed only when both authentications succeed. The check SHALL NOT send mail. Automated tests SHALL use a fake IMAP server and a fake SMTP server behind a fake egress transport and SHALL NOT contact a live mailbox. On failure, the admin API surface remains the fixed plain text `Connection check failed` with no connector exception text and no password in the response.
-
-#### Scenario: Successful check when fake IMAP and SMTP both accept login
-
-- **GIVEN** the admin app with the Gmail connector and a fake egress transport whose TLS sessions speak to a fake IMAP server and a fake SMTP server that both accept the fixture address and password
-- **WHEN** the client performs `POST /api/accounts` with connector `gmail`, a non-empty label, and those fixture values
-- **THEN** the response status is 201
-- **AND** the account is persisted
-- **AND** the serialized response body does not contain the fixture password
-
-#### Scenario: Failed check when fake IMAP rejects login
-
-- **GIVEN** the admin app with the Gmail connector and a fake egress transport whose fake IMAP server rejects LOGIN while the fake SMTP server would accept AUTH
-- **WHEN** the client performs `POST /api/accounts` with connector `gmail` and otherwise valid values including a fixture password
-- **THEN** the response status is 400
-- **AND** the response body is exactly the plain text `Connection check failed`
-- **AND** the serialized response body does not contain the fixture password
-- **AND** the account is not saved
-
-#### Scenario: Failed check when fake SMTP rejects AUTH
-
-- **GIVEN** the admin app with the Gmail connector and a fake egress transport whose fake IMAP server accepts LOGIN and whose fake SMTP server rejects AUTH
-- **WHEN** the client performs `POST /api/accounts` with connector `gmail` and otherwise valid values including a fixture password
-- **THEN** the response status is 400
-- **AND** the response body is exactly the plain text `Connection check failed`
-- **AND** the serialized response body does not contain the fixture password
-- **AND** the account is not saved
+## MODIFIED Requirements
 
 ### Requirement: Gmail list_messages tool
 
@@ -239,17 +188,6 @@ The Gmail connector SHALL declare a tool with short name `read_message` (MCP nam
 - **AND** `attachments` is an empty array
 - **AND** the result text does not contain the account password
 
-### Requirement: Shared mail protocol is separate from the Gmail connector
-
-IMAP and SMTP protocol logic SHALL live in a shared module that speaks only over an already-connected egress duplex and accepts host and credential mapping from the caller. The Gmail connector SHALL supply hosts, field mapping, connection check, and tools, and SHALL NOT embed a second IMAP/SMTP stack. Automated tests of the shared module SHALL use fake IMAP and fake SMTP servers and SHALL NOT contact a live provider.
-
-#### Scenario: Shared module authenticates over a duplex without opening its own TCP socket
-
-- **GIVEN** a fake duplex connected to a fake IMAP server that accepts LOGIN
-- **WHEN** the shared mail module performs IMAP LOGIN over that duplex with fixture credentials
-- **THEN** LOGIN succeeds
-- **AND** the module did not open a separate TCP or TLS socket outside the provided duplex
-
 ### Requirement: Password never appears in Gmail tool or admin surfaces
 
 The Gmail app password SHALL NOT appear in tool result text, MCP error text, or admin API response bodies for create, patch, check, list, or get-account paths that involve a Gmail account. Tests SHALL use a fixture password string and assert it is absent from those serialized bodies after scrubbing and fixed error mapping. A failed `gmail_move_message`, `gmail_copy_message`, `gmail_update_flags`, `gmail_delete_mailbox`, or `gmail_get_attachment` call SHALL also omit that fixture password from MCP error text when the fake IMAP `NO` line contains it. The mailbox, flags, and message location SHALL stay as they were when that call fails.
@@ -305,6 +243,8 @@ The Gmail app password SHALL NOT appear in tool result text, MCP error text, or 
 - **WHEN** an authenticated MCP client calls `gmail_get_attachment` for that uid and index 0
 - **THEN** the MCP error text does not contain the fixture secret
 - **AND** the error text is not a successful attachment object
+
+## ADDED Requirements
 
 ### Requirement: Gmail list_mailboxes tool
 

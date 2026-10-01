@@ -1,58 +1,6 @@
-# connector-mail-ru Specification
+# Spec Delta
 
-## Purpose
-
-Defines the native Mail.ru connector: mailbox credentials, constant IMAP and SMTP hosts, connection check over the egress TLS session, and MCP tools that list, search, and read messages without exposing the app password or contacting a live mailbox in tests.
-
-## Requirements
-
-### Requirement: Mail.ru connector module identity and fields
-
-The process SHALL register a native connector with `id` exactly `mailru`, display `name` exactly `Mail.ru`, and `kind` exactly `native`. The connector SHALL declare exactly these account fields: `address` with type `text`, `required` true, and English label `Address`; and `password` with type `secret`, `required` true, and English label `App password`. The connector SHALL declare `allowedDestinations` as the constant pairs `{ host: "imap.mail.ru", port: 993 }` and `{ host: "smtp.mail.ru", port: 465 }` and SHALL NOT take hosts from model arguments or from account fields of type `host`.
-
-#### Scenario: Production registry lists Mail.ru with Address and App password fields
-
-- **GIVEN** the production connector registry module
-- **WHEN** its public connector list is read
-- **THEN** the list includes a connector with `id` `mailru`, `name` `Mail.ru`, and `kind` `native`
-- **AND** that connector's fields include `{ name: "address", label: "Address", type: "text", required: true }` and `{ name: "password", label: "App password", type: "secret", required: true }`
-- **AND** the list still includes a connector with `id` `gmail`
-
-#### Scenario: Mail.ru allowlist is the two constant hosts
-
-- **GIVEN** the Mail.ru connector module from the production registry
-- **WHEN** its `allowedDestinations` are read
-- **THEN** they are exactly `{ host: "imap.mail.ru", port: 993 }` and `{ host: "smtp.mail.ru", port: 465 }`
-
-### Requirement: Mail.ru connection check uses IMAP LOGIN and SMTP AUTH over egress
-
-The Mail.ru connector's `checkConnection` SHALL receive account field values and the gateway-built egress client. It SHALL open a TLS session to `imap.mail.ru:993` and perform IMAP LOGIN with `address` and `password`, and SHALL open a TLS session to `smtp.mail.ru:465` and perform SMTP AUTH with the same credentials. The check SHALL succeed only when both authentications succeed. The check SHALL NOT send mail. Automated tests SHALL use a fake IMAP server and a fake SMTP server behind a fake egress transport and SHALL NOT contact a live mailbox. On failure, the admin API surface remains the fixed plain text `Connection check failed` with no connector exception text and no password in the response.
-
-#### Scenario: Successful check when fake IMAP and SMTP both accept login
-
-- **GIVEN** the admin app with the Mail.ru connector and a fake egress transport whose TLS sessions speak to a fake IMAP server and a fake SMTP server that both accept the fixture address and password
-- **WHEN** the client performs `POST /api/accounts` with connector `mailru`, a non-empty label, and those fixture values
-- **THEN** the response status is 201
-- **AND** the account is persisted
-- **AND** the serialized response body does not contain the fixture password
-
-#### Scenario: Failed check when fake IMAP rejects login
-
-- **GIVEN** the admin app with the Mail.ru connector and a fake egress transport whose fake IMAP server rejects LOGIN while the fake SMTP server would accept AUTH
-- **WHEN** the client performs `POST /api/accounts` with connector `mailru` and otherwise valid values including a fixture password
-- **THEN** the response status is 400
-- **AND** the response body is exactly the plain text `Connection check failed`
-- **AND** the serialized response body does not contain the fixture password
-- **AND** the account is not saved
-
-#### Scenario: Failed check when fake SMTP rejects AUTH
-
-- **GIVEN** the admin app with the Mail.ru connector and a fake egress transport whose fake IMAP server accepts LOGIN and whose fake SMTP server rejects AUTH
-- **WHEN** the client performs `POST /api/accounts` with connector `mailru` and otherwise valid values including a fixture password
-- **THEN** the response status is 400
-- **AND** the response body is exactly the plain text `Connection check failed`
-- **AND** the serialized response body does not contain the fixture password
-- **AND** the account is not saved
+## MODIFIED Requirements
 
 ### Requirement: Mail.ru list_messages tool
 
@@ -240,17 +188,6 @@ The Mail.ru connector SHALL declare a tool with short name `read_message` (MCP n
 - **AND** `attachments` is an empty array
 - **AND** the result text does not contain the account password
 
-### Requirement: Mail.ru uses the shared mail protocol module
-
-The Mail.ru connector SHALL supply hosts, field mapping, connection check, and tools, and SHALL perform IMAP and SMTP operations only through the existing shared mail module over an already-connected egress duplex. It SHALL NOT embed a second IMAP/SMTP stack and SHALL NOT open a TCP or TLS socket outside the egress client. Automated tests SHALL use fake IMAP and fake SMTP servers and SHALL NOT contact a live Mail.ru mailbox.
-
-#### Scenario: Mail.ru login uses the shared module over the egress duplex
-
-- **GIVEN** a fake egress client that returns a duplex connected to a fake IMAP server for `imap.mail.ru:993` and a duplex connected to a fake SMTP server for `smtp.mail.ru:465`
-- **WHEN** the Mail.ru connector `checkConnection` runs with fixture address and password that both fakes accept
-- **THEN** IMAP LOGIN and SMTP AUTH both succeed
-- **AND** the connector did not open a TCP or TLS socket outside that egress client
-
 ### Requirement: Password never appears in Mail.ru tool or admin surfaces
 
 The Mail.ru app password SHALL NOT appear in tool result text, MCP error text, or admin API response bodies for create, patch, check, list, or get-account paths that involve a Mail.ru account. Tests SHALL use a fixture password string and assert it is absent from those serialized bodies after scrubbing and fixed error mapping. A failed `mailru_move_message`, `mailru_copy_message`, `mailru_update_flags`, `mailru_delete_mailbox`, or `mailru_get_attachment` call SHALL also omit that fixture password from MCP error text when the fake IMAP `NO` line contains it. The mailbox, flags, and message location SHALL stay as they were when that call fails.
@@ -306,6 +243,8 @@ The Mail.ru app password SHALL NOT appear in tool result text, MCP error text, o
 - **WHEN** an authenticated MCP client calls `mailru_get_attachment` for that uid and index 0
 - **THEN** the MCP error text does not contain the fixture secret
 - **AND** the error text is not a successful attachment object
+
+## ADDED Requirements
 
 ### Requirement: Mail.ru list_mailboxes tool
 
