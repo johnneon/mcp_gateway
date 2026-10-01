@@ -6,10 +6,15 @@ import {
   IMAP_LOGIN_FAILED_MESSAGE,
   INVALID_ORDER_MESSAGE,
   INVALID_SEARCH_FILTER_MESSAGE,
+  INBOX_CANNOT_BE_DELETED_MESSAGE,
+  INBOX_CANNOT_BE_RENAMED_MESSAGE,
+  MAILBOX_NAME_REQUIRED_MESSAGE,
   MESSAGE_NOT_FOUND_MESSAGE,
   UID_REQUIRED_MESSAGE,
   type AttachmentDownload,
   type ImapSearchFilter,
+  type MailboxInfo,
+  type MailboxSpecialUse,
   type MessageAttachment,
   type MessageHeaders,
   type MessagePage,
@@ -325,6 +330,52 @@ function requireAttachmentIndex(index: unknown): number {
   return index;
 }
 
+const SPECIAL_USE_FLAGS: ReadonlyArray<readonly [string, MailboxSpecialUse]> = [
+  ['\\Inbox', 'inbox'],
+  ['\\Sent', 'sent'],
+  ['\\Drafts', 'drafts'],
+  ['\\Junk', 'junk'],
+  ['\\Trash', 'trash'],
+  ['\\Archive', 'archive'],
+  ['\\Flagged', 'flagged'],
+  ['\\All', 'all'],
+];
+
+function specialUseFromAttributes(attributes: readonly string[]): MailboxSpecialUse {
+  const folded = attributes.map((attribute) => attribute.toLowerCase());
+  for (const [flag, use] of SPECIAL_USE_FLAGS) {
+    if (folded.includes(flag.toLowerCase())) {
+      return use;
+    }
+  }
+  return 'none';
+}
+
+function isBlankMailboxName(name: string): boolean {
+  return name.trim().length === 0;
+}
+
+function isInboxMailboxName(name: string): boolean {
+  return name.toUpperCase() === 'INBOX';
+}
+
+function unquoteImap(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  }
+  return trimmed;
+}
+
+function parseListLine(line: string): { name: string; attributes: string[] } | undefined {
+  const match = /^\* LIST \(([^)]*)\)\s+\S+\s+(.+)$/.exec(line);
+  if (match === null) {
+    return undefined;
+  }
+  const attributes = (match[1] ?? '').split(/\s+/).filter((part) => part.length > 0);
+  return { name: unquoteImap(match[2] ?? ''), attributes };
+}
+
 function attachmentMetadata(part: ParsedAttachment): MessageAttachment {
   return {
     index: part.index,
@@ -342,6 +393,10 @@ export type ImapClient = {
   pageMessages(query?: MessagePageQuery): Promise<MessagePage>;
   fetchMessage(uid: unknown): Promise<ReadMessageResult>;
   getAttachment(uid: unknown, index: unknown): Promise<AttachmentDownload>;
+  listMailboxes(): Promise<MailboxInfo[]>;
+  createMailbox(name: string): Promise<{ name: string }>;
+  renameMailbox(name: string, newName: string): Promise<{ name: string; newName: string }>;
+  deleteMailbox(name: string): Promise<{ name: string }>;
   logout(): Promise<void>;
   close(): void;
 };
@@ -355,6 +410,16 @@ type ParsedFetch = {
   uid: number;
   flags: string;
   sections: FetchSection[];
+};
+
+type ListedMailbox = {
+  name: string;
+  attributes: string[];
+};
+
+type TaggedResult = {
+  fetches: ParsedFetch[];
+  listed: ListedMailbox[];
 };
 
 /**
@@ -392,11 +457,12 @@ export function createImapClient(duplex: Duplex): ImapClient {
     }
   }
 
-  async function runTagged(command: string): Promise<ParsedFetch[]> {
+  async function runTagged(command: string): Promise<TaggedResult> {
     await ensureGreeting();
     const tag = nextTag();
     session.writeLine(`${tag} ${command}`);
     const fetches: ParsedFetch[] = [];
+    const listed: ListedMailbox[] = [];
     const searchUids: number[] = [];
     let searchSeen = false;
 
@@ -405,9 +471,12 @@ export function createImapClient(duplex: Duplex): ImapClient {
       if (line.startsWith(`${tag} `)) {
         if (line.startsWith(`${tag} OK`)) {
           if (searchSeen) {
-            return searchUids.map((uid) => ({ uid, flags: '', sections: [] }));
+            return {
+              fetches: searchUids.map((uid) => ({ uid, flags: '', sections: [] })),
+              listed,
+            };
           }
-          return fetches;
+          return { fetches, listed };
         }
         if (line.startsWith(`${tag} NO`) || line.startsWith(`${tag} BAD`)) {
           throw new Error(line.slice(tag.length + 1));
@@ -427,6 +496,13 @@ export function createImapClient(duplex: Duplex): ImapClient {
         }
         continue;
       }
+      if (line.startsWith('* LIST ')) {
+        const parsed = parseListLine(line);
+        if (parsed !== undefined) {
+          listed.push(parsed);
+        }
+        continue;
+      }
       if (line.startsWith('* ') && line.includes('FETCH')) {
         fetches.push(parseFetchLine(line, literals));
       }
@@ -439,7 +515,7 @@ export function createImapClient(duplex: Duplex): ImapClient {
     htmlBody: string;
     attachments: ParsedAttachment[];
   }> {
-    const fetches = await runTagged(
+    const { fetches } = await runTagged(
       `UID FETCH ${String(uid)} (BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE)] BODY.PEEK[TEXT])`,
     );
     const fetch = fetches[0];
@@ -459,6 +535,57 @@ export function createImapClient(duplex: Duplex): ImapClient {
     };
   }
 
+  async function listMailboxes(): Promise<MailboxInfo[]> {
+    const { listed } = await runTagged('LIST "" "*"');
+    return listed.map((entry) => ({
+      name: entry.name,
+      specialUse: specialUseFromAttributes(entry.attributes),
+    }));
+  }
+
+  async function createMailbox(name: string): Promise<{ name: string }> {
+    if (isBlankMailboxName(name)) {
+      throw new Error(MAILBOX_NAME_REQUIRED_MESSAGE);
+    }
+    await runTagged(`CREATE ${quoteAtom(name)}`);
+    return { name };
+  }
+
+  async function renameMailbox(
+    name: string,
+    newName: string,
+  ): Promise<{ name: string; newName: string }> {
+    if (isBlankMailboxName(name) || isBlankMailboxName(newName)) {
+      throw new Error(MAILBOX_NAME_REQUIRED_MESSAGE);
+    }
+    if (isInboxMailboxName(name)) {
+      throw new Error(INBOX_CANNOT_BE_RENAMED_MESSAGE);
+    }
+    const listed = await listMailboxes();
+    const source = listed.find((mailbox) => mailbox.name === name);
+    if (source?.specialUse === 'inbox') {
+      throw new Error(INBOX_CANNOT_BE_RENAMED_MESSAGE);
+    }
+    await runTagged(`RENAME ${quoteAtom(name)} ${quoteAtom(newName)}`);
+    return { name, newName };
+  }
+
+  async function deleteMailbox(name: string): Promise<{ name: string }> {
+    if (isBlankMailboxName(name)) {
+      throw new Error(MAILBOX_NAME_REQUIRED_MESSAGE);
+    }
+    if (isInboxMailboxName(name)) {
+      throw new Error(INBOX_CANNOT_BE_DELETED_MESSAGE);
+    }
+    const listed = await listMailboxes();
+    const source = listed.find((mailbox) => mailbox.name === name);
+    if (source?.specialUse === 'inbox') {
+      throw new Error(INBOX_CANNOT_BE_DELETED_MESSAGE);
+    }
+    await runTagged(`DELETE ${quoteAtom(name)}`);
+    return { name };
+  }
+
   return {
     async login(user, password) {
       try {
@@ -476,7 +603,7 @@ export function createImapClient(duplex: Duplex): ImapClient {
       assertNotFreeFormSearch(filter);
       const criteria = buildImapSearchCriteria(filter);
       const result = await runTagged(`UID SEARCH ${criteria}`);
-      return result.map((entry) => entry.uid);
+      return result.fetches.map((entry) => entry.uid);
     },
 
     async fetchSummaries(uids) {
@@ -484,7 +611,7 @@ export function createImapClient(duplex: Duplex): ImapClient {
         return [];
       }
       const set = uids.join(',');
-      const fetches = await runTagged(
+      const { fetches } = await runTagged(
         `UID FETCH ${set} (FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE)])`,
       );
       return fetches.map((fetch) => {
@@ -550,6 +677,11 @@ export function createImapClient(duplex: Duplex): ImapClient {
         data: part.bytes.toString('base64'),
       } satisfies AttachmentDownload;
     },
+
+    listMailboxes,
+    createMailbox,
+    renameMailbox,
+    deleteMailbox,
 
     async logout() {
       try {

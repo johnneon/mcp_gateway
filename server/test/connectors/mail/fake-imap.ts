@@ -34,6 +34,8 @@ export type FakeImapOptions = {
   messages?: FakeImapMessage[];
   /** Extra mailboxes. INBOX is always built from `messages`, not from this list. */
   mailboxes?: Array<Omit<FakeMailbox, 'messages'> & { messages?: FakeImapMessage[] }>;
+  /** When set, DELETE replies NO with this text and leaves the mailbox. */
+  deleteNo?: string;
 };
 
 /**
@@ -44,6 +46,7 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
   searchCommandCount: number;
   lastSearchCriteria: string | undefined;
   fetchCommandCount: number;
+  commands: readonly string[];
 } {
   const acceptLogin = options.acceptLogin !== false;
   const mailboxes = initialMailboxes(options);
@@ -54,6 +57,7 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
     searchCommandCount: 0,
     lastSearchCriteria: undefined as string | undefined,
     fetchCommandCount: 0,
+    commands: [] as string[],
   };
 
   const duplex = new Duplex({
@@ -75,6 +79,9 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
   });
   Object.defineProperty(duplex, 'fetchCommandCount', {
     get: () => state.fetchCommandCount,
+  });
+  Object.defineProperty(duplex, 'commands', {
+    get: () => state.commands,
   });
 
   const sendLine = (line: string): void => {
@@ -112,6 +119,7 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
     const tag = match[1] ?? '';
     const rest = match[2] ?? '';
     const upper = rest.toUpperCase();
+    state.commands.push(rest);
 
     if (upper.startsWith('LOGIN ')) {
       if (!acceptLogin) {
@@ -145,6 +153,62 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
       selected = mailbox;
       sendLine(`* ${String(mailbox.messages.length)} EXISTS`);
       sendLine(`${tag} OK SELECT completed`);
+      return;
+    }
+
+    if (upper.startsWith('LIST ')) {
+      for (const mailbox of mailboxes) {
+        sendLine(`* LIST (${mailbox.attributes.join(' ')}) "/" ${quoteImap(mailbox.name)}`);
+      }
+      sendLine(`${tag} OK LIST completed`);
+      return;
+    }
+
+    if (upper.startsWith('CREATE ')) {
+      const name = unquoteAtom(rest.slice('CREATE '.length));
+      if (findMailbox(mailboxes, name) !== undefined) {
+        sendLine(`${tag} NO mailbox exists`);
+        return;
+      }
+      mailboxes.push({ name, attributes: [], messages: [] });
+      sendLine(`${tag} OK CREATE completed`);
+      return;
+    }
+
+    if (upper.startsWith('RENAME ')) {
+      const pair = readQuotedPair(rest.slice('RENAME '.length));
+      if (pair === undefined) {
+        sendLine(`${tag} BAD rename`);
+        return;
+      }
+      const [fromName, toName] = pair;
+      const source = findMailbox(mailboxes, fromName);
+      if (source === undefined) {
+        sendLine(`${tag} NO mailbox not found`);
+        return;
+      }
+      if (findMailbox(mailboxes, toName) !== undefined) {
+        sendLine(`${tag} NO mailbox exists`);
+        return;
+      }
+      source.name = toName;
+      sendLine(`${tag} OK RENAME completed`);
+      return;
+    }
+
+    if (upper.startsWith('DELETE ')) {
+      const name = unquoteAtom(rest.slice('DELETE '.length));
+      if (options.deleteNo !== undefined) {
+        sendLine(`${tag} NO ${options.deleteNo}`);
+        return;
+      }
+      const index = mailboxes.findIndex((mailbox) => mailbox.name === name);
+      if (index < 0) {
+        sendLine(`${tag} NO mailbox not found`);
+        return;
+      }
+      mailboxes.splice(index, 1);
+      sendLine(`${tag} OK DELETE completed`);
       return;
     }
 
@@ -240,7 +304,44 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
     searchCommandCount: number;
     lastSearchCriteria: string | undefined;
     fetchCommandCount: number;
+    commands: readonly string[];
   };
+}
+
+function quoteImap(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function readQuotedPair(input: string): [string, string] | undefined {
+  const first = readQuoted(input.trim());
+  if (first === undefined) {
+    return undefined;
+  }
+  const second = readQuoted(first.rest);
+  if (second === undefined) {
+    return undefined;
+  }
+  return [first.value, second.value];
+}
+
+function readQuoted(input: string): { value: string; rest: string } | undefined {
+  if (!input.startsWith('"')) {
+    return undefined;
+  }
+  let value = '';
+  for (let index = 1; index < input.length; index += 1) {
+    const ch = input[index];
+    if (ch === '\\') {
+      value += input[index + 1] ?? '';
+      index += 1;
+      continue;
+    }
+    if (ch === '"') {
+      return { value, rest: input.slice(index + 1).trim() };
+    }
+    value += ch ?? '';
+  }
+  return undefined;
 }
 
 function fetchMarksSeen(items: string): boolean {

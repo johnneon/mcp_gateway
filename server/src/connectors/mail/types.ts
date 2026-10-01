@@ -67,5 +67,16 @@ export const UID_REQUIRED_MESSAGE = 'uid is required';
 export const ATTACHMENT_INDEX_REQUIRED_MESSAGE = 'Attachment index is required';
 export const ATTACHMENT_NOT_FOUND_MESSAGE = 'Attachment not found';
 export const MESSAGE_NOT_FOUND_MESSAGE = 'Message not found';
+export const MAILBOX_NAME_REQUIRED_MESSAGE = 'Mailbox name is required';
+export const INBOX_CANNOT_BE_RENAMED_MESSAGE = 'Inbox cannot be renamed';
+export const INBOX_CANNOT_BE_DELETED_MESSAGE = 'Inbox cannot be deleted';
+
+export type MailboxSpecialUse =
+  'inbox' | 'sent' | 'drafts' | 'junk' | 'trash' | 'archive' | 'flagged' | 'all' | 'none';
+
+export type MailboxInfo = {
+  name: string;
+  specialUse: MailboxSpecialUse;
+};
 export const IMAP_LOGIN_FAILED_MESSAGE = 'IMAP login failed';
 export const SMTP_AUTH_FAILED_MESSAGE = 'SMTP authentication failed';
