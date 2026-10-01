@@ -6,16 +6,21 @@ import {
   IMAP_LOGIN_FAILED_MESSAGE,
   INVALID_ORDER_MESSAGE,
   INVALID_SEARCH_FILTER_MESSAGE,
+  DESTINATION_MAILBOX_DOES_NOT_EXIST_MESSAGE,
+  FLAG_IS_REQUIRED_MESSAGE,
   INBOX_CANNOT_BE_DELETED_MESSAGE,
   INBOX_CANNOT_BE_RENAMED_MESSAGE,
   MAILBOX_NAME_REQUIRED_MESSAGE,
   MESSAGE_NOT_FOUND_MESSAGE,
+  TRASH_MAILBOX_IS_NOT_AVAILABLE_MESSAGE,
   UID_REQUIRED_MESSAGE,
   type AttachmentDownload,
   type ImapSearchFilter,
   type MailboxInfo,
   type MailboxSpecialUse,
   type MessageAttachment,
+  type MessageFlagState,
+  type MessageLocation,
   type MessageHeaders,
   type MessagePage,
   type MessagePageQuery,
@@ -397,6 +402,15 @@ export type ImapClient = {
   createMailbox(name: string): Promise<{ name: string }>;
   renameMailbox(name: string, newName: string): Promise<{ name: string; newName: string }>;
   deleteMailbox(name: string): Promise<{ name: string }>;
+  moveMessage(uid: unknown, source: string, destination: string): Promise<MessageLocation>;
+  copyMessage(uid: unknown, source: string, destination: string): Promise<MessageLocation>;
+  deleteMessage(uid: unknown, source: string): Promise<MessageLocation>;
+  restoreMessage(uid: unknown, destination?: string): Promise<MessageLocation>;
+  updateFlags(
+    uid: unknown,
+    mailbox: string,
+    flags: { seen?: unknown; flagged?: unknown },
+  ): Promise<MessageFlagState>;
   logout(): Promise<void>;
   close(): void;
 };
@@ -586,6 +600,121 @@ export function createImapClient(duplex: Duplex): ImapClient {
     return { name };
   }
 
+  async function selectMailbox(mailbox: string): Promise<void> {
+    await runTagged(`SELECT ${quoteAtom(mailbox)}`);
+  }
+
+  async function uidsInSelected(): Promise<number[]> {
+    const result = await runTagged('UID SEARCH ALL');
+    return result.fetches.map((entry) => entry.uid);
+  }
+
+  async function requirePresent(uid: number): Promise<void> {
+    const uids = await uidsInSelected();
+    if (!uids.includes(uid)) {
+      throw new Error(MESSAGE_NOT_FOUND_MESSAGE);
+    }
+  }
+
+  async function requireDestination(name: string): Promise<void> {
+    const listed = await listMailboxes();
+    if (!listed.some((mailbox) => mailbox.name === name)) {
+      throw new Error(DESTINATION_MAILBOX_DOES_NOT_EXIST_MESSAGE);
+    }
+  }
+
+  async function trashMailbox(): Promise<MailboxInfo | undefined> {
+    const listed = await listMailboxes();
+    return listed.find((mailbox) => mailbox.specialUse === 'trash');
+  }
+
+  async function moveMessage(
+    uid: unknown,
+    source: string,
+    destination: string,
+  ): Promise<MessageLocation> {
+    const parsedUid = requireUid(uid);
+    await requireDestination(destination);
+    await selectMailbox(source);
+    await requirePresent(parsedUid);
+    await runTagged(`UID MOVE ${String(parsedUid)} ${quoteAtom(destination)}`);
+    return { uid: parsedUid, source, destination };
+  }
+
+  async function copyMessage(
+    uid: unknown,
+    source: string,
+    destination: string,
+  ): Promise<MessageLocation> {
+    const parsedUid = requireUid(uid);
+    await requireDestination(destination);
+    await selectMailbox(source);
+    await requirePresent(parsedUid);
+    await runTagged(`UID COPY ${String(parsedUid)} ${quoteAtom(destination)}`);
+    return { uid: parsedUid, source, destination };
+  }
+
+  async function deleteMessage(uid: unknown, source: string): Promise<MessageLocation> {
+    requireUid(uid);
+    const trash = await trashMailbox();
+    if (trash === undefined) {
+      throw new Error(TRASH_MAILBOX_IS_NOT_AVAILABLE_MESSAGE);
+    }
+    return moveMessage(uid, source, trash.name);
+  }
+
+  async function restoreMessage(uid: unknown, destination?: string): Promise<MessageLocation> {
+    requireUid(uid);
+    const trash = await trashMailbox();
+    if (trash === undefined) {
+      throw new Error(TRASH_MAILBOX_IS_NOT_AVAILABLE_MESSAGE);
+    }
+    const target =
+      destination === undefined || destination.trim().length === 0 ? 'INBOX' : destination;
+    const listed = await listMailboxes();
+    if (!listed.some((mailbox) => mailbox.name === target)) {
+      throw new Error(DESTINATION_MAILBOX_DOES_NOT_EXIST_MESSAGE);
+    }
+    return moveMessage(uid, trash.name, target);
+  }
+
+  async function readFlags(uid: number): Promise<{ seen: boolean; flagged: boolean }> {
+    const { fetches } = await runTagged(`UID FETCH ${String(uid)} (FLAGS)`);
+    const fetch = fetches[0];
+    if (fetch === undefined) {
+      throw new Error(MESSAGE_NOT_FOUND_MESSAGE);
+    }
+    return {
+      seen: hasImapFlag(fetch.flags, 'Seen'),
+      flagged: hasImapFlag(fetch.flags, 'Flagged'),
+    };
+  }
+
+  async function updateFlags(
+    uid: unknown,
+    mailbox: string,
+    flags: { seen?: unknown; flagged?: unknown },
+  ): Promise<MessageFlagState> {
+    const parsedUid = requireUid(uid);
+    const seen = flags.seen;
+    const flagged = flags.flagged;
+    if (typeof seen !== 'boolean' && typeof flagged !== 'boolean') {
+      throw new Error(FLAG_IS_REQUIRED_MESSAGE);
+    }
+    await selectMailbox(mailbox);
+    await requirePresent(parsedUid);
+    if (typeof seen === 'boolean') {
+      const op = seen ? '+' : '-';
+      await runTagged(`UID STORE ${String(parsedUid)} ${op}FLAGS (\\Seen)`);
+    }
+    if (typeof flagged === 'boolean') {
+      const op = flagged ? '+' : '-';
+      await runTagged(`UID STORE ${String(parsedUid)} ${op}FLAGS (\\Flagged)`);
+    }
+    const current = await readFlags(parsedUid);
+    return { uid: parsedUid, seen: current.seen, flagged: current.flagged };
+  }
+
   return {
     async login(user, password) {
       try {
@@ -682,6 +811,11 @@ export function createImapClient(duplex: Duplex): ImapClient {
     createMailbox,
     renameMailbox,
     deleteMailbox,
+    moveMessage,
+    copyMessage,
+    deleteMessage,
+    restoreMessage,
+    updateFlags,
 
     async logout() {
       try {

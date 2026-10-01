@@ -8,6 +8,7 @@ export type FakeImapMessage = {
   subject: string;
   date: string;
   seen: boolean;
+  flagged?: boolean;
   textBody: string;
   htmlBody?: string;
   /** When set, TEXT part is multipart with this attachment name (bytes not returned to client). */
@@ -36,6 +37,14 @@ export type FakeImapOptions = {
   mailboxes?: Array<Omit<FakeMailbox, 'messages'> & { messages?: FakeImapMessage[] }>;
   /** When set, DELETE replies NO with this text and leaves the mailbox. */
   deleteNo?: string;
+  /** When set, UID MOVE replies NO with this text and leaves messages in place. */
+  moveNo?: string;
+  /** When set, UID COPY replies NO with this text and does not copy. */
+  copyNo?: string;
+  /** When set, UID STORE replies NO with this text and leaves flags unchanged. */
+  storeNo?: string;
+  /** When set, a body FETCH replies NO with this text and leaves the message unchanged. */
+  attachmentNo?: string;
 };
 
 /**
@@ -212,6 +221,52 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
       return;
     }
 
+    if (upper.startsWith('UID MOVE ')) {
+      if (options.moveNo !== undefined) {
+        sendLine(`${tag} NO ${options.moveNo}`);
+        return;
+      }
+      transferMessage(tag, rest, 'MOVE', true);
+      return;
+    }
+
+    if (upper.startsWith('UID COPY ')) {
+      if (options.copyNo !== undefined) {
+        sendLine(`${tag} NO ${options.copyNo}`);
+        return;
+      }
+      transferMessage(tag, rest, 'COPY', false);
+      return;
+    }
+
+    if (upper.startsWith('UID STORE ')) {
+      if (options.storeNo !== undefined) {
+        sendLine(`${tag} NO ${options.storeNo}`);
+        return;
+      }
+      const storeMatch = /^UID STORE\s+(\d+)\s+([+-])FLAGS\s+\(([^)]*)\)$/i.exec(rest);
+      if (storeMatch === null || selected === undefined) {
+        sendLine(`${tag} NO store failed`);
+        return;
+      }
+      const uid = Number(storeMatch[1]);
+      const message = selected.messages.find((entry) => entry.uid === uid);
+      if (message === undefined) {
+        sendLine(`${tag} NO message not found`);
+        return;
+      }
+      const add = storeMatch[2] === '+';
+      for (const flag of (storeMatch[3] ?? '').split(/\s+/)) {
+        if (/^\\Seen$/i.test(flag)) {
+          message.seen = add;
+        } else if (/^\\Flagged$/i.test(flag)) {
+          message.flagged = add;
+        }
+      }
+      sendLine(`${tag} OK STORE completed`);
+      return;
+    }
+
     if (upper.startsWith('UID SEARCH ')) {
       state.searchCommandCount += 1;
       const criteria = rest.slice('UID SEARCH '.length);
@@ -228,11 +283,19 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
 
     if (upper.startsWith('UID FETCH ')) {
       state.fetchCommandCount += 1;
+      const fetchMatch = /^UID FETCH\s+([\d,]+)\s+\((.*)\)$/i.exec(rest);
+      const items = (fetchMatch?.[2] ?? '').toUpperCase();
+      if (
+        options.attachmentNo !== undefined &&
+        (items.includes('BODY.PEEK[TEXT]') || items.includes('BODY[TEXT]'))
+      ) {
+        sendLine(`${tag} NO ${options.attachmentNo}`);
+        return;
+      }
       if (selected === undefined) {
         sendLine(`${tag} NO mailbox not selected`);
         return;
       }
-      const fetchMatch = /^UID FETCH\s+([\d,]+)\s+\((.*)\)$/i.exec(rest);
       if (fetchMatch === null) {
         sendLine(`${tag} BAD fetch`);
         return;
@@ -241,7 +304,6 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
         .split(',')
         .map((part) => Number(part))
         .filter((n) => Number.isInteger(n));
-      const items = (fetchMatch[2] ?? '').toUpperCase();
       for (const uid of uidList) {
         const message = selected.messages.find((entry) => entry.uid === uid);
         if (message === undefined) {
@@ -266,8 +328,37 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
     sendLine(`${tag} BAD unknown command`);
   }
 
+  function transferMessage(
+    commandTag: string,
+    commandRest: string,
+    verb: 'MOVE' | 'COPY',
+    removeSource: boolean,
+  ): void {
+    const match = new RegExp(`^UID ${verb}\\s+(\\d+)\\s+(.+)$`, 'i').exec(commandRest);
+    if (match === null || selected === undefined) {
+      sendLine(`${commandTag} NO ${verb.toLowerCase()} failed`);
+      return;
+    }
+    const uid = Number(match[1]);
+    const destination = findMailbox(mailboxes, unquoteAtom(match[2] ?? ''));
+    const index = selected.messages.findIndex((entry) => entry.uid === uid);
+    const message = index >= 0 ? selected.messages[index] : undefined;
+    if (destination === undefined || message === undefined) {
+      sendLine(`${commandTag} NO ${verb.toLowerCase()} failed`);
+      return;
+    }
+    if (removeSource) {
+      selected.messages.splice(index, 1);
+    }
+    const nextUid = destination.messages.reduce((max, entry) => Math.max(max, entry.uid), 0) + 1;
+    const copy = cloneMessage(message);
+    copy.uid = nextUid;
+    destination.messages.push(copy);
+    sendLine(`${commandTag} OK ${verb} completed`);
+  }
+
   function emitFetch(message: FakeImapMessage, items: string): void {
-    const flags = message.seen ? '(\\Seen)' : '()';
+    const flags = formatFlags(message);
     const wantHeaders = items.includes('HEADER.FIELDS');
     const wantText = items.includes('BODY.PEEK[TEXT]') || items.includes('BODY[TEXT]');
     const headerFields = wantHeaders
@@ -277,6 +368,11 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
       : '';
 
     const textBody = renderMessageText(message);
+
+    if (!wantHeaders && !wantText && items.includes('FLAGS')) {
+      sendLine(`* 1 FETCH (UID ${String(message.uid)} FLAGS ${flags})`);
+      return;
+    }
 
     if (wantHeaders && wantText) {
       const headerSize = Buffer.byteLength(headerFields, 'utf8');
@@ -306,6 +402,17 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
     fetchCommandCount: number;
     commands: readonly string[];
   };
+}
+
+function formatFlags(message: FakeImapMessage): string {
+  const names: string[] = [];
+  if (message.seen) {
+    names.push('\\Seen');
+  }
+  if (message.flagged === true) {
+    names.push('\\Flagged');
+  }
+  return names.length === 0 ? '()' : `(${names.join(' ')})`;
 }
 
 function quoteImap(value: string): string {

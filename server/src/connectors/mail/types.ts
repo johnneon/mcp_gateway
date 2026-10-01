@@ -70,6 +70,21 @@ export const MESSAGE_NOT_FOUND_MESSAGE = 'Message not found';
 export const MAILBOX_NAME_REQUIRED_MESSAGE = 'Mailbox name is required';
 export const INBOX_CANNOT_BE_RENAMED_MESSAGE = 'Inbox cannot be renamed';
 export const INBOX_CANNOT_BE_DELETED_MESSAGE = 'Inbox cannot be deleted';
+export const DESTINATION_MAILBOX_DOES_NOT_EXIST_MESSAGE = 'Destination mailbox does not exist';
+export const TRASH_MAILBOX_IS_NOT_AVAILABLE_MESSAGE = 'Trash mailbox is not available';
+export const FLAG_IS_REQUIRED_MESSAGE = 'Flag is required';
+
+export type MessageLocation = {
+  uid: number;
+  source: string;
+  destination: string;
+};
+
+export type MessageFlagState = {
+  uid: number;
+  seen: boolean;
+  flagged: boolean;
+};
 
 export type MailboxSpecialUse =
   'inbox' | 'sent' | 'drafts' | 'junk' | 'trash' | 'archive' | 'flagged' | 'all' | 'none';
