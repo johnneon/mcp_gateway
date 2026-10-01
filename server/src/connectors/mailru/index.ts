@@ -8,9 +8,11 @@ import type {
 import { ToolFailure } from '../tool-failure.js';
 import {
   assertNotFreeFormSearch,
+  ATTACHMENT_INDEX_REQUIRED_MESSAGE,
   createImapClient,
   createSmtpClient,
   INVALID_ORDER_MESSAGE,
+  UID_REQUIRED_MESSAGE,
   INVALID_SEARCH_FILTER_MESSAGE,
   type ImapClient,
   type ImapSearchFilter,
@@ -156,27 +158,41 @@ const listMailboxes: NativeToolHandler = async (_args, accountValues, egressClie
   });
 };
 
-const readMessage: NativeToolHandler = async (args, accountValues, egressClient) => {
-  const mailbox = readMailbox(args);
-  const uid = args.uid;
+function assertUid(uid: unknown): void {
   if (typeof uid !== 'number' || !Number.isInteger(uid) || uid < 1) {
-    throw new Error('uid is required');
+    throw new ToolFailure(UID_REQUIRED_MESSAGE);
   }
+}
+
+function assertAttachmentIndex(index: unknown): void {
+  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0) {
+    throw new ToolFailure(ATTACHMENT_INDEX_REQUIRED_MESSAGE);
+  }
+}
+
+const readMessage: NativeToolHandler = async (args, accountValues, egressClient) => {
+  assertUid(args.uid);
+  const mailbox = readMailbox(args);
   return await withImapSession(accountValues, egressClient, mailbox, async (imap) => {
-    const message = await imap.fetchMessage(uid);
-    const payload = {
+    const message = await imap.fetchMessage(args.uid);
+    return jsonResult({
       from: message.headers.from,
       to: message.headers.to,
       subject: message.headers.subject,
       date: message.headers.date,
       textBody: message.textBody,
-      ...(message.attachmentNames !== undefined
-        ? { attachmentNames: message.attachmentNames }
-        : {}),
-    };
-    return {
-      content: [{ type: 'text', text: JSON.stringify(payload) }],
-    };
+      htmlBody: message.htmlBody,
+      attachments: message.attachments,
+    });
+  });
+};
+
+const getAttachment: NativeToolHandler = async (args, accountValues, egressClient) => {
+  assertUid(args.uid);
+  assertAttachmentIndex(args.index);
+  const mailbox = readMailbox(args);
+  return await withImapSession(accountValues, egressClient, mailbox, async (imap) => {
+    return jsonResult(await imap.getAttachment(args.uid, args.index));
   });
 };
 
@@ -274,17 +290,33 @@ export const mailruConnector: NativeConnectorModule = {
     {
       name: 'read_message',
       description:
-        'Read one message by uid: headers (from, to, subject, date) and text body. Does not return attachment bytes.',
+        'Read one message by uid: headers, text body, HTML body, and attachment metadata. Does not return attachment bytes.',
       inputSchema: {
         type: 'object',
         properties: {
           mailbox: { type: 'string', description: 'Mailbox name; defaults to INBOX' },
-          uid: { type: 'integer', minimum: 1, description: 'IMAP UID of the message' },
+          uid: { type: 'number', description: 'IMAP UID of the message' },
         },
         required: ['uid'],
         additionalProperties: false,
       },
       handler: readMessage,
+    },
+    {
+      name: 'get_attachment',
+      description:
+        'Download one attachment by message uid and part index. Returns standard base64 of the decoded bytes.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          mailbox: { type: 'string', description: 'Mailbox name; defaults to INBOX' },
+          uid: { type: 'number', description: 'IMAP UID of the message' },
+          index: { type: 'number', description: 'Attachment index starting at 0' },
+        },
+        required: ['uid', 'index'],
+        additionalProperties: false,
+      },
+      handler: getAttachment,
     },
   ],
 };

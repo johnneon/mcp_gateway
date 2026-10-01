@@ -682,40 +682,144 @@ describe('connector-mail-ru: Mail.ru search_messages tool', () => {
   });
 });
 
+function attachedMessage(uid: number): FakeImapMessage {
+  return {
+    uid,
+    from: 'alice@example.test',
+    to: 'me@example.test',
+    subject: 'With attachment',
+    date: '01 Jan 2024 00:00:00 +0000',
+    seen: true,
+    textBody: 'Readable text body',
+    htmlBody: '<p>Readable html</p>',
+    attachments: [
+      { name: 'file.bin', contentType: 'application/octet-stream', bytes: 'file-bytes' },
+    ],
+  };
+}
+
+function parseObject(text: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(text);
+  if (!isRecord(parsed)) {
+    throw new Error('expected a JSON object');
+  }
+  return parsed;
+}
+
 describe('connector-mail-ru: Mail.ru read_message tool', () => {
   it('Read returns headers and text body without attachment bytes', async () => {
-    const attachmentBytes = 'ATTACHMENT-BYTES-MUST-NOT-LEAK';
-    const messages: FakeImapMessage[] = [
-      {
-        uid: 42,
-        from: 'alice@example.test',
-        to: FIXTURE_ADDRESS,
-        subject: 'With attachment',
-        date: 'Mon, 1 Jan 2024 00:00:00 +0000',
-        seen: true,
-        textBody: 'Readable text body',
-        attachmentName: 'file.bin',
-        attachmentBytes,
-      },
-    ];
-    await withMailruMcpClient(messages, async (client) => {
-      const result = await client.callTool({
-        name: 'mailru_read_message',
-        arguments: { account: ACCOUNT_ID, uid: 42 },
-      });
-      const text = toolText(result);
-      expect(text).not.toContain(FIXTURE_PASSWORD);
-      expect(text).not.toContain(attachmentBytes);
-      const parsed = JSON.parse(text) as Record<string, unknown>;
-      expect(parsed).toEqual(
-        expect.objectContaining({
-          from: 'alice@example.test',
-          to: FIXTURE_ADDRESS,
-          subject: 'With attachment',
-          date: 'Mon, 1 Jan 2024 00:00:00 +0000',
-          textBody: 'Readable text body',
+    await withMailruMcpClient([attachedMessage(42)], async (client) => {
+      const text = toolText(
+        await client.callTool({
+          name: 'mailru_read_message',
+          arguments: { account: ACCOUNT_ID, uid: 42 },
         }),
       );
+      expect(text).not.toContain(FIXTURE_PASSWORD);
+      expect(text).not.toContain('file-bytes');
+      expect(text).not.toContain('attachmentNames');
+      const parsed = parseObject(text);
+      expect(parsed).toEqual({
+        from: 'alice@example.test',
+        to: 'me@example.test',
+        subject: 'With attachment',
+        date: '01 Jan 2024 00:00:00 +0000',
+        textBody: 'Readable text body',
+        htmlBody: '<p>Readable html</p>',
+        attachments: [
+          { index: 0, name: 'file.bin', contentType: 'application/octet-stream', size: 10 },
+        ],
+      });
+      expect(parsed).not.toHaveProperty('data');
+    });
+  });
+
+  it('Missing HTML part yields an empty string', async () => {
+    await withMailruMcpClient(
+      [
+        {
+          uid: 7,
+          from: 'alice@example.test',
+          to: 'me@example.test',
+          subject: 'Plain',
+          date: '01 Jan 2024 00:00:00 +0000',
+          seen: false,
+          textBody: 'Plain only',
+        },
+      ],
+      async (client) => {
+        const text = toolText(
+          await client.callTool({
+            name: 'mailru_read_message',
+            arguments: { account: ACCOUNT_ID, uid: 7 },
+          }),
+        );
+        expect(text).not.toContain(FIXTURE_PASSWORD);
+        const parsed = parseObject(text);
+        expect(parsed.textBody).toBe('Plain only');
+        expect(parsed.htmlBody).toBe('');
+        expect(parsed.attachments).toEqual([]);
+      },
+    );
+  });
+});
+
+describe('connector-mail-ru: Mail.ru get_attachment tool', () => {
+  it('Attachment is returned as base64', async () => {
+    await withMailruMcpClient([attachedMessage(42)], async (client) => {
+      const text = toolText(
+        await client.callTool({
+          name: 'mailru_get_attachment',
+          arguments: { account: ACCOUNT_ID, uid: 42, index: 0 },
+        }),
+      );
+      expect(text).not.toContain(FIXTURE_PASSWORD);
+      expect(parseObject(text)).toEqual({
+        index: 0,
+        name: 'file.bin',
+        contentType: 'application/octet-stream',
+        size: 10,
+        data: 'ZmlsZS1ieXRlcw==',
+      });
+    });
+  });
+
+  it('Missing attachment is not found', async () => {
+    await withMailruMcpClient([note(42, 'No file')], async (client) => {
+      const message = await expectCallFailure(() =>
+        client.callTool({
+          name: 'mailru_get_attachment',
+          arguments: { account: ACCOUNT_ID, uid: 42, index: 0 },
+        }),
+      );
+      expect(message).toContain('Attachment not found');
+      expect(message).not.toContain(FIXTURE_PASSWORD);
+    });
+  });
+
+  it('Attachment index below 0 is rejected', async () => {
+    await withMailruMcpClient([attachedMessage(42)], async (client) => {
+      const message = await expectCallFailure(() =>
+        client.callTool({
+          name: 'mailru_get_attachment',
+          arguments: { account: ACCOUNT_ID, uid: 42, index: -1 },
+        }),
+      );
+      expect(message).toContain('Attachment index is required');
+      expect(message).not.toContain(FIXTURE_PASSWORD);
+    });
+  });
+
+  it('Get attachment uid below 1 is rejected', async () => {
+    await withMailruMcpClient([attachedMessage(42)], async (client) => {
+      const message = await expectCallFailure(() =>
+        client.callTool({
+          name: 'mailru_get_attachment',
+          arguments: { account: ACCOUNT_ID, uid: 0, index: 0 },
+        }),
+      );
+      expect(message).toContain('uid is required');
+      expect(message).not.toContain(FIXTURE_PASSWORD);
     });
   });
 });
