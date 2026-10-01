@@ -2,9 +2,12 @@ import type { Duplex } from 'node:stream';
 import { DuplexLineSession } from './duplex-lines.js';
 import {
   IMAP_LOGIN_FAILED_MESSAGE,
+  INVALID_ORDER_MESSAGE,
   INVALID_SEARCH_FILTER_MESSAGE,
   type ImapSearchFilter,
   type MessageHeaders,
+  type MessagePage,
+  type MessagePageQuery,
   type MessageSummary,
   type ReadMessageResult,
 } from './types.js';
@@ -63,6 +66,75 @@ export function assertNotFreeFormSearch(value: unknown): void {
   if (typeof value === 'string') {
     throw new Error(INVALID_SEARCH_FILTER_MESSAGE);
   }
+}
+
+type MessageOrder = 'newest' | 'oldest';
+
+function resolveMessageOrder(order: unknown): MessageOrder {
+  if (order === undefined) {
+    return 'newest';
+  }
+  if (order === 'newest' || order === 'oldest') {
+    return order;
+  }
+  throw new Error(INVALID_ORDER_MESSAGE);
+}
+
+function resolveOffset(offset: unknown): number {
+  if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0) {
+    return 0;
+  }
+  return offset;
+}
+
+function resolveLimit(limit: unknown): number | null {
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1) {
+    return null;
+  }
+  return limit;
+}
+
+function parsedDate(value: string): number | null {
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return null;
+  }
+  return parsed;
+}
+
+function hasImapFlag(flags: string, name: string): boolean {
+  const target = `\\${name}`.toLowerCase();
+  return flags.split(/\s+/).some((flag) => flag.toLowerCase() === target);
+}
+
+function compareUid(order: MessageOrder, leftUid: number, rightUid: number): number {
+  return order === 'newest' ? rightUid - leftUid : leftUid - rightUid;
+}
+
+/**
+ * Unparseable dates are older than every date that parses.
+ * Equal dates, including two unparseable dates, break by uid.
+ */
+function compareSummaries(
+  order: MessageOrder,
+  left: MessageSummary,
+  right: MessageSummary,
+): number {
+  const leftDate = parsedDate(left.date);
+  const rightDate = parsedDate(right.date);
+  if (leftDate === null && rightDate === null) {
+    return compareUid(order, left.uid, right.uid);
+  }
+  if (leftDate === null) {
+    return order === 'newest' ? 1 : -1;
+  }
+  if (rightDate === null) {
+    return order === 'newest' ? -1 : 1;
+  }
+  if (leftDate !== rightDate) {
+    return order === 'newest' ? rightDate - leftDate : leftDate - rightDate;
+  }
+  return compareUid(order, left.uid, right.uid);
 }
 
 function parseHeaderBlock(raw: string): MessageHeaders {
@@ -149,6 +221,7 @@ export type ImapClient = {
   select(mailbox: string): Promise<void>;
   search(filter: ImapSearchFilter): Promise<number[]>;
   fetchSummaries(uids: readonly number[]): Promise<MessageSummary[]>;
+  pageMessages(query?: MessagePageQuery): Promise<MessagePage>;
   fetchMessage(uid: number): Promise<ReadMessageResult>;
   logout(): Promise<void>;
   close(): void;
@@ -267,7 +340,7 @@ export function createImapClient(duplex: Duplex): ImapClient {
       }
       const set = uids.join(',');
       const fetches = await runTagged(
-        `UID FETCH ${set} (FLAGS BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])`,
+        `UID FETCH ${set} (FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE)])`,
       );
       return fetches.map((fetch) => {
         const headerSection = fetch.sections.find((section) =>
@@ -277,11 +350,28 @@ export function createImapClient(duplex: Duplex): ImapClient {
         return {
           uid: fetch.uid,
           from: headers.from,
+          to: headers.to,
           subject: headers.subject,
           date: headers.date,
-          seen: /\b\\Seen\b/i.test(fetch.flags),
+          seen: hasImapFlag(fetch.flags, 'Seen'),
         } satisfies MessageSummary;
       });
+    },
+
+    async pageMessages(query = {}) {
+      const order = resolveMessageOrder(query.order);
+      const offset = resolveOffset(query.offset);
+      const limit = resolveLimit(query.limit);
+      const uids = await this.search(query.filter ?? {});
+      const summaries = await this.fetchSummaries(uids);
+      const sorted = [...summaries].sort((left, right) => compareSummaries(order, left, right));
+      const page = limit === null ? sorted.slice(offset) : sorted.slice(offset, offset + limit);
+      return {
+        messages: page.map((summary) => ({ ...summary, unread: !summary.seen })),
+        total: sorted.length,
+        offset,
+        limit,
+      };
     },
 
     async fetchMessage(uid) {

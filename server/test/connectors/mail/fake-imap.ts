@@ -14,11 +14,20 @@ export type FakeImapMessage = {
   attachmentBytes?: string;
 };
 
+export type FakeMailbox = {
+  name: string;
+  attributes: string[];
+  messages: FakeImapMessage[];
+};
+
 export type FakeImapOptions = {
   user: string;
   password: string;
   acceptLogin?: boolean;
+  /** Messages placed in INBOX. Existing callers keep passing this list. */
   messages?: FakeImapMessage[];
+  /** Extra mailboxes. INBOX is always built from `messages`, not from this list. */
+  mailboxes?: Array<Omit<FakeMailbox, 'messages'> & { messages?: FakeImapMessage[] }>;
 };
 
 /**
@@ -30,9 +39,9 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
   lastSearchCriteria: string | undefined;
 } {
   const acceptLogin = options.acceptLogin !== false;
-  const messages = options.messages ?? [];
+  const mailboxes = initialMailboxes(options);
   let buffer = '';
-  let selected = false;
+  let selected: FakeMailbox | undefined;
   let loggedIn = false;
   const state = {
     searchCommandCount: 0,
@@ -116,8 +125,14 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
     }
 
     if (upper.startsWith('SELECT ')) {
-      selected = true;
-      sendLine('* 0 EXISTS');
+      const name = unquoteAtom(rest.slice('SELECT '.length));
+      const mailbox = findMailbox(mailboxes, name);
+      if (mailbox === undefined) {
+        sendLine(`${tag} NO mailbox not found`);
+        return;
+      }
+      selected = mailbox;
+      sendLine(`* ${String(mailbox.messages.length)} EXISTS`);
       sendLine(`${tag} OK SELECT completed`);
       return;
     }
@@ -126,18 +141,18 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
       state.searchCommandCount += 1;
       const criteria = rest.slice('UID SEARCH '.length);
       state.lastSearchCriteria = criteria;
-      if (!selected) {
+      if (selected === undefined) {
         sendLine(`${tag} NO mailbox not selected`);
         return;
       }
-      const uids = filterMessages(criteria, messages);
+      const uids = filterMessages(criteria, selected.messages);
       sendLine(`* SEARCH ${uids.join(' ')}`.trimEnd());
       sendLine(`${tag} OK SEARCH completed`);
       return;
     }
 
     if (upper.startsWith('UID FETCH ')) {
-      if (!selected) {
+      if (selected === undefined) {
         sendLine(`${tag} NO mailbox not selected`);
         return;
       }
@@ -152,7 +167,7 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
         .filter((n) => Number.isInteger(n));
       const items = (fetchMatch[2] ?? '').toUpperCase();
       for (const uid of uidList) {
-        const message = messages.find((entry) => entry.uid === uid);
+        const message = selected.messages.find((entry) => entry.uid === uid);
         if (message === undefined) {
           continue;
         }
@@ -223,6 +238,40 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
     searchCommandCount: number;
     lastSearchCriteria: string | undefined;
   };
+}
+
+function cloneMessage(message: FakeImapMessage): FakeImapMessage {
+  return { ...message };
+}
+
+function initialMailboxes(options: FakeImapOptions): FakeMailbox[] {
+  const extras = (options.mailboxes ?? [])
+    .filter((mailbox) => mailbox.name.toUpperCase() !== 'INBOX')
+    .map((mailbox) => ({
+      name: mailbox.name,
+      attributes: [...mailbox.attributes],
+      messages: (mailbox.messages ?? []).map(cloneMessage),
+    }));
+  return [
+    {
+      name: 'INBOX',
+      attributes: ['\\Inbox'],
+      messages: (options.messages ?? []).map(cloneMessage),
+    },
+    ...extras,
+  ];
+}
+
+function findMailbox(mailboxes: readonly FakeMailbox[], name: string): FakeMailbox | undefined {
+  return mailboxes.find((mailbox) => mailbox.name === name);
+}
+
+function unquoteAtom(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  }
+  return trimmed;
 }
 
 function filterMessages(criteria: string, messages: FakeImapMessage[]): number[] {
