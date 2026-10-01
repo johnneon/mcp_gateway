@@ -862,6 +862,18 @@ function parseMailboxes(text: string): Array<{ name: string; specialUse: string 
   });
 }
 
+async function listMessageText(client: Client, mailbox?: string): Promise<string> {
+  return toolText(
+    await client.callTool({
+      name: 'gmail_list_messages',
+      arguments: {
+        account: ACCOUNT_ID,
+        ...(mailbox !== undefined ? { mailbox } : {}),
+      },
+    }),
+  );
+}
+
 async function listMailboxText(client: Client): Promise<string> {
   return toolText(
     await client.callTool({
@@ -1272,6 +1284,256 @@ describe('connector-gmail: Gmail delete_mailbox tool', () => {
         mailboxes: [{ name: 'Projects', attributes: [], messages: [] }],
         deleteNo: FIXTURE_PASSWORD,
       },
+    );
+  });
+});
+
+const archiveMailbox = [{ name: 'Archive', attributes: [], messages: [] }];
+const trashMailbox = [{ name: 'Deleted Items', attributes: ['\\Trash'], messages: [] }];
+
+describe('connector-gmail: Gmail move_message tool', () => {
+  it('Move message into an existing mailbox', async () => {
+    await withGmailMcpClient(
+      [note(7, 'Move me')],
+      async (client) => {
+        const text = toolText(
+          await client.callTool({
+            name: 'gmail_move_message',
+            arguments: { account: ACCOUNT_ID, uid: 7, destination: 'Archive' },
+          }),
+        );
+        expect(text).not.toContain(FIXTURE_PASSWORD);
+        expect(text).not.toContain('body Move me');
+        expect(parseObject(text)).toEqual({ uid: 7, source: 'INBOX', destination: 'Archive' });
+        expect(await listMessageText(client)).not.toContain('"uid":7');
+        const archived = await listMessageText(client, 'Archive');
+        expect(archived).toContain('Move me');
+        expect(archived).toContain('alice@example.test');
+        expect(archived).toContain('me@example.test');
+      },
+      archiveMailbox,
+    );
+  });
+
+  it('Missing destination leaves the message in the source', async () => {
+    await withGmailMcpClient([note(7, 'Stay')], async (client) => {
+      const message = await expectCallFailure(() =>
+        client.callTool({
+          name: 'gmail_move_message',
+          arguments: { account: ACCOUNT_ID, uid: 7, destination: 'Missing' },
+        }),
+      );
+      expect(message).toContain('Destination mailbox does not exist');
+      expect(message).not.toContain(FIXTURE_PASSWORD);
+      expect(await listMessageText(client)).toContain('"uid":7');
+    });
+  });
+
+  it('Move uid below 1 is rejected', async () => {
+    await withGmailMcpClient(
+      [note(7, 'Stay')],
+      async (client) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_move_message',
+            arguments: { account: ACCOUNT_ID, uid: 0, destination: 'Archive' },
+          }),
+        );
+        expect(message).toContain('uid is required');
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        expect(await listMessageText(client)).toContain('"uid":7');
+      },
+      archiveMailbox,
+    );
+  });
+});
+
+describe('connector-gmail: Gmail copy_message tool', () => {
+  it('Copy message keeps the source', async () => {
+    await withGmailMcpClient(
+      [note(7, 'Copy me')],
+      async (client) => {
+        const text = toolText(
+          await client.callTool({
+            name: 'gmail_copy_message',
+            arguments: { account: ACCOUNT_ID, uid: 7, destination: 'Archive' },
+          }),
+        );
+        expect(text).not.toContain(FIXTURE_PASSWORD);
+        expect(text).not.toContain('body Copy me');
+        expect(parseObject(text)).toEqual({ uid: 7, source: 'INBOX', destination: 'Archive' });
+        expect(await listMessageText(client)).toContain('"uid":7');
+        const archived = await listMessageText(client, 'Archive');
+        expect(archived).toContain('Copy me');
+        expect(archived).toContain('alice@example.test');
+        expect(archived).toContain('me@example.test');
+      },
+      archiveMailbox,
+    );
+  });
+
+  it('Copy missing destination does not copy', async () => {
+    await withGmailMcpClient([note(7, 'Stay')], async (client) => {
+      const message = await expectCallFailure(() =>
+        client.callTool({
+          name: 'gmail_copy_message',
+          arguments: { account: ACCOUNT_ID, uid: 7, destination: 'Missing' },
+        }),
+      );
+      expect(message).toContain('Destination mailbox does not exist');
+      expect(message).not.toContain(FIXTURE_PASSWORD);
+      expect(await listMessageText(client)).toContain('"uid":7');
+    });
+  });
+
+  it('Copy uid below 1 is rejected', async () => {
+    await withGmailMcpClient(
+      [note(7, 'Stay')],
+      async (client) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_copy_message',
+            arguments: { account: ACCOUNT_ID, uid: 0, destination: 'Archive' },
+          }),
+        );
+        expect(message).toContain('uid is required');
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        expect(await listMessageText(client)).toContain('"uid":7');
+      },
+      archiveMailbox,
+    );
+  });
+});
+
+describe('connector-gmail: Gmail delete_message tool', () => {
+  it('Delete message moves it into trash', async () => {
+    await withGmailMcpClient(
+      [note(7, 'Delete me')],
+      async (client) => {
+        const text = toolText(
+          await client.callTool({
+            name: 'gmail_delete_message',
+            arguments: { account: ACCOUNT_ID, uid: 7 },
+          }),
+        );
+        expect(text).not.toContain(FIXTURE_PASSWORD);
+        expect(text).not.toContain('[Gmail]/');
+        expect(parseObject(text)).toEqual({
+          uid: 7,
+          source: 'INBOX',
+          destination: 'Deleted Items',
+        });
+        expect(await listMessageText(client)).not.toContain('"uid":7');
+        expect(await listMessageText(client, 'Deleted Items')).toContain('Delete me');
+      },
+      trashMailbox,
+    );
+  });
+
+  it('Missing trash leaves the message in place', async () => {
+    await withGmailMcpClient([note(7, 'Stay')], async (client) => {
+      const message = await expectCallFailure(() =>
+        client.callTool({
+          name: 'gmail_delete_message',
+          arguments: { account: ACCOUNT_ID, uid: 7 },
+        }),
+      );
+      expect(message).toContain('Trash mailbox is not available');
+      expect(message).not.toContain(FIXTURE_PASSWORD);
+      expect(await listMessageText(client)).toContain('"uid":7');
+    });
+  });
+
+  it('Delete message uid below 1 is rejected', async () => {
+    await withGmailMcpClient(
+      [note(7, 'Stay')],
+      async (client) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_delete_message',
+            arguments: { account: ACCOUNT_ID, uid: 0 },
+          }),
+        );
+        expect(message).toContain('uid is required');
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        expect(await listMessageText(client)).toContain('"uid":7');
+      },
+      trashMailbox,
+    );
+  });
+});
+
+describe('connector-gmail: Gmail restore_message tool', () => {
+  it('Restore message moves it out of trash', async () => {
+    await withGmailMcpClient(
+      [],
+      async (client) => {
+        const text = toolText(
+          await client.callTool({
+            name: 'gmail_restore_message',
+            arguments: { account: ACCOUNT_ID, uid: 4 },
+          }),
+        );
+        expect(text).not.toContain(FIXTURE_PASSWORD);
+        expect(parseObject(text)).toEqual({
+          uid: 4,
+          source: 'Deleted Items',
+          destination: 'INBOX',
+        });
+        expect(await listMessageText(client)).toContain('Restore me');
+        expect(await listMessageText(client, 'Deleted Items')).not.toContain('Restore me');
+      },
+      [{ name: 'Deleted Items', attributes: ['\\Trash'], messages: [note(4, 'Restore me')] }],
+    );
+  });
+
+  it('Restore without a trash mailbox is rejected', async () => {
+    await withGmailMcpClient([note(7, 'Stay')], async (client) => {
+      const message = await expectCallFailure(() =>
+        client.callTool({
+          name: 'gmail_restore_message',
+          arguments: { account: ACCOUNT_ID, uid: 7 },
+        }),
+      );
+      expect(message).toContain('Trash mailbox is not available');
+      expect(message).not.toContain(FIXTURE_PASSWORD);
+      expect(await listMessageText(client)).toContain('"uid":7');
+    });
+  });
+
+  it('Restore missing destination leaves the message in trash', async () => {
+    await withGmailMcpClient(
+      [],
+      async (client) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_restore_message',
+            arguments: { account: ACCOUNT_ID, uid: 9, destination: 'Missing' },
+          }),
+        );
+        expect(message).toContain('Destination mailbox does not exist');
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        expect(await listMessageText(client, 'Deleted Items')).toContain('Stay deleted');
+      },
+      [{ name: 'Deleted Items', attributes: ['\\Trash'], messages: [note(9, 'Stay deleted')] }],
+    );
+  });
+
+  it('Restore uid below 1 is rejected', async () => {
+    await withGmailMcpClient(
+      [],
+      async (client) => {
+        const message = await expectCallFailure(() =>
+          client.callTool({
+            name: 'gmail_restore_message',
+            arguments: { account: ACCOUNT_ID, uid: 0 },
+          }),
+        );
+        expect(message).toContain('uid is required');
+        expect(message).not.toContain(FIXTURE_PASSWORD);
+        expect(await listMessageText(client, 'Deleted Items')).toContain('"uid":9');
+      },
+      [{ name: 'Deleted Items', attributes: ['\\Trash'], messages: [note(9, 'Stay')] }],
     );
   });
 });
