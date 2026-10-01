@@ -1,0 +1,24 @@
+services:
+  gateway:
+    build: .
+    image: mcp-gateway
+    restart: unless-stopped
+    environment:
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "3100"
+      ADMIN_HOST: 0.0.0.0
+      ADMIN_PORT: "3200"
+      DATA_DIR: /data
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+    ports:
+      # MCP is published on the host. Admin stays on loopback; put a proxy in front of it.
+      - "3100:3100"
+      - "127.0.0.1:3200:3200"
+    volumes:
+      - gateway-data:/data
+      # A proxy connector runs its entry with the container's node.
+      # The entry path stored on the account must exist inside the container.
+      # - ./proxy:/proxy:ro
+
+volumes:
+  gateway-data:
