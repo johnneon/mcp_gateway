@@ -1,230 +1,230 @@
 # MCP Gateway
 
-Спецификация самостоятельного приложения. Документ переносится в репозиторий продукта целиком. Ссылок на чужой хост, сеть, compose и агентов здесь нет: продукт их не знает. Куда его потом поставить — решается снаружи.
+Specification of a standalone application. The document is copied into the product repository as a whole. It does not refer to an outside host, network, compose file, or agents: the product does not know them. Where the process is deployed is decided outside this specification.
 
-Интерфейс, имена инструментов, описания инструментов и тексты ошибок MCP — на английском.
+The admin UI, tool names, tool descriptions, and MCP error text are English.
 
-## Назначение
+## Purpose
 
-Шлюз — это MCP-сервер (Streamable HTTP), через который модель работает с внешними сервисами: почтой, трекерами, базами знаний. Шлюз хранит учётные данные аккаунтов у себя, сам ходит в сервис и возвращает только результат. Секрет аккаунта модель не получает.
+The gateway is an MCP server (Streamable HTTP) through which a model works with external services: mail, trackers, knowledge bases. The gateway stores account credentials, calls the service itself, and returns only the result. The model never receives an account secret.
 
-Сервис подключается коннектором. Коннектор — модуль в коде шлюза. Оператор в интерфейсе выбирает коннектор и добавляет к нему аккаунты, например два ящика Gmail. Модель, подключённая к шлюзу, видит инструменты коннектора и подписи доступных ей аккаунтов.
+A service is connected by a connector. A connector is a module in the gateway code. In the UI the operator picks a connector and adds accounts to it, for example two Gmail mailboxes. A model connected to the gateway sees the connector's tools and the labels of the accounts available to it.
 
-Эта спецификация задаёт общую базу: хранилище, конфигурации доступа, контракт коннектора, MCP и интерфейс. Конкретные коннекторы в базу не входят. Каждый добавляется отдельным изменением поверх неё.
+This specification defines the shared base: the store, access configurations, the connector contract, MCP, and the UI. Concrete connectors are not part of the base. Each one is added by a separate change on top of it.
 
-## Стек
+## Stack
 
-Один процесс на Node.js (актуальный LTS) и TypeScript.
+One process on Node.js (current LTS) and TypeScript.
 
 - HTTP: Express 5.
-- MCP: пакет `@modelcontextprotocol/sdk`, транспорт Streamable HTTP. Отдельного SSE-эндпоинта нет.
-- Интерфейс: React, Vite, shadcn/ui, стили — Tailwind. Тот же процесс раздаёт статику. Отдельного фронтенд-сервиса нет.
-- Тесты: Vitest на сервере и в интерфейсе.
-- Данные: JSON-файл в каталоге из окружения, зашифрованный целиком. Отдельная СУБД не нужна.
+- MCP: the `@modelcontextprotocol/sdk` package, Streamable HTTP transport. There is no separate SSE endpoint.
+- UI: React, Vite, shadcn/ui, Tailwind. The same process serves the static build. There is no separate frontend service.
+- Tests: Vitest on the server and in the UI.
+- Data: one JSON file in a directory from the environment, encrypted as a whole. No separate database.
 
-## Понятия
+## Terms
 
-| Понятие | Что это |
+| Term | Meaning |
 | --- | --- |
-| Коннектор | модуль в коде: поля аккаунта, проверка соединения, инструменты, разрешённые хосты |
-| Аккаунт | экземпляр коннектора с учётными данными, например один ящик Gmail |
-| Конфигурация | доступ к MCP: имя, bearer-токен и набор аккаунтов, которые видит модель с этим токеном |
+| Connector | a code module: account fields, a connection check, tools, allowed hosts |
+| Account | one connector instance with credentials, for example one Gmail mailbox |
+| Configuration | MCP access: a name, a bearer token, and the set of accounts the model sees with that token |
 
-## Процесс вызова
+## Call flow
 
 ```text
-MCP-клиент
-  Authorization: Bearer <токен конфигурации>
+MCP client
+  Authorization: Bearer <configuration token>
   tools/call { name, arguments }
         │
         ▼
-шлюз
-  1. хеш токена → конфигурация; нет её или она выключена → отказ
-  2. инструмент из списка коннекторов; аргументы проходят JSON Schema
-  3. account входит в конфигурацию и включён
-  4. учётные данные аккаунта расшифрованы в памяти, передаются только коннектору
-  5. коннектор ходит только на разрешённые хосты
-  6. из ответа и текста ошибки вырезаются значения секретов аккаунта
+gateway
+  1. token hash → configuration; missing or disabled → reject
+  2. tool from the connector list; arguments pass JSON Schema
+  3. account is in the configuration and enabled
+  4. account field values are decrypted in memory and passed only to the connector
+  5. the connector calls only allowed hosts
+  6. account secret values are removed from the result and from error text
         │
         ▼
-клиент ← результат инструмента
+client ← tool result
 ```
 
-Аргументы модели не содержат URL, хост и секрет. Иначе запрос можно увести на чужой сервер вместе с учётными данными.
+Model arguments contain no URL, host, or secret. Otherwise the request could be sent to another server together with the credentials.
 
-## Граница данных
+## Data boundary
 
-| Что | Кто видит |
+| What | Who sees it |
 | --- | --- |
-| Секретные поля аккаунтов, ключ шифрования | только процесс шлюза и коннектор этого аккаунта |
-| Bearer конфигурации | оператор один раз при создании и при ротации; в хранилище только хеш |
-| Несекретные поля аккаунта (адрес, хост) | оператор в интерфейсе |
-| Имена и схемы инструментов, подписи аккаунтов | модель |
-| Аргументы вызова и тело ответа | модель |
+| Account secret fields, encryption key | only the gateway process and that account's connector |
+| Configuration bearer | the operator once at creation and at rotation; the store keeps only the hash |
+| Non-secret account fields (address, host) | the operator in the UI |
+| Tool names and schemas, account labels | the model |
+| Call arguments and response body | the model |
 
-Прячутся учётные данные, не содержимое сервиса. Ответ модели — это и есть данные аккаунта.
+Credentials are hidden, not the service content. The model's response is the account's data.
 
-Значения секретов не попадают в схемы инструментов, в ответы API интерфейса и в ошибки MCP. Если ответ сервиса случайно содержит секрет, он вырезается до отдачи клиенту.
+Secret values do not appear in tool schemas, admin API responses, or MCP errors. If a service response happens to contain a secret, it is removed before the client receives it.
 
-## Хранилище
+## Store
 
-Всё состояние — один файл в каталоге данных: конфигурации и аккаунты.
+All state is one file in the data directory: configurations and accounts.
 
-- Файл целиком шифруется AES-GCM. Ключ — только из окружения.
-- Процесс читает файл при старте и держит состояние в памяти. Каждое изменение пишет файл заново: сначала во временный файл, потом переименование. Записи идут по очереди.
-- Файла нет — процесс начинает с пустого состояния. Файл не расшифровывается или повреждён — процесс не стартует и пишет причину без ключа и без содержимого.
+- The file is encrypted as a whole with AES-GCM. The key comes only from the environment.
+- The process reads the file at startup and keeps state in memory. Each change writes the file again: first a temporary file, then a rename. Writes are serialized.
+- If the file is missing, the process starts from an empty state. If the file cannot be decrypted or is corrupt, the process does not start and writes the reason without the key and without the contents.
 
-## Конфигурации
+## Configurations
 
-| Поле | Смысл |
+| Field | Meaning |
 | --- | --- |
-| id | стабильный идентификатор |
-| name | подпись в интерфейсе |
-| token hash | SHA-256 от случайного токена длиной не меньше 32 байт; сам токен не хранится |
-| enabled | выключенная конфигурация не вызывает инструменты |
-| account ids | какие аккаунты доступны модели с этим токеном |
+| id | stable identifier |
+| name | label in the UI |
+| token hash | SHA-256 of a random token at least 32 bytes long; the token itself is not stored |
+| enabled | a disabled configuration does not call tools |
+| account ids | which accounts the model can use with this token |
 
-Токен показывается один раз: при создании и при ротации. Ротация сразу гасит предыдущий. Сравнение хеша — за постоянное время. Пустой, неизвестный и выключенный токен получают один и тот же отказ, без перечисления конфигураций.
+The token is shown once: at creation and at rotation. Rotation invalidates the previous token immediately. Hash comparison takes constant time. An empty, unknown, or disabled token gets the same rejection, without listing configurations.
 
-## Аккаунты
+## Accounts
 
-| Поле | Смысл |
+| Field | Meaning |
 | --- | --- |
-| id | стабильный идентификатор, его модель передаёт в `account` |
-| connector | id коннектора из кода |
-| label | подпись, которую видит модель, например `Work Gmail` |
-| values | значения полей, описанных коннектором; секретные поля наружу не отдаются |
-| enabled | выключенный аккаунт не виден модели и наружу не ходит |
+| id | stable identifier; the model passes it as `account` |
+| connector | connector id from code |
+| label | label the model sees, for example `Work Gmail` |
+| values | values of the fields the connector describes; secret fields are not returned |
+| enabled | a disabled account is not visible to the model and makes no outbound calls |
 
-- Перед сохранением шлюз вызывает проверку соединения коннектора. Проверка не прошла — аккаунт не сохраняется, ошибка короткая и без секрета.
-- При редактировании пустое секретное поле значит «не менять». Новое значение снова проходит проверку.
-- Удалённый аккаунт пропадает из всех конфигураций.
+- Before saving, the gateway calls the connector's connection check. If the check fails, the account is not saved, and the error is short and contains no secret.
+- On edit, an empty secret field means leave it unchanged. A new value goes through the check again.
+- A deleted account disappears from every configuration.
 
-## Коннектор
+## Connector
 
-Коннектор задан кодом и подключается отдельным изменением. Каталога коннекторов во время работы нет: оператор выбирает только из того, что есть в коде.
+A connector is defined in code and added by a separate change. There is no connector catalog at runtime: the operator chooses only from what is in the code.
 
-### Контракт
+### Contract
 
-Каждый коннектор объявляет:
+Each connector declares:
 
-| Часть | Смысл |
+| Part | Meaning |
 | --- | --- |
-| id | строка `[a-z0-9]+`, она же префикс инструментов |
-| name | отображаемое имя в интерфейсе |
-| поля аккаунта | имя, подпись, тип (`text`, `secret`, `host`), обязательность |
-| проверка соединения | вызывается перед сохранением аккаунта и по кнопке в интерфейсе |
-| разрешённые хосты | константы в коде или значения полей типа `host`, которые ввёл оператор |
-| вид | `native` или `proxy` |
+| id | a string `[a-z0-9]+`, also the tool prefix |
+| name | display name in the UI |
+| account fields | name, label, type (`text`, `secret`, `host`), required |
+| connection check | called before saving an account and from a button in the UI |
+| allowed hosts | constants in code, or values of `host` fields the operator entered |
+| kind | `native` or `proxy` |
 
-Форма аккаунта в интерфейсе строится по описанию полей. Новому коннектору свой экран не нужен.
+The account form in the UI is built from the field description. A new connector does not need its own screen.
 
-Поле `host` — только имя хоста, без схемы, пути и учётных данных. Хост берётся из кода или из поля аккаунта и никогда из аргументов модели.
+A `host` field is a hostname only, with no scheme, path, or credentials. The host comes from code or from an account field, and never from model arguments.
 
-### Инструменты
+### Tools
 
-- Имя инструмента в MCP — `<id коннектора>_<имя>`, например `gmail_list_messages`.
-- Шлюз сам добавляет к каждому инструменту обязательный параметр `account`. В схеме — id и подписи только тех аккаунтов этого коннектора, которые включены и входят в конфигурацию.
-- У коннектора нет доступных аккаунтов — его инструментов в `tools/list` нет. Нет ни одного — список пустой.
-- Чужой или выключенный `account` — отказ до обращения к коннектору.
+- The MCP tool name is `<connector id>_<name>`, for example `gmail_list_messages`.
+- The gateway adds a required `account` parameter to every tool. The schema lists ids and labels only of that connector's accounts that are enabled and included in the configuration.
+- If a connector has no available accounts, its tools are absent from `tools/list`. If none are available, the list is empty.
+- An unknown or disabled `account` is rejected before the connector is called.
 
-### Вид `native`
+### Kind `native`
 
-Инструменты написаны в коде шлюза: имя, описание, JSON Schema аргументов, обработчик.
+Tools are written in the gateway code: name, description, JSON Schema of the arguments, handler.
 
-- Обработчик получает расшифрованные значения полей аккаунта и сетевой клиент, который пускает только на разрешённые хосты.
-- Редирект на другой хост не выполняется.
-- Таймаут и предел размера ответа заданы в коде.
+- The handler receives decrypted account field values and a network client that allows only the permitted hosts.
+- A redirect to another host is not followed.
+- The timeout and the response size limit are set in code.
 
-### Вид `proxy`
+### Kind `proxy`
 
-Коннектор запускает сторонний MCP-сервер и отдаёт модели часть его инструментов.
+The connector starts a third-party MCP server and exposes a subset of its tools to the model.
 
-- Транспорт — stdio. Сервер берётся из пакета, закреплённого в зависимостях репозитория с точной версией. Скачивание при запуске (`npx` без установленного пакета) запрещено.
-- На каждый аккаунт — свой дочерний процесс. Он запускается при первом вызове и останавливается после простоя. Упавший процесс перезапускается при следующем вызове.
-- Окружение дочернего процесса собирается с нуля: только переменные, которые коннектор сопоставил полям аккаунта, и минимум для запуска. Переменные шлюза, включая ключ шифрования, туда не попадают.
-- Наружу видны только инструменты из списка разрешённых в коде коннектора. Параметр `account` шлюз снимает до передачи вызова дочернему процессу.
-- Разрешённый инструмент не принимает URL и хост в аргументах. Это проверяется в изменении, которое добавляет коннектор.
-- Ответ и stderr дочернего процесса чистятся от значений секретов аккаунта. stderr клиенту не отдаётся.
+- Transport is stdio. The server comes from a package pinned in the repository dependencies at an exact version. Downloading at startup (`npx` without an installed package) is forbidden.
+- Each account has its own child process. It starts on the first call and stops after idle time. A crashed process is started again on the next call.
+- The child environment is built from scratch: only the variables the connector maps from account fields, plus the minimum needed to start. Gateway variables, including the encryption key, are not passed in.
+- Only tools listed as allowed in the connector code are exposed. The gateway removes the `account` parameter before forwarding the call to the child.
+- An allowed tool does not accept a URL or a host in its arguments. The change that adds the connector checks this.
+- The child's response and stderr are scrubbed of account secret values. stderr is not returned to the client.
 
-Сторонний сервер получает секрет аккаунта сам. Куда он ходит по сети, шлюз не ограничивает. Поэтому пакет выбирается и закрепляется в изменении коннектора.
+The third-party server receives the account secret itself. The gateway does not restrict where that server connects. The package is therefore chosen and pinned in the connector's change.
 
-## Интерфейс
+## UI
 
-Язык интерфейса — английский. Входа в продукте нет: порт интерфейса слушает адрес из окружения (по умолчанию `127.0.0.1`), доступ к нему закрывает внешний прокси оператора.
+The UI language is English. The product has no login: the UI port listens on the address from the environment (default `127.0.0.1`), and the operator's outer proxy protects that port.
 
-API интерфейса принимает изменения только с `Content-Type: application/json` и не отдаёт заголовки CORS. Так чужая страница в браузере оператора не может отправить запрос от его имени.
+The admin API accepts changes only with `Content-Type: application/json` and does not send CORS headers. A foreign page in the operator's browser therefore cannot send a request as the operator.
 
-Экраны:
+Screens:
 
-1. Connectors — коннекторы из кода. У каждого список аккаунтов: добавить, изменить, проверить соединение, выключить, удалить. Секретов на экране нет.
-2. Configurations — список, создание, токен один раз, ротация, выключение, удаление, галочки аккаунтов по коннекторам.
+1. Connectors — connectors from code. Each has an account list: add, edit, check the connection, disable, delete. No secrets on screen.
+2. Configurations — list, create, show the token once, rotate, disable, delete, account checkboxes grouped by connector.
 
 ## HTTP
 
-Два порта.
+Two ports.
 
-| Порт | Путь | Кто |
+| Port | Path | Who |
 | --- | --- | --- |
-| MCP | `GET /health` | без аутентификации; статус процесса, без каталога и секретов |
-| MCP | `/mcp` | MCP, заголовок `Authorization: Bearer` |
-| MCP | остальное | 404 |
-| интерфейс | `/api/*` | API интерфейса |
-| интерфейс | остальное | статика `web` |
+| MCP | `GET /health` | no authentication; process status, no catalog and no secrets |
+| MCP | `/mcp` | MCP, header `Authorization: Bearer` |
+| MCP | anything else | 404 |
+| UI | `/api/*` | admin API |
+| UI | anything else | `web` static files |
 
-Bearer конфигурации не открывает API интерфейса: это другой порт. Порт интерфейса не отвечает на MCP.
+A configuration bearer does not open the admin API: that is a different port. The UI port does not speak MCP.
 
-Ошибка сервиса клиенту — короткая, на английском, без заголовков и тел, в которых мог быть секрет.
+A service error returned to the client is short, in English, and contains no headers or bodies that could have held a secret.
 
-## Окружение
+## Environment
 
-В репозиторий попадают только имена переменных, не значения.
+The repository contains only variable names, not values.
 
-| Переменная | Зачем |
+| Variable | Purpose |
 | --- | --- |
-| адрес и порт MCP | `/mcp` и `/health` |
-| адрес и порт интерфейса | интерфейс и его API; адрес по умолчанию `127.0.0.1` |
-| каталог данных | зашифрованный файл состояния |
-| ключ шифрования | AES-GCM для файла состояния |
+| MCP address and port | `/mcp` and `/health` |
+| UI address and port | the UI and its API; default address `127.0.0.1` |
+| data directory | the encrypted state file |
+| encryption key | AES-GCM for the state file |
 
-Нет обязательной переменной — процесс не стартует и пишет, какого имени не хватает, без значений.
+If a required variable is missing, the process does not start and writes the missing name, without values.
 
-## Сборка репозитория
+## Repository layout
 
-Два каталога в одном репозитории, один `package.json` через workspaces:
+Two directories in one repository, one `package.json` via workspaces:
 
-- `server` — MCP, API интерфейса, хранилище, контракт коннектора, коннекторы;
+- `server` — MCP, admin API, store, connector contract, connectors;
 - `web` — React.
 
-Продакшен-артефакт — один Node-процесс: API и собранный `web`. Отдельный контейнер под интерфейс не требуется. Dockerfile может появиться в репозитории продукта; привязка к чужому compose — не эта спецификация.
+The production artifact is one Node process: the API and the built `web`. A separate container for the UI is not required. A Dockerfile may appear in the product repository; binding to someone else's compose file is outside this specification.
 
-Порядок реализации базы:
+Base implementation order:
 
-1. Процесс: окружение, зашифрованное хранилище, два порта, `/health`.
-2. Конфигурации в API и MCP с пустым `tools/list`.
-3. Интерфейс: Configurations и пустой Connectors.
-4. Контракт коннектора и вид `native` на фейковом коннекторе: аккаунты, форма по полям, проверка, `tools/list`, `tools/call`.
-5. Вид `proxy` на фейковом MCP-сервере по stdio.
+1. Process: environment, encrypted store, two ports, `/health`.
+2. Configurations in the API and in MCP with an empty `tools/list`.
+3. UI: Configurations and an empty Connectors screen.
+4. Connector contract and kind `native` on a fake connector: accounts, a form from fields, the check, `tools/list`, `tools/call`.
+5. Kind `proxy` on a fake MCP server over stdio.
 
-## Планируемые коннекторы
+## Planned connectors
 
-Не входят в базу. Каждый — отдельное изменение; вид `native` или `proxy` выбирается в нём.
+Not part of the base. Each is a separate change; that change chooses kind `native` or `proxy`.
 
-| Коннектор | Учётные данные | Хосты |
+| Connector | Credentials | Hosts |
 | --- | --- | --- |
-| Gmail | адрес и пароль приложения (IMAP/SMTP) | `imap.gmail.com:993`, `smtp.gmail.com:465` |
-| Mail.ru | адрес и пароль приложения (IMAP/SMTP) | `imap.mail.ru:993`, `smtp.mail.ru:465` |
-| Jira | хост, email, API token | хост из поля аккаунта |
-| Notion | токен внутренней интеграции | `api.notion.com` |
+| Gmail | address and app password (IMAP/SMTP) | `imap.gmail.com:993`, `smtp.gmail.com:465` |
+| Mail.ru | address and app password (IMAP/SMTP) | `imap.mail.ru:993`, `smtp.mail.ru:465` |
+| Jira | host, email, API token | host from the account field |
+| Notion | internal integration token | `api.notion.com` |
 
-## Вне скоупа
+## Out of scope
 
-- Журнал вызовов. Будет отдельной функцией.
-- Каталог коннекторов во время работы и произвольный HTTP по шаблону из аргументов модели.
-- Включение новых инструментов самим клиентом.
-- Вход в интерфейс внутри продукта, несколько администраторов и организации.
-- OAuth-подключение аккаунтов.
-- Удалённые MCP-серверы по HTTP в виде `proxy`.
-- Выполнение кода по запросу модели.
-- Публикация метрик. `GET /health` достаточен.
-- Решение, на каком хосте процесс запущен. Продукт слушает адреса из окружения и на этом заканчивается.
+- A call log. It will be a separate feature.
+- A runtime connector catalog and arbitrary HTTP from a template in model arguments.
+- The client enabling new tools by itself.
+- A login inside the product, multiple administrators, and organizations.
+- Connecting accounts with OAuth.
+- Remote MCP servers over HTTP as kind `proxy`.
+- Running code on the model's request.
+- Publishing metrics. `GET /health` is enough.
+- Deciding which host the process runs on. The product listens on the addresses from the environment and stops there.
