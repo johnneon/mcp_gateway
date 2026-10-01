@@ -6,7 +6,7 @@
 
 ## 2. README
 
-- [ ] 2.1 In README, under "Run in a container", document an anonymous `docker pull` of `ghcr.io/johnneon/mcp_gateway:latest`, the 7-character SHA tag, and the semver tag next to them (the root `package.json` version, example shape `0.1.0`, no `v` prefix, no floating MAJOR or MAJOR.MINOR tag), and a `docker run` that passes only `ENCRYPTION_KEY`, publishes `3100` and loopback `3200`, and mounts a data volume. Keep the local `docker compose up -d --build` instructions. Extend `server/test/ci/publish-image.test.ts` with the scenario "README shows the published image and the local compose build". The test name includes the requirement name and the scenario name. Check: that test passes. Do not call GHCR or `docker`.
+- [x] 2.1 In README, under "Run in a container", document an anonymous `docker pull` of `ghcr.io/johnneon/mcp_gateway:latest`, the 7-character SHA tag, and the semver tag next to them (the root `package.json` version, example shape `0.1.0`, no `v` prefix, no floating MAJOR or MAJOR.MINOR tag), and a `docker run` that passes only `ENCRYPTION_KEY`, publishes `3100` and loopback `3200`, and mounts a data volume. Keep the local `docker compose up -d --build` instructions. Extend `server/test/ci/publish-image.test.ts` with the scenario "README shows the published image and the local compose build". The test name includes the requirement name and the scenario name. Check: that test passes. Do not call GHCR or `docker`.
 
 ## 3. Finish version bump
 

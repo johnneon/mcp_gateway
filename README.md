@@ -82,6 +82,29 @@ Data lives in the `gateway-data` volume and survives container recreation. An ex
 
 A `proxy` connector runs its entry file with the container's `node`. The path stored on the account must exist inside the container. `docker-compose.yml` has a commented volume `./proxy:/proxy` for that.
 
+### Published image
+
+No registry login. Pull the public image:
+
+```bash
+docker pull ghcr.io/johnneon/mcp_gateway:latest
+```
+
+The other tags, next to `latest`, are `ghcr.io/johnneon/mcp_gateway:` plus the 7-character commit SHA, and `ghcr.io/johnneon/mcp_gateway:0.1.0` (the root `package.json` version, example shape `0.1.0`). There is no `v` prefix.
+
+The image already sets `MCP_HOST`, `MCP_PORT`, `ADMIN_HOST`, `ADMIN_PORT`, and `DATA_DIR`. Pass only `ENCRYPTION_KEY`. Do not pass the host `.env` from the non-container run: that file binds different hosts and ports.
+
+```bash
+docker run -d \
+  -e ENCRYPTION_KEY \
+  -p 3100:3100 \
+  -p 127.0.0.1:3200:3200 \
+  -v gateway-data:/data \
+  ghcr.io/johnneon/mcp_gateway:latest
+```
+
+Admin stays on loopback. The UI is `http://127.0.0.1:3200`. The MCP check is `GET http://127.0.0.1:3100/health`. The named volume is mounted at `/data`, the same role as Compose's `gateway-data`.
+
 ## Author
 
 [Efimovich Evgenii](https://github.com/johnneon)

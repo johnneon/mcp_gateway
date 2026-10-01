@@ -8,6 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..', '..');
 const publishPath = path.join(repoRoot, '.github', 'workflows', 'publish-image.yml');
 const checksPath = path.join(repoRoot, '.github', 'workflows', 'ci.yml');
+const readmePath = path.join(repoRoot, 'README.md');
 
 type StepInput = string | boolean;
 
@@ -315,5 +316,58 @@ describe('ghcr-image-publish: Package visibility is public and repeatable', () =
     expect(script).toContain('GITHUB_TOKEN');
     expect(script).toMatch(/if \[ "\$visibility" = "public" \]; then[\s\S]*?exit 0/);
     expect(script).not.toContain('private');
+  });
+});
+
+describe('ghcr-image-publish: README documents pull and run', () => {
+  it('README shows the published image and the local compose build', () => {
+    const readme = readFileSync(readmePath, 'utf8').replace(/\r\n/g, '\n');
+    const sectionStart = readme.indexOf('## Run in a container');
+    const sectionEnd = readme.indexOf('\n## ', sectionStart + 1);
+    expect(sectionStart).toBeGreaterThanOrEqual(0);
+    expect(sectionEnd).toBeGreaterThan(sectionStart);
+    const section = readme.slice(sectionStart, sectionEnd);
+
+    expect(section).toContain('docker compose up -d --build');
+
+    const publishedStart = section.indexOf('### Published image');
+    expect(publishedStart).toBeGreaterThanOrEqual(0);
+    const published = section.slice(publishedStart);
+    expect(published).toContain('No registry login');
+    expect(published).not.toContain('docker login');
+    expect(published).toContain('docker pull ghcr.io/johnneon/mcp_gateway:latest');
+
+    const latestAt = published.indexOf('ghcr.io/johnneon/mcp_gateway:latest');
+    const shaAt = published.indexOf('7-character');
+    const semverAt = published.indexOf('ghcr.io/johnneon/mcp_gateway:0.1.0');
+    expect(latestAt).toBeGreaterThanOrEqual(0);
+    expect(shaAt).toBeGreaterThanOrEqual(0);
+    expect(semverAt).toBeGreaterThanOrEqual(0);
+    const positions = [latestAt, shaAt, semverAt].sort((left, right) => left - right);
+    const first = positions[0] ?? 0;
+    const last = positions[2] ?? 0;
+    expect(last - first).toBeLessThan(600);
+    expect(published).toContain('package.json');
+    expect(published).not.toContain('ghcr.io/johnneon/mcp_gateway:v');
+
+    const imageTags = [
+      ...published.matchAll(/ghcr\.io\/johnneon\/mcp_gateway:([A-Za-z0-9._-]+)/g),
+    ].map((match) => match[1] ?? '');
+    expect(imageTags).toContain('latest');
+    expect(imageTags).toContain('0.1.0');
+    for (const tag of imageTags) {
+      expect(tag.startsWith('v')).toBe(false);
+      expect(/^\d+$/.test(tag) || /^\d+\.\d+$/.test(tag)).toBe(false);
+    }
+
+    const runMatch = published.match(/```bash\n(docker run[\s\S]*?)```/);
+    const run = runMatch?.[1] ?? '';
+    expect(run).toContain('-e ENCRYPTION_KEY');
+    expect(run).toContain('-p 3100:3100');
+    expect(run).toContain('-p 127.0.0.1:3200:3200');
+    expect(run).toMatch(/-v \S+:\/data/);
+    expect(run.match(/-e \S+/g)).toEqual(['-e ENCRYPTION_KEY']);
+    expect(run).not.toContain('--env-file');
+    expect(run).not.toContain('MCP_HOST');
   });
 });
