@@ -16,6 +16,7 @@ const fakeConnector = {
     { name: 'token', label: 'Token', type: 'secret' as const, required: true },
     { name: 'user', label: 'User', type: 'text' as const, required: true },
   ],
+  tools: [],
 };
 
 function configurationsHandler(
@@ -29,6 +30,8 @@ function configurationsHandler(
     accounts?: unknown[];
     connectors?: unknown[];
     putAccounts?: { status: number; body: unknown };
+    disabledToolsFor?: Record<string, { toolNames: string[] }>;
+    putDisabledTools?: { status: number; body: string | { toolNames: string[] } };
   },
 ) {
   let configurationRows = [...rows];
@@ -44,6 +47,25 @@ function configurationsHandler(
     }
     if (call.method === 'GET' && url === '/api/connectors') {
       return jsonResponse(options?.connectors ?? []);
+    }
+    if (
+      call.method === 'GET' &&
+      /\/api\/configurations\/[^/]+\/accounts\/[^/]+\/disabled-tools$/.test(url)
+    ) {
+      return jsonResponse(options?.disabledToolsFor?.[url] ?? { toolNames: [] });
+    }
+    if (
+      call.method === 'PUT' &&
+      /\/api\/configurations\/[^/]+\/accounts\/[^/]+\/disabled-tools$/.test(url)
+    ) {
+      const status = options?.putDisabledTools?.status ?? 200;
+      const responseBody = options?.putDisabledTools?.body;
+      if (status >= 400) {
+        const text = typeof responseBody === 'string' ? responseBody : 'Bad Request';
+        return textResponse(text, status);
+      }
+      const parsed = JSON.parse(call.body ?? '{"toolNames":[]}') as { toolNames: string[] };
+      return jsonResponse(responseBody ?? parsed, status);
     }
     if (call.method === 'POST' && url === '/api/configurations') {
       const body = options?.create?.body ?? {
@@ -466,5 +488,171 @@ describe('admin-configurations-ui: Configuration account checkboxes by connector
       calls.find((call) => call.method === 'PUT' && call.url === '/api/configurations/c1/accounts')
         ?.body,
     ).toBe(JSON.stringify({ accountIds: ['a2'] }));
+  });
+});
+
+const SECRET = 'account-secret-should-not-show';
+const BEARER = 'bearer-should-not-show';
+
+const toolsConnector = {
+  ...fakeConnector,
+  tools: [
+    { name: 'fake_keep', description: 'Keep a row' },
+    { name: 'fake_drop', description: 'Drop a row' },
+  ],
+};
+
+describe('admin-configurations-ui: Enable or disable tools for an assigned account', () => {
+  it('Assigned account lists tools and a toggle replaces the set', async () => {
+    const user = userEvent.setup();
+    const { calls } = configurationsHandler(
+      [{ id: 'c1', name: 'Ops', enabled: true, accountIds: ['a1'], token: BEARER }],
+      {
+        accounts: [
+          {
+            id: 'a1',
+            connector: 'fake',
+            label: 'Box',
+            enabled: true,
+            values: { token: SECRET },
+          },
+        ],
+        connectors: [toolsConnector],
+        disabledToolsFor: {
+          '/api/configurations/c1/accounts/a1/disabled-tools': { toolNames: [] },
+        },
+        putDisabledTools: { status: 200, body: { toolNames: ['fake_drop'] } },
+      },
+    );
+
+    render(<ConfigurationsPage />);
+
+    expect(await screen.findByText('fake_keep')).toBeInTheDocument();
+    expect(screen.getByText('Keep a row')).toBeInTheDocument();
+    expect(screen.getByText('fake_drop')).toBeInTheDocument();
+    expect(screen.getByText('Drop a row')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('checkbox', { name: 'Enable fake_drop for Box' }));
+
+    await waitFor(() => {
+      expect(
+        calls.some(
+          (call) =>
+            call.method === 'PUT' &&
+            call.url === '/api/configurations/c1/accounts/a1/disabled-tools',
+        ),
+      ).toBe(true);
+    });
+    const put = calls.find(
+      (call) =>
+        call.method === 'PUT' && call.url === '/api/configurations/c1/accounts/a1/disabled-tools',
+    );
+    expect(put?.headers.get('Content-Type')).toBe('application/json');
+    expect(put?.body).toBe(JSON.stringify({ toolNames: ['fake_drop'] }));
+    expect(screen.queryByText(BEARER)).not.toBeInTheDocument();
+    expect(screen.queryByText(SECRET)).not.toBeInTheDocument();
+  });
+
+  it('Turning a tool back on sends an empty set', async () => {
+    const user = userEvent.setup();
+    const { calls } = configurationsHandler(
+      [{ id: 'c1', name: 'Ops', enabled: true, accountIds: ['a1'] }],
+      {
+        accounts: [
+          {
+            id: 'a1',
+            connector: 'fake',
+            label: 'Box',
+            enabled: true,
+            values: { user: 'alice' },
+          },
+        ],
+        connectors: [toolsConnector],
+        disabledToolsFor: {
+          '/api/configurations/c1/accounts/a1/disabled-tools': { toolNames: ['fake_drop'] },
+        },
+        putDisabledTools: { status: 200, body: { toolNames: [] } },
+      },
+    );
+
+    render(<ConfigurationsPage />);
+    const checkbox = await screen.findByRole('checkbox', { name: 'Enable fake_drop for Box' });
+    expect(checkbox).not.toBeChecked();
+
+    await user.click(checkbox);
+
+    await waitFor(() => {
+      expect(
+        calls.some(
+          (call) =>
+            call.method === 'PUT' &&
+            call.url === '/api/configurations/c1/accounts/a1/disabled-tools',
+        ),
+      ).toBe(true);
+    });
+    const put = calls.find(
+      (call) =>
+        call.method === 'PUT' && call.url === '/api/configurations/c1/accounts/a1/disabled-tools',
+    );
+    expect(put?.body).toBe(JSON.stringify({ toolNames: [] }));
+  });
+
+  it('Unassigned account has no tool toggles', async () => {
+    const { calls } = configurationsHandler(
+      [{ id: 'c1', name: 'Ops', enabled: true, accountIds: [] }],
+      {
+        accounts: [
+          {
+            id: 'a1',
+            connector: 'fake',
+            label: 'Box',
+            enabled: true,
+            values: { user: 'alice' },
+          },
+        ],
+        connectors: [toolsConnector],
+      },
+    );
+
+    render(<ConfigurationsPage />);
+    expect(await screen.findByRole('checkbox', { name: 'Assign Box to Ops' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('checkbox', { name: 'Enable fake_drop for Box' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('fake_drop')).not.toBeInTheDocument();
+    expect(calls.some((call) => call.url.includes('disabled-tools'))).toBe(false);
+  });
+
+  it('Failed toggle shows English error without secrets', async () => {
+    const user = userEvent.setup();
+    configurationsHandler(
+      [{ id: 'c1', name: 'Ops', enabled: true, accountIds: ['a1'], token: BEARER }],
+      {
+        accounts: [
+          {
+            id: 'a1',
+            connector: 'fake',
+            label: 'Box',
+            enabled: true,
+            values: { token: SECRET },
+          },
+        ],
+        connectors: [toolsConnector],
+        disabledToolsFor: {
+          '/api/configurations/c1/accounts/a1/disabled-tools': { toolNames: [] },
+        },
+        putDisabledTools: { status: 400, body: 'Could not update tools' },
+      },
+    );
+
+    render(<ConfigurationsPage />);
+    const checkbox = await screen.findByRole('checkbox', { name: 'Enable fake_drop for Box' });
+    expect(checkbox).toBeChecked();
+
+    await user.click(checkbox);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not update tools');
+    expect(screen.queryByText(BEARER)).not.toBeInTheDocument();
+    expect(screen.queryByText(SECRET)).not.toBeInTheDocument();
   });
 });

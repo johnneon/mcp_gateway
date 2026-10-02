@@ -61,3 +61,29 @@ export function rotateConfiguration(id: string): Promise<ConfigurationWithToken>
     { method: 'POST' },
   );
 }
+
+export type DisabledTools = {
+  toolNames: string[];
+};
+
+function disabledToolsPath(configurationId: string, accountId: string): string {
+  return `/api/configurations/${encodeURIComponent(configurationId)}/accounts/${encodeURIComponent(accountId)}/disabled-tools`;
+}
+
+export function getDisabledTools(
+  configurationId: string,
+  accountId: string,
+): Promise<DisabledTools> {
+  return apiRequest<DisabledTools>(disabledToolsPath(configurationId, accountId));
+}
+
+export function setDisabledTools(
+  configurationId: string,
+  accountId: string,
+  toolNames: string[],
+): Promise<DisabledTools> {
+  return apiRequest<DisabledTools>(disabledToolsPath(configurationId, accountId), {
+    method: 'PUT',
+    body: { toolNames },
+  });
+}

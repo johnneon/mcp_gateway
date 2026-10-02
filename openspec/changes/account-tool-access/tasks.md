@@ -18,7 +18,7 @@
 
 ## 5. Configurations screen toggles
 
-- [ ] 5.1 On the Configurations screen, inside each assigned account, list that connector's tools by MCP name and description and toggle each one. A toggle immediately PUTs the full replacement `{ toolNames }` set. Load the set only for assigned accounts. Unassigned accounts show no tool controls and cause no disabled-tools request. Copy is English. The screen shows no bearer and no secret. A failed PUT shows a short English error. Cover the delta scenarios with React Testing Library component tests. Check: Configurations screen tests pass; `npm run typecheck -w web` exits 0.
+- [x] 5.1 On the Configurations screen, inside each assigned account, list that connector's tools by MCP name and description and toggle each one. A toggle immediately PUTs the full replacement `{ toolNames }` set. Load the set only for assigned accounts. Unassigned accounts show no tool controls and cause no disabled-tools request. Copy is English. The screen shows no bearer and no secret. A failed PUT shows a short English error. Cover the delta scenarios with React Testing Library component tests. Check: Configurations screen tests pass; `npm run typecheck -w web` exits 0.
 
 ## 6. Full package check
 

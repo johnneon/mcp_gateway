@@ -12,6 +12,12 @@ export type ConnectorPublicDescription = {
   name: string;
   kind: 'native' | 'proxy';
   fields: ConnectorFieldDescription[];
+  tools: ConnectorToolDescription[];
+};
+
+export type ConnectorToolDescription = {
+  name: string;
+  description: string;
 };
 
 export function listConnectors(): Promise<ConnectorPublicDescription[]> {

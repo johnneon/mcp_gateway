@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse, mockFetch } from '@/test/mockFetch';
 import {
   createConfiguration,
+  getDisabledTools,
   listConfigurations,
   rotateConfiguration,
   setConfigurationAccounts,
   setConfigurationEnabled,
+  setDisabledTools,
 } from './api';
 
 afterEach(() => {
@@ -91,5 +93,31 @@ describe('configurations api accountIds', () => {
     expect(calls[0]?.url).toBe('/api/configurations/c1/accounts');
     expect(calls[0]?.headers.get('Content-Type')).toBe('application/json');
     expect(calls[0]?.body).toBe(JSON.stringify({ accountIds: ['a2', 'a1'] }));
+  });
+
+  it('setDisabledTools PUTs the full toolNames replacement', async () => {
+    const { calls } = mockFetch((url, _init, call) => {
+      if (call.method === 'PUT' && url === '/api/configurations/c1/accounts/a1/disabled-tools') {
+        return jsonResponse({ toolNames: ['fake_drop'] });
+      }
+      throw new Error(`unexpected ${call.method} ${url}`);
+    });
+
+    await expect(setDisabledTools('c1', 'a1', ['fake_drop'])).resolves.toEqual({
+      toolNames: ['fake_drop'],
+    });
+    expect(calls[0]?.headers.get('Content-Type')).toBe('application/json');
+    expect(calls[0]?.body).toBe(JSON.stringify({ toolNames: ['fake_drop'] }));
+  });
+
+  it('getDisabledTools reads the stored names', async () => {
+    mockFetch((url, _init, call) => {
+      if (call.method === 'GET' && url === '/api/configurations/c1/accounts/a1/disabled-tools') {
+        return jsonResponse({ toolNames: [] });
+      }
+      throw new Error(`unexpected ${call.method} ${url}`);
+    });
+
+    await expect(getDisabledTools('c1', 'a1')).resolves.toEqual({ toolNames: [] });
   });
 });
