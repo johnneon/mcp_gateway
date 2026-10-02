@@ -61,9 +61,10 @@ Use when given `openspec/changes/<name>/verification.md` with blockers, or revie
 Use when the committed `verification.md` says `blockers: 0`.
 
 1. Follow `openspec-archive-change` and commit the archive with `docs:`.
-2. Run the full test suite once more.
-3. Push and open the pull request into `main` per `commits`, with `Closes #<n>` from `proposal.md`.
-4. Move the issue card to In review.
-5. Report the pull request link. Do not merge.
+2. At finish, after the archive commit and before push, create one chore commit that sets the root package.json version. Keep that commit separate from the archive docs commit. If the version field is absent, set 0.1.0. If the person named major, minor, or patch for this change, bump that component and reset lower components to 0. Otherwise bump patch. Do not bump the version during propose or apply. Do not add or change version in a workspace package.json.
+3. Run the full test suite once more.
+4. Push and open the pull request into `main` per `commits`, with `Closes #<n>` from `proposal.md`.
+5. Move the issue card to In review.
+6. Report the pull request link. Do not merge.
 
 CLI: `npx openspec` from the repository root. Node.js 22.

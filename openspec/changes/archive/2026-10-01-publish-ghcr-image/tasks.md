@@ -1,0 +1,17 @@
+# Tasks
+
+## 1. Publish workflow
+
+- [x] 1.1 Add `.github/workflows/publish-image.yml` as design describes: `push` to `main` only, `ubuntu-24.04`, permissions `contents: read` and `packages: write`, login to `ghcr.io` with `GITHUB_TOKEN`, Node 22, a step that reads the root `package.json` `version` and fails without inventing a tag when the field is missing or is not exactly three numeric components, build the existing Dockerfile for `linux/amd64`, tags `latest`, the first 7 characters of `GITHUB_SHA`, and that exact version, then the repeatable visibility step for container package `mcp_gateway`. Do not push a MAJOR-only or MAJOR.MINOR tag, and do not add a `v` prefix. Do not edit `.github/workflows/ci.yml`, `Dockerfile`, `docker-compose.yml`, or any `package.json`. Add `server/test/ci/publish-image.test.ts` that reads those YAML files and covers the delta scenarios "Workflow publishes only from a push to main", "Workflow declares latest, a 7-character SHA, the package version, and amd64", "Job fails when the package version is missing or not three numeric components", and "Visibility step sets public and succeeds when already public". Test names include the requirement name and the scenario name. The tests do not call GHCR, `gh`, or `docker`. Format the workflow with project Prettier. Check: those four tests pass, and `npm run format:check` exits 0.
+
+## 2. README
+
+- [x] 2.1 In README, under "Run in a container", document an anonymous `docker pull` of `ghcr.io/johnneon/mcp_gateway:latest`, the 7-character SHA tag, and the semver tag next to them (the root `package.json` version, example shape `0.1.0`, no `v` prefix, no floating MAJOR or MAJOR.MINOR tag), and a `docker run` that passes only `ENCRYPTION_KEY`, publishes `3100` and loopback `3200`, and mounts a data volume. Keep the local `docker compose up -d --build` instructions. Extend `server/test/ci/publish-image.test.ts` with the scenario "README shows the published image and the local compose build". The test name includes the requirement name and the scenario name. Check: that test passes. Do not call GHCR or `docker`.
+
+## 3. Finish version bump
+
+- [x] 3.1 State the finish-time root version bump in `.cursor/skills/commits/SKILL.md`, the finish step of `docs/workflow.md`, and the finish list of `.cursor/agents/developer.md`, using the English sentence and the Russian sentence from design decision 7. In the commits skill, also add a `chore:` row for that commit in the when-to-commit table. In `developer.md`, place the version commit after the archive commit and before the full test suite, and keep the suite before push. In `docs/workflow.md`, place the version step after archive and before push, and do not add a test-suite step. Do not bump during propose or apply. Do not edit root `package.json` or any workspace `package.json` in this task: this change's finish sets `0.1.0` because the field is absent. Do not edit generated `openspec-*` skills and do not add a skill file. Extend `server/test/ci/publish-image.test.ts` with the scenario "Finish instructions bump the root version before push". The test name includes the requirement name and the scenario name. The test reads the three files and does not call GHCR. Check: that test passes.
+
+## 4. Full package check
+
+- [x] 4.1 From the repository root, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm test`, and `npm run build` all exit 0. The existing pull-request checks tests still pass. No live GHCR call.
