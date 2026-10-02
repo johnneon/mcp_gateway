@@ -2,7 +2,7 @@
 
 ## 1. Configuration denylist
 
-- [ ] 1.1 Extend the configuration record so an optional `disabledTools` map is read and written. A missing property, a missing account key, or an empty array means every tool is enabled. New creates write no `disabledTools` property. Public configuration JSON omits `disabledTools`, `token`, and `tokenHash`. `setAccountIds` drops keys for account ids removed from the list and keeps keys that remain. `removeAccountIdFromAll` drops that account's key on every configuration. `ActiveConfiguration` carries the same map for MCP. Unit tests cover a missing property, create without the property, unassign then assign again with no key, and delete cascade of the key. Check: configurations and accounts service tests for those scenarios pass; `npm run typecheck -w server` exits 0.
+- [x] 1.1 Extend the configuration record so an optional `disabledTools` map is read and written. A missing property, a missing account key, or an empty array means every tool is enabled. New creates write no `disabledTools` property. Public configuration JSON omits `disabledTools`, `token`, and `tokenHash`. `setAccountIds` drops keys for account ids removed from the list and keeps keys that remain. `removeAccountIdFromAll` drops that account's key on every configuration. `ActiveConfiguration` carries the same map for MCP. Unit tests cover a missing property, create without the property, unassign then assign again with no key, and delete cascade of the key. Check: configurations and accounts service tests for those scenarios pass; `npm run typecheck -w server` exits 0.
 
 ## 2. Connector tool names on the admin list
 

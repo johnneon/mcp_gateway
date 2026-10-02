@@ -8,6 +8,7 @@ export type ActiveConfiguration = {
   tokenHash: string;
   enabled: boolean;
   accountIds: string[];
+  disabledTools: Record<string, string[]>;
 };
 
 /**
@@ -51,6 +52,22 @@ function readAccountIds(row: Record<string, unknown>): string[] {
   return row.accountIds.filter((id): id is string => typeof id === 'string');
 }
 
+function readDisabledTools(row: Record<string, unknown>): Record<string, string[]> {
+  const raw = row.disabledTools;
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return {};
+  }
+  const map: Record<string, string[]> = {};
+  for (const [accountId, value] of Object.entries(raw)) {
+    if (!Array.isArray(value)) {
+      map[accountId] = [];
+      continue;
+    }
+    map[accountId] = value.filter((name): name is string => typeof name === 'string');
+  }
+  return map;
+}
+
 function readAuthRows(document: JsonObject): ActiveConfiguration[] {
   const raw = document.configurations;
   if (!Array.isArray(raw)) {
@@ -67,6 +84,7 @@ function readAuthRows(document: JsonObject): ActiveConfiguration[] {
       tokenHash: value.tokenHash as string,
       enabled: value.enabled as boolean,
       accountIds: readAccountIds(value),
+      disabledTools: readDisabledTools(value),
     });
   }
   return rows;
