@@ -6,7 +6,7 @@
 
 ## 2. Connector tool names on the admin list
 
-- [ ] 2.1 Add `tools: [{ name, description }]` to the public connector object. `name` is the MCP tool name. Do not include input schemas, handlers, allowed destinations, secrets, or account values. Update connectors-api tests that assert the public shape so they expect `tools` as in the delta, without weakening the existing assertions that destinations and secrets stay out of the body. Check: connectors-api tests pass, including the fake connector scenario whose tool is `fake_drop` with description `Drop a row`.
+- [x] 2.1 Add `tools: [{ name, description }]` to the public connector object. `name` is the MCP tool name. Do not include input schemas, handlers, allowed destinations, secrets, or account values. Update connectors-api tests that assert the public shape so they expect `tools` as in the delta, without weakening the existing assertions that destinations and secrets stay out of the body. Check: connectors-api tests pass, including the fake connector scenario whose tool is `fake_drop` with description `Drop a row`.
 
 ## 3. Disabled-tools admin routes
 

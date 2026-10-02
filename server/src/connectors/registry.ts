@@ -333,6 +333,10 @@ function toPublicConnector(module: ConnectorModule): PublicConnector {
       type: field.type,
       required: field.required,
     })),
+    tools: module.tools.map((tool) => ({
+      name: mcpToolName(module.id, tool.name),
+      description: tool.description,
+    })),
   };
 }
 
