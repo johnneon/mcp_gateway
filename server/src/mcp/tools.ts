@@ -109,6 +109,15 @@ export function eligibleAccountsForConnector(
   return eligible;
 }
 
+export function isToolDisabledForAccount(
+  configuration: ActiveConfiguration,
+  accountId: string,
+  mcpName: string,
+): boolean {
+  const names = configuration.disabledTools[accountId];
+  return names !== undefined && names.includes(mcpName);
+}
+
 function accountPropertyDescription(accounts: readonly EligibleAccount[]): string {
   return accounts.map((account) => `${account.id} (${account.label})`).join('\n');
 }
@@ -139,7 +148,7 @@ export function buildToolInputSchema(
 
 /**
  * Build tools/list for the active configuration from the connector registry.
- * A connector's tools appear only when it has at least one eligible account.
+ * A tool appears only when at least one account is eligible for that tool.
  */
 export function listToolsForConfiguration(
   connectorRegistry: ConnectorRegistry,
@@ -148,13 +157,20 @@ export function listToolsForConfiguration(
 ): McpListedTool[] {
   const tools: McpListedTool[] = [];
   for (const connector of connectorRegistry.connectors) {
-    const eligible = eligibleAccountsForConnector(configuration, store, connector.id);
-    if (eligible.length === 0) {
+    const connectorEligible = eligibleAccountsForConnector(configuration, store, connector.id);
+    if (connectorEligible.length === 0) {
       continue;
     }
     for (const tool of connector.tools) {
+      const mcpName = mcpToolName(connector.id, tool.name);
+      const eligible = connectorEligible.filter(
+        (account) => !isToolDisabledForAccount(configuration, account.id, mcpName),
+      );
+      if (eligible.length === 0) {
+        continue;
+      }
       tools.push({
-        name: mcpToolName(connector.id, tool.name),
+        name: mcpName,
         description: tool.description,
         inputSchema: buildToolInputSchema(
           tool.inputSchema.properties,
