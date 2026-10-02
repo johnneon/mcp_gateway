@@ -32,6 +32,12 @@ export type ConfigurationsService = {
   rotate(id: string): Promise<ConfigurationWithToken>;
   setEnabled(id: string, enabled: boolean): Promise<ConfigurationPublic>;
   setAccountIds(id: string, accountIds: string[]): Promise<ConfigurationPublic>;
+  readDisabledToolNames(id: string, accountId: string): string[];
+  replaceDisabledToolNames(
+    id: string,
+    accountId: string,
+    toolNames: readonly string[],
+  ): Promise<string[]>;
   removeAccountIdFromAll(accountId: string): Promise<void>;
   remove(id: string): Promise<void>;
 };
@@ -130,6 +136,22 @@ function pruneDisabledTools(
     }
   }
   return next;
+}
+
+function requireAssignedConfiguration(
+  rows: ConfigurationRecord[],
+  id: string,
+  accountId: string,
+): { index: number; row: ConfigurationRecord } {
+  const index = rows.findIndex((row) => row.id === id);
+  const row = index >= 0 ? rows[index] : undefined;
+  if (!row) {
+    throw new ConfigurationNotFoundError();
+  }
+  if (!row.accountIds.includes(accountId)) {
+    throw new ConfigurationValidationError('account is not assigned to this configuration');
+  }
+  return { index, row };
 }
 
 function dropDisabledToolsKey(
@@ -269,6 +291,28 @@ export function createConfigurationsService(store: EncryptedStore): Configuratio
       rows[index] = updated;
       await writeConfigurations(store, rows);
       return toPublic(updated);
+    },
+
+    readDisabledToolNames(id: string, accountId: string): string[] {
+      const rows = readConfigurations(store.read());
+      const { row } = requireAssignedConfiguration(rows, id, accountId);
+      const names = row.disabledTools?.[accountId];
+      return names === undefined ? [] : [...names];
+    },
+
+    async replaceDisabledToolNames(
+      id: string,
+      accountId: string,
+      toolNames: readonly string[],
+    ): Promise<string[]> {
+      const rows = readConfigurations(store.read());
+      const { index, row } = requireAssignedConfiguration(rows, id, accountId);
+      const disabledTools: DisabledToolsMap = { ...(row.disabledTools ?? {}) };
+      const stored = [...toolNames];
+      disabledTools[accountId] = stored;
+      rows[index] = withAccounts(row, [...row.accountIds], disabledTools);
+      await writeConfigurations(store, rows);
+      return stored;
     },
 
     async removeAccountIdFromAll(accountId: string): Promise<void> {

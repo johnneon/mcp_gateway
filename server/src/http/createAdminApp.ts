@@ -41,7 +41,10 @@ export function createAdminApp(options: CreateAdminAppOptions): Express {
 
   app.use('/api', requireJsonContentType);
   app.use('/api', express.json({ strict: false }));
-  app.use('/api/configurations', createConfigurationsRouter(configurations, accounts));
+  app.use(
+    '/api/configurations',
+    createConfigurationsRouter(configurations, accounts, connectorRegistry),
+  );
   app.use('/api/accounts', createAccountsRouter(accounts));
   app.use('/api/connectors', createConnectorsRouter(connectorRegistry));
 

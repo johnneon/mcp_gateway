@@ -86,6 +86,8 @@ function asConfigPublic(value: unknown): ConfigPublic {
       accountIds: expect.any(Array) as string[],
     }),
   );
+  const row = value as ConfigPublic;
+  expect(row).not.toHaveProperty('disabledTools');
   return value as ConfigPublic;
 }
 
@@ -102,7 +104,20 @@ function createFakeNative(overrides: Partial<NativeConnectorModule> = {}): Nativ
     ],
     allowedDestinations: [{ host: 'imap.example.test', port: 993 }],
     checkConnection: () => undefined,
-    tools: [],
+    tools: [
+      {
+        name: 'keep',
+        description: 'Keep a row',
+        inputSchema: { type: 'object' },
+        handler: () => ({ content: [{ type: 'text', text: 'ok' }] }),
+      },
+      {
+        name: 'drop',
+        description: 'Drop a row',
+        inputSchema: { type: 'object' },
+        handler: () => ({ content: [{ type: 'text', text: 'ok' }] }),
+      },
+    ],
   };
   return {
     ...base,
@@ -450,6 +465,33 @@ describe('accounts-api: Delete account removes it from configurations', () => {
     expect(asConfigPublic((parseJson(configs.text) as unknown[])[0]).accountIds).toEqual([]);
   });
 
+  it('Delete drops the account disabledTools entry', async () => {
+    const { app, store } = createApp({});
+    const account = await createAccount(app);
+    const configResponse = await request(app)
+      .post('/api/configurations')
+      .set('Content-Type', 'application/json')
+      .send({ name: 'Ops' });
+    const config = asConfigPublic(parseJson(configResponse.text));
+    await request(app)
+      .put(`/api/configurations/${config.id}/accounts`)
+      .set('Content-Type', 'application/json')
+      .send({ accountIds: [account.id] });
+    const disabled = await request(app)
+      .put(`/api/configurations/${config.id}/accounts/${account.id}/disabled-tools`)
+      .set('Content-Type', 'application/json')
+      .send({ toolNames: ['fake_drop'] });
+    expect(disabled.status).toBe(200);
+
+    const deleted = await request(app)
+      .delete(`/api/accounts/${account.id}`)
+      .set('Content-Type', 'application/json');
+    expect(deleted.status).toBe(204);
+    const stored = (store.read().configurations as JsonObject[])[0];
+    const tools = stored.disabledTools as Record<string, string[]> | undefined;
+    expect(tools?.[account.id]).toBeUndefined();
+  });
+
   it('Unknown account id on DELETE — 404', async () => {
     const { app } = createApp({});
     const response = await request(app)
@@ -549,6 +591,58 @@ describe('accounts-api: Assign accounts to a configuration', () => {
     expect(response.status).toBe(200);
     expect(asConfigPublic(parseJson(response.text)).accountIds).toEqual([account.id]);
   });
+
+  it('Unassign drops disabledTools and assign again starts enabled', async () => {
+    const { app, store } = createApp({});
+    const a1 = await createAccount(app, { label: 'One' });
+    const a2 = await createAccount(app, { label: 'Two' });
+    const configResponse = await request(app)
+      .post('/api/configurations')
+      .set('Content-Type', 'application/json')
+      .send({ name: 'Ops' });
+    const config = asConfigPublic(parseJson(configResponse.text));
+    await request(app)
+      .put(`/api/configurations/${config.id}/accounts`)
+      .set('Content-Type', 'application/json')
+      .send({ accountIds: [a1.id, a2.id] });
+    await request(app)
+      .put(`/api/configurations/${config.id}/accounts/${a1.id}/disabled-tools`)
+      .set('Content-Type', 'application/json')
+      .send({ toolNames: ['fake_drop'] });
+    await request(app)
+      .put(`/api/configurations/${config.id}/accounts/${a2.id}/disabled-tools`)
+      .set('Content-Type', 'application/json')
+      .send({ toolNames: ['fake_keep'] });
+
+    const unassigned = await request(app)
+      .put(`/api/configurations/${config.id}/accounts`)
+      .set('Content-Type', 'application/json')
+      .send({ accountIds: [a2.id] });
+    expect(unassigned.status).toBe(200);
+    expect(asConfigPublic(parseJson(unassigned.text))).not.toHaveProperty('token');
+    const afterUnassign = (store.read().configurations as JsonObject[])[0].disabledTools as Record<
+      string,
+      string[]
+    >;
+    expect(afterUnassign).not.toHaveProperty(a1.id);
+    expect(afterUnassign[a2.id]).toEqual(['fake_keep']);
+
+    const assigned = await request(app)
+      .put(`/api/configurations/${config.id}/accounts`)
+      .set('Content-Type', 'application/json')
+      .send({ accountIds: [a2.id, a1.id] });
+    expect(assigned.status).toBe(200);
+    const afterAssign = (store.read().configurations as JsonObject[])[0].disabledTools as Record<
+      string,
+      string[]
+    >;
+    expect(afterAssign).not.toHaveProperty(a1.id);
+    const enabled = await request(app).get(
+      `/api/configurations/${config.id}/accounts/${a1.id}/disabled-tools`,
+    );
+    expect(enabled.status).toBe(200);
+    expect(parseJson(enabled.text)).toEqual({ toolNames: [] });
+  });
 });
 
 describe('accounts-api: Accounts API follows admin JSON and CORS rules', () => {
@@ -568,6 +662,172 @@ describe('accounts-api: Accounts API follows admin JSON and CORS rules', () => {
     const response = await request(app).get('/api/accounts');
     expect(response.status).toBe(200);
     assertNoCors(response.headers);
+  });
+});
+
+describe('accounts-api: Read and replace disabled tools for an assigned account', () => {
+  async function assignOne(app: Express): Promise<{
+    account: AccountPublic;
+    configId: string;
+    token: string;
+  }> {
+    const account = await createAccount(app);
+    const configResponse = await request(app)
+      .post('/api/configurations')
+      .set('Content-Type', 'application/json')
+      .send({ name: 'Ops' });
+    expect(configResponse.status).toBe(201);
+    const created = parseJson(configResponse.text) as { id: string; token: string };
+    await request(app)
+      .put(`/api/configurations/${created.id}/accounts`)
+      .set('Content-Type', 'application/json')
+      .send({ accountIds: [account.id] });
+    return { account, configId: created.id, token: created.token };
+  }
+
+  function storedTools(store: EncryptedStore, accountId: string): string[] | undefined {
+    const row = (store.read().configurations as JsonObject[])[0];
+    const tools = row?.disabledTools as Record<string, string[]> | undefined;
+    return tools?.[accountId];
+  }
+
+  it('GET returns an empty list when nothing is stored', async () => {
+    const { app } = createApp({});
+    const { account, configId, token } = await assignOne(app);
+    const response = await request(app).get(
+      `/api/configurations/${configId}/accounts/${account.id}/disabled-tools`,
+    );
+    expect(response.status).toBe(200);
+    expect(parseJson(response.text)).toEqual({ toolNames: [] });
+    expect(response.text).not.toContain(token);
+    expect(response.text).not.toContain(FIXTURE_SECRET);
+  });
+
+  it('PUT replaces the set and GET returns the stored names', async () => {
+    const { app, store } = createApp({});
+    const { account, configId, token } = await assignOne(app);
+    const response = await request(app)
+      .put(`/api/configurations/${configId}/accounts/${account.id}/disabled-tools`)
+      .set('Content-Type', 'application/json')
+      .send({ toolNames: ['fake_drop'], ignored: true });
+    expect(response.status).toBe(200);
+    expect(parseJson(response.text)).toEqual({ toolNames: ['fake_drop'] });
+    expect(response.text).not.toContain(token);
+    expect(response.text).not.toContain(FIXTURE_SECRET);
+    expect(storedTools(store, account.id)).toEqual(['fake_drop']);
+    const again = await request(app).get(
+      `/api/configurations/${configId}/accounts/${account.id}/disabled-tools`,
+    );
+    expect(parseJson(again.text)).toEqual({ toolNames: ['fake_drop'] });
+  });
+
+  it('PUT stores tool names in the submitted order', async () => {
+    const { app, store } = createApp({});
+    const { account, configId } = await assignOne(app);
+    const response = await request(app)
+      .put(`/api/configurations/${configId}/accounts/${account.id}/disabled-tools`)
+      .set('Content-Type', 'application/json')
+      .send({ toolNames: ['fake_drop', 'fake_keep'] });
+    expect(response.status).toBe(200);
+    expect(parseJson(response.text)).toEqual({ toolNames: ['fake_drop', 'fake_keep'] });
+    expect(storedTools(store, account.id)).toEqual(['fake_drop', 'fake_keep']);
+  });
+
+  it('Empty array enables every tool', async () => {
+    const { app } = createApp({});
+    const { account, configId } = await assignOne(app);
+    await request(app)
+      .put(`/api/configurations/${configId}/accounts/${account.id}/disabled-tools`)
+      .set('Content-Type', 'application/json')
+      .send({ toolNames: ['fake_drop'] });
+    const response = await request(app)
+      .put(`/api/configurations/${configId}/accounts/${account.id}/disabled-tools`)
+      .set('Content-Type', 'application/json')
+      .send({ toolNames: [] });
+    expect(response.status).toBe(200);
+    expect(parseJson(response.text)).toEqual({ toolNames: [] });
+    const again = await request(app).get(
+      `/api/configurations/${configId}/accounts/${account.id}/disabled-tools`,
+    );
+    expect(parseJson(again.text)).toEqual({ toolNames: [] });
+  });
+
+  it('Duplicate tool names reject without write', async () => {
+    const { app, store } = createApp({});
+    const { account, configId } = await assignOne(app);
+    const response = await request(app)
+      .put(`/api/configurations/${configId}/accounts/${account.id}/disabled-tools`)
+      .set('Content-Type', 'application/json')
+      .send({ toolNames: ['fake_drop', 'fake_drop'] });
+    expect(response.status).toBe(400);
+    expect(storedTools(store, account.id)).toBeUndefined();
+  });
+
+  it('Empty tool name rejects without write', async () => {
+    const { app, store } = createApp({});
+    const { account, configId } = await assignOne(app);
+    const response = await request(app)
+      .put(`/api/configurations/${configId}/accounts/${account.id}/disabled-tools`)
+      .set('Content-Type', 'application/json')
+      .send({ toolNames: [''] });
+    expect(response.status).toBe(400);
+    expect(storedTools(store, account.id)).toBeUndefined();
+  });
+
+  it('Unknown tool name rejects without write', async () => {
+    const { app, store } = createApp({});
+    const { account, configId } = await assignOne(app);
+    const response = await request(app)
+      .put(`/api/configurations/${configId}/accounts/${account.id}/disabled-tools`)
+      .set('Content-Type', 'application/json')
+      .send({ toolNames: ['other_drop'] });
+    expect(response.status).toBe(400);
+    expect(storedTools(store, account.id)).toBeUndefined();
+  });
+
+  it('Account not assigned rejects without write', async () => {
+    const { app, store } = createApp({});
+    const account = await createAccount(app);
+    const configResponse = await request(app)
+      .post('/api/configurations')
+      .set('Content-Type', 'application/json')
+      .send({ name: 'Ops' });
+    const config = asConfigPublic(parseJson(configResponse.text));
+    const response = await request(app)
+      .put(`/api/configurations/${config.id}/accounts/${account.id}/disabled-tools`)
+      .set('Content-Type', 'application/json')
+      .send({ toolNames: [] });
+    expect(response.status).toBe(400);
+    expect(storedTools(store, account.id)).toBeUndefined();
+    const read = await request(app).get(
+      `/api/configurations/${config.id}/accounts/${account.id}/disabled-tools`,
+    );
+    expect(read.status).toBe(400);
+  });
+
+  it('Unknown configuration is 404', async () => {
+    const { app } = createApp({});
+    const response = await request(app).get(
+      '/api/configurations/missing/accounts/a1/disabled-tools',
+    );
+    expect(response.status).toBe(404);
+    expect(response.text).toBe('Not Found');
+    expect(response.text).not.toContain(FIXTURE_SECRET);
+  });
+
+  it('Non-JSON PUT does not write', async () => {
+    const { app } = createApp({});
+    const { account, configId } = await assignOne(app);
+    const response = await request(app)
+      .put(`/api/configurations/${configId}/accounts/${account.id}/disabled-tools`)
+      .set('Content-Type', 'text/plain')
+      .send('{ "toolNames": ["fake_drop"] }');
+    expect(response.status).toBe(415);
+    const again = await request(app).get(
+      `/api/configurations/${configId}/accounts/${account.id}/disabled-tools`,
+    );
+    expect(again.status).toBe(200);
+    expect(parseJson(again.text)).toEqual({ toolNames: [] });
   });
 });
 

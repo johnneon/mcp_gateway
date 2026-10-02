@@ -10,7 +10,7 @@
 
 ## 3. Disabled-tools admin routes
 
-- [ ] 3.1 Mount `GET` and `PUT /api/configurations/:id/accounts/:accountId/disabled-tools` on the admin app. PUT body `{ toolNames: string[] }` replaces the whole set in stored order. The account must be in `accountIds`. Every name must be an MCP tool of that account's connector. Duplicates, empty strings, unknown names, and an unassigned account are 400 with no write. Unknown configuration is 404. Empty array enables every tool. Non-JSON PUT is 415 with no write. Responses contain no bearer and no account secret. HTTP tests cover every added and modified scenario in `accounts-api` and the denylist scenarios in `configurations-api`. Check: those HTTP tests pass.
+- [x] 3.1 Mount `GET` and `PUT /api/configurations/:id/accounts/:accountId/disabled-tools` on the admin app. PUT body `{ toolNames: string[] }` replaces the whole set in stored order. The account must be in `accountIds`. Every name must be an MCP tool of that account's connector. Duplicates, empty strings, unknown names, and an unassigned account are 400 with no write. Unknown configuration is 404. Empty array enables every tool. Non-JSON PUT is 415 with no write. Responses contain no bearer and no account secret. HTTP tests cover every added and modified scenario in `accounts-api` and the denylist scenarios in `configurations-api`. Check: those HTTP tests pass.
 
 ## 4. MCP list and call
 
