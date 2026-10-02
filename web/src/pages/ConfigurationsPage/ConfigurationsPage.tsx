@@ -15,10 +15,12 @@ import { listAccounts, type AccountPublic } from '@/features/accounts/api';
 import {
   createConfiguration,
   deleteConfiguration,
+  getDisabledTools,
   listConfigurations,
   rotateConfiguration,
   setConfigurationAccounts,
   setConfigurationEnabled,
+  setDisabledTools,
   type ConfigurationListItem,
 } from '@/features/configurations/api';
 import { listConnectors, type ConnectorPublicDescription } from '@/features/connectors/api';
@@ -37,6 +39,25 @@ function errorMessage(error: unknown): string {
   return 'Something went wrong';
 }
 
+function disabledToolsKey(configurationId: string, accountId: string): string {
+  return `${configurationId}/${accountId}`;
+}
+
+async function loadDisabledToolMap(
+  configurationRows: readonly ConfigurationListItem[],
+): Promise<Record<string, string[]>> {
+  const pairs = configurationRows.flatMap((row) =>
+    row.accountIds.map((accountId) => ({ configurationId: row.id, accountId })),
+  );
+  const entries = await Promise.all(
+    pairs.map(async (pair) => {
+      const body = await getDisabledTools(pair.configurationId, pair.accountId);
+      return [disabledToolsKey(pair.configurationId, pair.accountId), body.toolNames] as const;
+    }),
+  );
+  return Object.fromEntries(entries);
+}
+
 export function ConfigurationsPage() {
   const [items, setItems] = useState<ConfigurationListItem[]>([]);
   const [accounts, setAccounts] = useState<AccountPublic[]>([]);
@@ -48,6 +69,7 @@ export function ConfigurationsPage() {
   const [accountsBusyId, setAccountsBusyId] = useState<string | null>(null);
   const [revealToken, setRevealToken] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [disabledTools, setDisabledToolsByAccount] = useState<Record<string, string[]>>({});
 
   const loadLists = useCallback(async () => {
     setLoading(true);
@@ -58,14 +80,17 @@ export function ConfigurationsPage() {
         listAccounts(),
         listConnectors(),
       ]);
+      const toolMap = await loadDisabledToolMap(configurationRows);
       setItems(configurationRows);
       setAccounts(accountRows);
       setConnectors(connectorRows);
+      setDisabledToolsByAccount(toolMap);
     } catch (err) {
       setError(errorMessage(err));
       setItems([]);
       setAccounts([]);
       setConnectors([]);
+      setDisabledToolsByAccount({});
     } finally {
       setLoading(false);
     }
@@ -127,10 +152,49 @@ export function ConfigurationsPage() {
     try {
       const updated = await setConfigurationAccounts(item.id, nextIds);
       setItems((current) => current.map((row) => (row.id === updated.id ? updated : row)));
+      const toolMap = await loadDisabledToolMap([updated]);
+      setDisabledToolsByAccount((current) => {
+        const next: Record<string, string[]> = {};
+        const prefix = `${updated.id}/`;
+        for (const [key, names] of Object.entries(current)) {
+          if (!key.startsWith(prefix)) {
+            next[key] = names;
+          }
+        }
+        return { ...next, ...toolMap };
+      });
     } catch (err) {
       setError(errorMessage(err));
     } finally {
       setAccountsBusyId(null);
+    }
+  }
+
+  async function handleToggleTool(
+    configurationId: string,
+    accountId: string,
+    toolName: string,
+    enabled: boolean,
+  ) {
+    if (busy) {
+      return;
+    }
+    const key = disabledToolsKey(configurationId, accountId);
+    const currentNames = disabledTools[key] ?? [];
+    const toolNames = enabled
+      ? currentNames.filter((name) => name !== toolName)
+      : currentNames.includes(toolName)
+        ? currentNames
+        : [...currentNames, toolName];
+    setError(null);
+    try {
+      const saved = await setDisabledTools(configurationId, accountId, toolNames);
+      setDisabledToolsByAccount((current) => ({
+        ...current,
+        [key]: saved.toolNames,
+      }));
+    } catch (err) {
+      setError(errorMessage(err));
     }
   }
 
@@ -278,23 +342,64 @@ export function ConfigurationsPage() {
                               const accountLabel = account.enabled
                                 ? account.label
                                 : `${account.label} (disabled)`;
+                              const toolKey = disabledToolsKey(item.id, account.id);
+                              const disabledNames = disabledTools[toolKey] ?? [];
                               return (
-                                <li key={account.id} className="flex items-center gap-2">
-                                  <Checkbox
-                                    id={checkboxId}
-                                    checked={checked}
-                                    disabled={busy || accountsLocked}
-                                    onCheckedChange={(value) => {
-                                      void handleToggleAccount(item, account.id, value === true);
-                                    }}
-                                    aria-label={`Assign ${account.label} to ${item.name}`}
-                                  />
-                                  <Label
-                                    htmlFor={checkboxId}
-                                    className="font-normal text-muted-foreground"
-                                  >
-                                    {accountLabel}
-                                  </Label>
+                                <li key={account.id} className="space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <Checkbox
+                                      id={checkboxId}
+                                      checked={checked}
+                                      disabled={busy || accountsLocked}
+                                      onCheckedChange={(value) => {
+                                        void handleToggleAccount(item, account.id, value === true);
+                                      }}
+                                      aria-label={`Assign ${account.label} to ${item.name}`}
+                                    />
+                                    <Label
+                                      htmlFor={checkboxId}
+                                      className="font-normal text-muted-foreground"
+                                    >
+                                      {accountLabel}
+                                    </Label>
+                                  </div>
+                                  {checked ? (
+                                    <ul className="space-y-2 ps-6">
+                                      {connector.tools.map((tool) => {
+                                        const toolEnabled = !disabledNames.includes(tool.name);
+                                        const toolCheckboxId = `config-${item.id}-account-${account.id}-tool-${tool.name}`;
+                                        return (
+                                          <li key={tool.name} className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                              <Checkbox
+                                                id={toolCheckboxId}
+                                                checked={toolEnabled}
+                                                disabled={busy || accountsLocked}
+                                                onCheckedChange={(value) => {
+                                                  void handleToggleTool(
+                                                    item.id,
+                                                    account.id,
+                                                    tool.name,
+                                                    value === true,
+                                                  );
+                                                }}
+                                                aria-label={`Enable ${tool.name} for ${account.label}`}
+                                              />
+                                              <Label
+                                                htmlFor={toolCheckboxId}
+                                                className="font-normal"
+                                              >
+                                                {tool.name}
+                                              </Label>
+                                            </div>
+                                            <p className="ps-6 text-sm text-muted-foreground">
+                                              {tool.description}
+                                            </p>
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
+                                  ) : null}
                                 </li>
                               );
                             })}

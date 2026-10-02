@@ -1,6 +1,11 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import type { AccountsService } from '../../accounts/service.js';
+import type { ConnectorRegistry } from '../../connectors/registry.js';
+import {
+  readAccountDisabledTools,
+  replaceAccountDisabledTools,
+} from '../../configurations/disabled-tools.js';
 import {
   ConfigurationNotFoundError,
   ConfigurationValidationError,
@@ -17,6 +22,10 @@ const patchBodySchema = z.object({
 
 const setAccountsBodySchema = z.object({
   accountIds: z.array(z.string().min(1)),
+});
+
+const disabledToolsBodySchema = z.object({
+  toolNames: z.array(z.string()),
 });
 
 function sendNotFound(res: Response): void {
@@ -50,6 +59,7 @@ async function mapDomainErrors(
 export function createConfigurationsRouter(
   service: ConfigurationsService,
   accounts: Pick<AccountsService, 'getRecord'>,
+  registry: ConnectorRegistry,
 ): Router {
   const router = Router();
 
@@ -103,6 +113,61 @@ export function createConfigurationsRouter(
       res.status(200).json(updated);
     });
   });
+
+  router.get(
+    '/:id/accounts/:accountId/disabled-tools',
+    (req: Request, res: Response, next: NextFunction) => {
+      void mapDomainErrors(res, next, () => {
+        const id = req.params.id;
+        const accountId = req.params.accountId;
+        if (typeof id !== 'string' || id.length === 0) {
+          sendNotFound(res);
+          return Promise.resolve();
+        }
+        if (typeof accountId !== 'string' || accountId.length === 0) {
+          sendBadRequest(res);
+          return Promise.resolve();
+        }
+        const body = readAccountDisabledTools(
+          { configurations: service, accounts, registry },
+          id,
+          accountId,
+        );
+        res.status(200).json(body);
+        return Promise.resolve();
+      });
+    },
+  );
+
+  router.put(
+    '/:id/accounts/:accountId/disabled-tools',
+    (req: Request, res: Response, next: NextFunction) => {
+      void mapDomainErrors(res, next, async () => {
+        const id = req.params.id;
+        const accountId = req.params.accountId;
+        if (typeof id !== 'string' || id.length === 0) {
+          sendNotFound(res);
+          return;
+        }
+        if (typeof accountId !== 'string' || accountId.length === 0) {
+          sendBadRequest(res);
+          return;
+        }
+        const parsed = disabledToolsBodySchema.safeParse(req.body);
+        if (!parsed.success) {
+          sendBadRequest(res);
+          return;
+        }
+        const body = await replaceAccountDisabledTools(
+          { configurations: service, accounts, registry },
+          id,
+          accountId,
+          parsed.data.toolNames,
+        );
+        res.status(200).json(body);
+      });
+    },
+  );
 
   router.patch('/:id', (req: Request, res: Response, next: NextFunction) => {
     void mapDomainErrors(res, next, async () => {

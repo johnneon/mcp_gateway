@@ -48,7 +48,20 @@ function createFakeNative(): ConnectorModule {
       { field: 'mailhost', port: 993 },
     ],
     checkConnection: () => undefined,
-    tools: [],
+    tools: [
+      {
+        name: 'drop',
+        description: 'Drop a row',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            rowId: { type: 'string', description: 'schema-marker-do-not-leak' },
+          },
+          required: ['rowId'],
+        },
+        handler: () => ({ content: [{ type: 'text', text: 'handler-marker-do-not-leak' }] }),
+      },
+    ],
   };
 }
 
@@ -86,10 +99,15 @@ describe('connectors-api: List connectors public description', () => {
           { name: 'token', label: 'Token', type: 'secret', required: true },
           { name: 'mailhost', label: 'Mail host', type: 'host', required: true },
         ],
+        tools: [{ name: 'fake_drop', description: 'Drop a row' }],
       },
     ]);
 
     const serialized = JSON.stringify(res.body);
+    expect(serialized).not.toContain('inputSchema');
+    expect(serialized).not.toContain('schema-marker-do-not-leak');
+    expect(serialized).not.toContain('handler');
+    expect(serialized).not.toContain('rowId');
     expect(serialized).not.toContain('imap.example.test');
     expect(serialized).not.toMatch(/:993\b/);
     expect(serialized).not.toContain('993');

@@ -87,6 +87,7 @@ function asConfigWithToken(value: unknown): ConfigWithToken {
   );
   const row = value as ConfigWithToken;
   expect(row).not.toHaveProperty('tokenHash');
+  expect(row).not.toHaveProperty('disabledTools');
   expect(Array.isArray(row.accountIds)).toBe(true);
   return row;
 }
@@ -103,6 +104,7 @@ function asConfigPublic(value: unknown): ConfigPublic {
   const row = value as ConfigPublic;
   expect(row).not.toHaveProperty('token');
   expect(row).not.toHaveProperty('tokenHash');
+  expect(row).not.toHaveProperty('disabledTools');
   expect(Array.isArray(row.accountIds)).toBe(true);
   return row;
 }
@@ -503,5 +505,44 @@ describe('configurations-api: Token absent from plaintext on disk after create',
 
     const fileBytes = await readFile(path.join(dataDir, 'state.bin'));
     expect(fileBytes.includes(Buffer.from(created.token, 'utf8'))).toBe(false);
+  });
+});
+
+describe('configurations-api: Configuration disabledTools denylist', () => {
+  it('Missing disabledTools leaves the configuration readable', async () => {
+    const store = createMemoryStore({
+      configurations: [
+        {
+          id: 'c1',
+          name: 'Legacy',
+          tokenHash: 'abc',
+          enabled: true,
+          accountIds: ['a1'],
+        },
+      ],
+    });
+    const app = createAdminApp({ store });
+    const response = await request(app).get('/api/configurations');
+    expect(response.status).toBe(200);
+    const listed = asConfigList(parseJson(response.text));
+    expect(listed).toEqual([{ id: 'c1', name: 'Legacy', enabled: true, accountIds: ['a1'] }]);
+    expect(response.text).not.toContain('disabledTools');
+    expect(response.text).not.toContain('tokenHash');
+    expect(response.text).not.toContain('"token"');
+  });
+
+  it('Create does not write a denylist', async () => {
+    const store = createMemoryStore({});
+    const app = createAdminApp({ store });
+    const response = await request(app)
+      .post('/api/configurations')
+      .set('Content-Type', 'application/json')
+      .send({ name: 'Primary' });
+    expect(response.status).toBe(201);
+    expect(response.text).not.toContain('disabledTools');
+    const created = asConfigWithToken(parseJson(response.text));
+    expect(created).not.toHaveProperty('disabledTools');
+    const entry = (store.read().configurations as JsonObject[])[0];
+    expect(entry).not.toHaveProperty('disabledTools');
   });
 });

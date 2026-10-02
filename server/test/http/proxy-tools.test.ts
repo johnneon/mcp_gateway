@@ -148,7 +148,10 @@ function proxyConnector(countFile: string): ProxyConnectorModule {
   };
 }
 
-function storeForProxyAccount(accountIds: string[]): EncryptedStore {
+function storeForProxyAccount(
+  accountIds: string[],
+  disabledTools?: Record<string, string[]>,
+): EncryptedStore {
   return createMemoryStore({
     accounts: [
       {
@@ -166,6 +169,7 @@ function storeForProxyAccount(accountIds: string[]): EncryptedStore {
         tokenHash: hashToken(CONFIG_TOKEN),
         enabled: true,
         accountIds,
+        ...(disabledTools !== undefined ? { disabledTools } : {}),
       },
     ],
   });
@@ -246,6 +250,19 @@ describe('mcp-endpoint: Proxy tools/list from the in-code allowlist', () => {
     const names = listed.map((tool) => tool.name);
     expect(names).not.toContain(`${CONNECTOR_ID}_echo_args`);
     expect(names).not.toContain(`${CONNECTOR_ID}_leak_secret`);
+  });
+
+  it('Disabled proxy tool is absent when no account may use it', async () => {
+    const countFile = await makeLaunchCountFile();
+    const registry = buildConnectorRegistry([proxyConnector(countFile)]);
+    const store = storeForProxyAccount([ACCOUNT_ID], {
+      [ACCOUNT_ID]: [`${CONNECTOR_ID}_echo_args`],
+    });
+    const listed = await listTools(store, registry);
+    const names = listed.map((tool) => tool.name);
+    expect(names).not.toContain(`${CONNECTOR_ID}_echo_args`);
+    expect(names).toContain(`${CONNECTOR_ID}_leak_secret`);
+    expect(await readLaunchCount(countFile)).toBe(0);
   });
 });
 
@@ -386,6 +403,21 @@ describe('mcp-endpoint: Proxy tools/call strips account and calls the child by s
         account: ACCOUNT_ID,
       }),
     ).rejects.toThrow(/Unknown tool/);
+    expect(await readLaunchCount(countFile)).toBe(0);
+  });
+
+  it('Disabled proxy tool does not start the child', async () => {
+    const countFile = await makeLaunchCountFile();
+    const registry = buildConnectorRegistry([proxyConnector(countFile)]);
+    const store = storeForProxyAccount([ACCOUNT_ID], {
+      [ACCOUNT_ID]: [`${CONNECTOR_ID}_echo_args`],
+    });
+    await expect(
+      callTool(store, registry, openRuntime(), `${CONNECTOR_ID}_echo_args`, {
+        account: ACCOUNT_ID,
+        note: 'hello',
+      }),
+    ).rejects.toThrow(/Tool is disabled for this account/);
     expect(await readLaunchCount(countFile)).toBe(0);
   });
 });

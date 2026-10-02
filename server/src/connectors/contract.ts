@@ -151,9 +151,15 @@ export type PublicConnectorField = {
   required: boolean;
 };
 
+export type PublicConnectorTool = {
+  name: string;
+  description: string;
+};
+
 export type PublicConnector = {
   id: string;
   name: string;
   kind: ConnectorKind;
   fields: readonly PublicConnectorField[];
+  tools: readonly PublicConnectorTool[];
 };

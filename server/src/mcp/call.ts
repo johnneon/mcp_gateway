@@ -17,6 +17,7 @@ import type { ActiveConfiguration } from './auth.js';
 import {
   buildToolInputSchema,
   eligibleAccountsForConnector,
+  isToolDisabledForAccount,
   type EligibleAccount,
 } from './tools.js';
 import { ToolFailure } from '../connectors/tool-failure.js';
@@ -26,6 +27,7 @@ export const TOOL_EXECUTION_FAILED_MESSAGE = 'Tool execution failed';
 export const INVALID_TOOL_ARGUMENTS_MESSAGE = 'Invalid tool arguments';
 export const ACCOUNT_NOT_ALLOWED_MESSAGE = 'Account is not allowed for this tool';
 export const UNKNOWN_TOOL_MESSAGE = 'Unknown tool';
+export const TOOL_DISABLED_MESSAGE = 'Tool is disabled for this account';
 
 const EGRESS_MCP_MESSAGES: ReadonlySet<string> = new Set([
   DESTINATION_NOT_ALLOWED_MESSAGE,
@@ -109,10 +111,23 @@ export async function dispatchToolCall(options: {
     throw new McpError(ErrorCode.InvalidParams, UNKNOWN_TOOL_MESSAGE);
   }
 
-  const eligible = eligibleAccountsForConnector(configuration, store, tool.connectorId);
-  if (eligible.length === 0) {
+  const eligibleForConnector = eligibleAccountsForConnector(configuration, store, tool.connectorId);
+  if (eligibleForConnector.length === 0) {
     throw new McpError(ErrorCode.InvalidParams, ACCOUNT_NOT_ALLOWED_MESSAGE);
   }
+
+  const requestedAccountId = readAccountId(args);
+  if (
+    requestedAccountId !== undefined &&
+    findEligibleAccount(eligibleForConnector, requestedAccountId) !== undefined &&
+    isToolDisabledForAccount(configuration, requestedAccountId, toolName)
+  ) {
+    throw new McpError(ErrorCode.InvalidParams, TOOL_DISABLED_MESSAGE);
+  }
+
+  const eligible = eligibleForConnector.filter(
+    (account) => !isToolDisabledForAccount(configuration, account.id, toolName),
+  );
 
   const inputSchema = buildToolInputSchema(
     tool.inputSchema.properties,
@@ -130,7 +145,16 @@ export async function dispatchToolCall(options: {
     throw new McpError(ErrorCode.InvalidParams, INVALID_TOOL_ARGUMENTS_MESSAGE);
   }
 
-  const account = findEligibleAccount(eligible, readAccountId(args));
+  const requestedAfterValidation = readAccountId(args);
+  if (
+    requestedAfterValidation !== undefined &&
+    findEligibleAccount(eligibleForConnector, requestedAfterValidation) !== undefined &&
+    isToolDisabledForAccount(configuration, requestedAfterValidation, toolName)
+  ) {
+    throw new McpError(ErrorCode.InvalidParams, TOOL_DISABLED_MESSAGE);
+  }
+
+  const account = findEligibleAccount(eligible, requestedAfterValidation);
   if (account === undefined) {
     throw new McpError(ErrorCode.InvalidParams, ACCOUNT_NOT_ALLOWED_MESSAGE);
   }

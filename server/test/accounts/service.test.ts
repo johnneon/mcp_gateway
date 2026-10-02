@@ -364,6 +364,29 @@ describe('accounts-api: Delete account removes it from configurations', () => {
     expect(configurations.list()[0].accountIds).toEqual([]);
   });
 
+  it('Delete drops the account disabledTools entry', async () => {
+    const { store, accounts, configurations } = createServices();
+    const account = await accounts.create({
+      connector: 'fake',
+      label: 'Work',
+      values: validValues(),
+    });
+    const config = await configurations.create('Ops');
+    await configurations.setAccountIds(config.id, [account.id]);
+    const document = store.read();
+    const rows = document.configurations as JsonObject[];
+    rows[0] = {
+      ...rows[0],
+      disabledTools: { [account.id]: ['fake_drop'] },
+    };
+    await store.replace(document);
+    await accounts.remove(account.id);
+    const stored = (store.read().configurations as JsonObject[])[0];
+    const disabledTools = stored.disabledTools as Record<string, string[]>;
+    expect(disabledTools).not.toHaveProperty(account.id);
+    expect(stored.accountIds).toEqual([]);
+  });
+
   it('Unknown account id on remove throws not found', async () => {
     const { accounts } = createServices();
     await expect(accounts.remove('missing')).rejects.toBeInstanceOf(AccountNotFoundError);

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createConfigurationsService } from '../../src/configurations/service.js';
+import { resolveActiveConfiguration } from '../../src/mcp/auth.js';
 import {
   ConfigurationNotFoundError,
   ConfigurationValidationError,
@@ -168,5 +169,117 @@ describe('configurations-api: setAccountIds and cascade helper', () => {
     await service.removeAccountIdFromAll('a1');
     expect(service.list().find((row) => row.id === first.id)?.accountIds).toEqual(['a2']);
     expect(service.list().find((row) => row.id === second.id)?.accountIds).toEqual([]);
+  });
+});
+
+describe('configurations-api: Configuration disabledTools denylist', () => {
+  it('Missing disabledTools leaves the configuration readable', () => {
+    const store = createMemoryStore({
+      configurations: [
+        {
+          id: 'c1',
+          name: 'Legacy',
+          tokenHash: 'abc',
+          enabled: true,
+          accountIds: ['a1'],
+        },
+      ],
+    });
+    const service = createConfigurationsService(store);
+    const listed = service.list();
+    expect(listed).toEqual([{ id: 'c1', name: 'Legacy', enabled: true, accountIds: ['a1'] }]);
+    expect(listed[0]).not.toHaveProperty('disabledTools');
+    expect(listed[0]).not.toHaveProperty('token');
+    expect(listed[0]).not.toHaveProperty('tokenHash');
+    expect(store.read().configurations).toEqual([
+      {
+        id: 'c1',
+        name: 'Legacy',
+        tokenHash: 'abc',
+        enabled: true,
+        accountIds: ['a1'],
+      },
+    ]);
+  });
+
+  it('Create does not write a denylist', async () => {
+    const store = createMemoryStore({});
+    const service = createConfigurationsService(store);
+    const created = await service.create('Primary');
+    expect(created).not.toHaveProperty('disabledTools');
+    expect(created).not.toHaveProperty('tokenHash');
+    const entry = (store.read().configurations as JsonObject[])[0];
+    expect(entry).not.toHaveProperty('disabledTools');
+    expect(entry).not.toHaveProperty('token');
+    expect(typeof entry.tokenHash).toBe('string');
+  });
+
+  it('Assign accounts to a configuration: Unassign drops disabledTools and assign again starts enabled', async () => {
+    const store = createMemoryStore({
+      configurations: [
+        {
+          id: 'c1',
+          name: 'Ops',
+          tokenHash: 'abc',
+          enabled: true,
+          accountIds: ['a1', 'a2'],
+          disabledTools: {
+            a1: ['fake_drop'],
+            a2: ['fake_keep'],
+          },
+        },
+      ],
+    });
+    const service = createConfigurationsService(store);
+    const unassigned = await service.setAccountIds('c1', ['a2']);
+    expect(unassigned).not.toHaveProperty('disabledTools');
+    expect(unassigned).not.toHaveProperty('token');
+    expect(unassigned).not.toHaveProperty('tokenHash');
+    const afterUnassign = (store.read().configurations as JsonObject[])[0];
+    const unassignedTools = afterUnassign.disabledTools as Record<string, string[]>;
+    expect(unassignedTools).not.toHaveProperty('a1');
+    expect(unassignedTools.a2).toEqual(['fake_keep']);
+
+    await service.setAccountIds('c1', ['a2', 'a1']);
+    const afterAssign = (store.read().configurations as JsonObject[])[0];
+    const assignedTools = afterAssign.disabledTools as Record<string, string[]>;
+    expect(assignedTools).not.toHaveProperty('a1');
+    expect(assignedTools.a2).toEqual(['fake_keep']);
+  });
+
+  it('ActiveConfiguration reads a missing denylist as an empty map and a non-array value as empty', () => {
+    const token = 'bearer-token-value';
+    const missing = createMemoryStore({
+      configurations: [
+        {
+          id: 'c1',
+          name: 'Ops',
+          tokenHash: hashToken(token),
+          enabled: true,
+          accountIds: ['a1'],
+        },
+      ],
+    });
+    expect(resolveActiveConfiguration(missing, token)?.disabledTools).toEqual({});
+
+    const present = createMemoryStore({
+      configurations: [
+        {
+          id: 'c1',
+          name: 'Ops',
+          tokenHash: hashToken(token),
+          enabled: true,
+          accountIds: ['a1', 'a2'],
+          disabledTools: {
+            a1: ['fake_drop'],
+            a2: 'nope',
+          },
+        },
+      ],
+    });
+    expect(resolveActiveConfiguration(present, token)?.disabledTools).toEqual({
+      a1: ['fake_drop'],
+      a2: [],
+    });
   });
 });

@@ -1,10 +1,6 @@
-# connectors-api Specification
+# Spec Delta
 
-## Purpose
-
-Defines the admin-port HTTP API that lists the public description of connectors from the in-code registry without exposing allowed destinations, connection checks, secrets, or account values.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: List connectors public description
 
@@ -25,24 +21,3 @@ Defines the admin-port HTTP API that lists the public description of connectors 
 - **AND** the JSON array has one element with `id` `fake`, `name` `Fake`, `kind` `native`, and a `fields` array of `{ name, label, type, required }` objects matching that connector
 - **AND** that element's `tools` array is `[{ "name": "fake_drop", "description": "Drop a row" }]`
 - **AND** the serialized response body does not include an input schema, a handler, allowed-destination hosts or ports, or account secret values
-
-### Requirement: GET connectors needs no JSON Content-Type
-
-`GET /api/connectors` SHALL succeed without a `Content-Type` header. The existing admin `/api` rule that requires `application/json` for non-GET methods SHALL remain unchanged by this change.
-
-#### Scenario: GET without Content-Type returns 200
-
-- **GIVEN** the admin app with an empty connector registry
-- **WHEN** the client performs `GET /api/connectors` without a `Content-Type` header
-- **THEN** the response status is 200
-- **AND** the body parsed as JSON is an empty array
-
-### Requirement: No CORS headers on connectors API responses
-
-No response for `GET /api/connectors` on the admin port SHALL include a CORS header (`Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`, or `Access-Control-Allow-Credentials`).
-
-#### Scenario: Successful connectors list has no CORS headers
-
-- **GIVEN** the admin app with an empty connector registry
-- **WHEN** the client performs `GET /api/connectors`
-- **THEN** the response has none of the headers `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`, or `Access-Control-Allow-Credentials`

@@ -14,10 +14,13 @@ import {
   productionConnectorRegistry,
   type ConnectorRegistry,
 } from '../../src/connectors/registry.js';
+import type { EgressTransport } from '../../src/connectors/native/egress.js';
+import { gmailConnector } from '../../src/connectors/gmail/index.js';
 import { createMcpApp } from '../../src/http/createMcpApp.js';
 import type { JsonObject } from '../../src/store/codec.js';
 import type { EncryptedStore } from '../../src/store/store.js';
 import { hashToken } from '../../src/token/token.js';
+import { createGmailFakeEgressTransport } from '../connectors/gmail/fake-egress.js';
 
 const openServers: http.Server[] = [];
 
@@ -49,8 +52,13 @@ function mcpAppFor(
 async function listenMcpApp(
   store: EncryptedStore,
   connectorRegistry: ConnectorRegistry = productionConnectorRegistry,
+  egressTransport?: EgressTransport,
 ): Promise<{ baseUrl: string; server: http.Server }> {
-  const app = mcpAppFor(store, connectorRegistry);
+  const app = createMcpApp({
+    store,
+    connectorRegistry,
+    ...(egressTransport !== undefined ? { egressTransport } : {}),
+  });
   const server = http.createServer(app);
   openServers.push(server);
   await new Promise<void>((resolve, reject) => {
@@ -128,6 +136,36 @@ function createFakeEchoConnector(handler?: NativeToolHandler): ConnectorModule {
           })),
       },
     ],
+  };
+}
+
+function createKeepDropConnector(onCall?: (name: 'keep' | 'drop') => void): ConnectorModule {
+  const tool = (name: 'keep' | 'drop', description: string) => ({
+    name,
+    description,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        message: { type: 'string' },
+      },
+      required: ['message'],
+    },
+    handler: () => {
+      onCall?.(name);
+      return { content: [{ type: 'text' as const, text: 'ok' }] };
+    },
+  });
+  return {
+    id: 'fake',
+    name: 'Fake',
+    kind: 'native',
+    fields: [
+      { name: 'user', label: 'User', type: 'text', required: true },
+      { name: 'token', label: 'Token', type: 'secret', required: true },
+    ],
+    allowedDestinations: [{ host: 'fake.example.test', port: 443 }],
+    checkConnection: () => undefined,
+    tools: [tool('keep', 'Keep a row'), tool('drop', 'Drop a row')],
   };
 }
 
@@ -472,8 +510,9 @@ async function withMcpClient<T>(
   registry: ConnectorRegistry,
   token: string,
   run: (client: Client) => Promise<T>,
+  egressTransport?: EgressTransport,
 ): Promise<T> {
-  const { baseUrl } = await listenMcpApp(store, registry);
+  const { baseUrl } = await listenMcpApp(store, registry, egressTransport);
   const transport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`), {
     requestInit: {
       headers: {
@@ -970,5 +1009,266 @@ describe('mcp-endpoint: Scrub secret account values from tool results and errors
         expect(message).not.toContain(FIXTURE_SECRET);
       }
     });
+  });
+});
+
+function accountField(tool: { inputSchema: unknown } | undefined): {
+  enum?: string[];
+  description?: string;
+} {
+  const schema = tool?.inputSchema as {
+    properties?: { account?: { enum?: string[]; description?: string } };
+  };
+  return schema.properties?.account ?? {};
+}
+
+function fakeAccount(id: string, label: string, enabled = true): JsonObject {
+  return {
+    id,
+    connector: 'fake',
+    label,
+    enabled,
+    values: { user: 'alice', token: FIXTURE_SECRET },
+  };
+}
+
+describe('mcp-endpoint: tools/list from eligible accounts only', () => {
+  it('Missing denylist lists every tool for the assigned account', async () => {
+    const registry = buildConnectorRegistry([createKeepDropConnector()]);
+    const store = createMemoryStore({
+      accounts: [fakeAccount('acc-1', 'Box')],
+      configurations: [
+        {
+          id: 'cfg-a',
+          name: 'Config A',
+          tokenHash: hashToken(CONFIG_A_TOKEN),
+          enabled: true,
+          accountIds: ['acc-1'],
+        },
+      ],
+    });
+    const listed = await listToolsWithBearer(store, registry, CONFIG_A_TOKEN);
+    const names = listed.tools.map((tool) => tool.name);
+    expect(names).toContain('fake_keep');
+    expect(names).toContain('fake_drop');
+    expect(accountField(listed.tools.find((tool) => tool.name === 'fake_keep')).enum).toEqual([
+      'acc-1',
+    ]);
+    expect(accountField(listed.tools.find((tool) => tool.name === 'fake_drop')).enum).toEqual([
+      'acc-1',
+    ]);
+  });
+
+  it('Tool omitted when every assigned account has it disabled', async () => {
+    const registry = buildConnectorRegistry([createKeepDropConnector()]);
+    const store = createMemoryStore({
+      accounts: [fakeAccount('acc-1', 'Box')],
+      configurations: [
+        {
+          id: 'cfg-a',
+          name: 'Config A',
+          tokenHash: hashToken(CONFIG_A_TOKEN),
+          enabled: true,
+          accountIds: ['acc-1'],
+          disabledTools: { 'acc-1': ['fake_drop'] },
+        },
+      ],
+    });
+    const listed = await listToolsWithBearer(store, registry, CONFIG_A_TOKEN);
+    const names = listed.tools.map((tool) => tool.name);
+    expect(names).toContain('fake_keep');
+    expect(names).not.toContain('fake_drop');
+  });
+
+  it('Same account on another configuration still lists the tool', async () => {
+    const registry = buildConnectorRegistry([createKeepDropConnector()]);
+    const store = createMemoryStore({
+      accounts: [fakeAccount('acc-1', 'Box')],
+      configurations: [
+        {
+          id: 'cfg-a',
+          name: 'Config A',
+          tokenHash: hashToken(CONFIG_A_TOKEN),
+          enabled: true,
+          accountIds: ['acc-1'],
+          disabledTools: { 'acc-1': ['fake_drop'] },
+        },
+        {
+          id: 'cfg-b',
+          name: 'Config B',
+          tokenHash: hashToken(CONFIG_B_TOKEN),
+          enabled: true,
+          accountIds: ['acc-1'],
+        },
+      ],
+    });
+    const listed = await listToolsWithBearer(store, registry, CONFIG_B_TOKEN);
+    const drop = listed.tools.find((tool) => tool.name === 'fake_drop');
+    expect(drop).toBeDefined();
+    expect(accountField(drop).enum).toEqual(['acc-1']);
+  });
+});
+
+describe('mcp-endpoint: Injected account argument in tool schemas', () => {
+  it('Disabled account is omitted from that tool enum only', async () => {
+    const registry = buildConnectorRegistry([createKeepDropConnector()]);
+    const store = createMemoryStore({
+      accounts: [fakeAccount('a1', 'Alpha'), fakeAccount('a2', 'Beta')],
+      configurations: [
+        {
+          id: 'cfg-a',
+          name: 'Config A',
+          tokenHash: hashToken(CONFIG_A_TOKEN),
+          enabled: true,
+          accountIds: ['a1', 'a2'],
+          disabledTools: { a1: ['fake_drop'] },
+        },
+      ],
+    });
+    const listed = await listToolsWithBearer(store, registry, CONFIG_A_TOKEN);
+    const drop = accountField(listed.tools.find((tool) => tool.name === 'fake_drop'));
+    const keep = accountField(listed.tools.find((tool) => tool.name === 'fake_keep'));
+    expect(drop.enum).toEqual(['a2']);
+    expect(keep.enum).toEqual(['a1', 'a2']);
+    expect(drop.description ?? '').not.toContain('a1');
+  });
+});
+
+describe('mcp-endpoint: tools/call validates, authorizes, then invokes handler', () => {
+  it('Disabled tool returns the fixed error and does not call the handler', async () => {
+    const counters = { keep: 0, drop: 0 };
+    const registry = buildConnectorRegistry([
+      createKeepDropConnector((name) => {
+        counters[name] += 1;
+      }),
+    ]);
+    const store = createMemoryStore({
+      accounts: [fakeAccount('acc-1', 'Box')],
+      configurations: [
+        {
+          id: 'cfg-a',
+          name: 'Config A',
+          tokenHash: hashToken(CONFIG_A_TOKEN),
+          enabled: true,
+          accountIds: ['acc-1'],
+          disabledTools: { 'acc-1': ['fake_drop'] },
+        },
+      ],
+    });
+
+    await withMcpClient(store, registry, CONFIG_A_TOKEN, async (client) => {
+      try {
+        await client.callTool({
+          name: 'fake_drop',
+          arguments: { message: 'hello', account: 'acc-1' },
+        });
+        expect.fail('expected callTool to throw');
+      } catch (error) {
+        const message = errorMessage(error);
+        expect(message).toContain('Tool is disabled for this account');
+        expect(message).not.toContain('Invalid tool arguments');
+      }
+      const kept = await client.callTool({
+        name: 'fake_keep',
+        arguments: { message: 'hello', account: 'acc-1' },
+      });
+      expect(kept).toMatchObject({ content: [{ type: 'text', text: 'ok' }] });
+    });
+
+    expect(counters.drop).toBe(0);
+    expect(counters.keep).toBe(1);
+  });
+
+  it('gmail_delete_message off on one configuration leaves the other path working', async () => {
+    const address = 'user@gmail.com';
+    const password = 'gmail-denylist-fixture-password-UNIQUE';
+    const accountId = 'gmail-acc-1';
+    const egress = createGmailFakeEgressTransport({
+      imap: {
+        user: address,
+        password,
+        messages: [
+          {
+            uid: 7,
+            from: 'alice@example.test',
+            to: address,
+            subject: 'Delete me',
+            date: 'Mon, 1 Jan 2024 00:00:00 +0000',
+            seen: false,
+            textBody: 'Body',
+          },
+        ],
+        mailboxes: [{ name: 'Deleted Items', attributes: ['\\Trash'], messages: [] }],
+      },
+      smtp: { user: address, password },
+    });
+    const registry = buildConnectorRegistry([gmailConnector]);
+    const store = createMemoryStore({
+      accounts: [
+        {
+          id: accountId,
+          connector: 'gmail',
+          label: 'Personal',
+          enabled: true,
+          values: { address, password },
+        },
+      ],
+      configurations: [
+        {
+          id: 'cfg-a',
+          name: 'Config A',
+          tokenHash: hashToken(CONFIG_A_TOKEN),
+          enabled: true,
+          accountIds: [accountId],
+          disabledTools: { [accountId]: ['gmail_delete_message'] },
+        },
+        {
+          id: 'cfg-b',
+          name: 'Config B',
+          tokenHash: hashToken(CONFIG_B_TOKEN),
+          enabled: true,
+          accountIds: [accountId],
+        },
+      ],
+    });
+
+    await withMcpClient(
+      store,
+      registry,
+      CONFIG_A_TOKEN,
+      async (client) => {
+        expect(egress.tlsSessionCallCount).toBe(0);
+        try {
+          await client.callTool({
+            name: 'gmail_delete_message',
+            arguments: { account: accountId, uid: 7 },
+          });
+          expect.fail('expected callTool to throw');
+        } catch (error) {
+          expect(errorMessage(error)).toContain('Tool is disabled for this account');
+        }
+        expect(egress.tlsSessionCallCount).toBe(0);
+        const listed = await client.callTool({
+          name: 'gmail_list_mailboxes',
+          arguments: { account: accountId },
+        });
+        expect(JSON.stringify(listed)).toContain('INBOX');
+      },
+      egress,
+    );
+
+    await withMcpClient(
+      store,
+      registry,
+      CONFIG_B_TOKEN,
+      async (client) => {
+        const deleted = await client.callTool({
+          name: 'gmail_delete_message',
+          arguments: { account: accountId, uid: 7 },
+        });
+        expect(JSON.stringify(deleted)).toContain('Deleted Items');
+      },
+      egress,
+    );
   });
 });

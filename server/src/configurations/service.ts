@@ -4,12 +4,15 @@ import type { JsonObject } from '../store/codec.js';
 import { generateToken, hashToken } from '../token/token.js';
 import { ConfigurationNotFoundError, ConfigurationValidationError } from './errors.js';
 
+export type DisabledToolsMap = Record<string, string[]>;
+
 export type ConfigurationRecord = {
   id: string;
   name: string;
   tokenHash: string;
   enabled: boolean;
   accountIds: string[];
+  disabledTools?: DisabledToolsMap;
 };
 
 export type ConfigurationPublic = {
@@ -29,6 +32,12 @@ export type ConfigurationsService = {
   rotate(id: string): Promise<ConfigurationWithToken>;
   setEnabled(id: string, enabled: boolean): Promise<ConfigurationPublic>;
   setAccountIds(id: string, accountIds: string[]): Promise<ConfigurationPublic>;
+  readDisabledToolNames(id: string, accountId: string): string[];
+  replaceDisabledToolNames(
+    id: string,
+    accountId: string,
+    toolNames: readonly string[],
+  ): Promise<string[]>;
   removeAccountIdFromAll(accountId: string): Promise<void>;
   remove(id: string): Promise<void>;
 };
@@ -53,6 +62,114 @@ function readAccountIds(row: Record<string, unknown>): string[] {
   return row.accountIds.filter((id): id is string => typeof id === 'string');
 }
 
+function readToolNames(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((name): name is string => typeof name === 'string');
+}
+
+/**
+ * Absent property stays absent so a later write does not invent a denylist.
+ * A present non-object becomes an empty map. A non-array value becomes [].
+ */
+function readDisabledTools(row: Record<string, unknown>): DisabledToolsMap | undefined {
+  if (!Object.hasOwn(row, 'disabledTools')) {
+    return undefined;
+  }
+  const raw = row.disabledTools;
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return {};
+  }
+  const map: DisabledToolsMap = {};
+  for (const [accountId, value] of Object.entries(raw)) {
+    map[accountId] = readToolNames(value);
+  }
+  return map;
+}
+
+function configurationRecord(row: Record<string, unknown>): ConfigurationRecord {
+  const record: ConfigurationRecord = {
+    id: row.id as string,
+    name: row.name as string,
+    tokenHash: row.tokenHash as string,
+    enabled: row.enabled as boolean,
+    accountIds: readAccountIds(row),
+  };
+  const disabledTools = readDisabledTools(row);
+  if (disabledTools !== undefined) {
+    record.disabledTools = disabledTools;
+  }
+  return record;
+}
+
+function withAccounts(
+  row: ConfigurationRecord,
+  accountIds: string[],
+  disabledTools: DisabledToolsMap | undefined,
+): ConfigurationRecord {
+  const next: ConfigurationRecord = {
+    id: row.id,
+    name: row.name,
+    tokenHash: row.tokenHash,
+    enabled: row.enabled,
+    accountIds,
+  };
+  if (disabledTools !== undefined) {
+    next.disabledTools = disabledTools;
+  }
+  return next;
+}
+
+function pruneDisabledTools(
+  disabledTools: DisabledToolsMap | undefined,
+  accountIds: readonly string[],
+): DisabledToolsMap | undefined {
+  if (disabledTools === undefined) {
+    return undefined;
+  }
+  const allowed = new Set(accountIds);
+  const next: DisabledToolsMap = {};
+  for (const [accountId, names] of Object.entries(disabledTools)) {
+    if (allowed.has(accountId)) {
+      next[accountId] = names;
+    }
+  }
+  return next;
+}
+
+function requireAssignedConfiguration(
+  rows: ConfigurationRecord[],
+  id: string,
+  accountId: string,
+): { index: number; row: ConfigurationRecord } {
+  const index = rows.findIndex((row) => row.id === id);
+  const row = index >= 0 ? rows[index] : undefined;
+  if (!row) {
+    throw new ConfigurationNotFoundError();
+  }
+  if (!row.accountIds.includes(accountId)) {
+    throw new ConfigurationValidationError('account is not assigned to this configuration');
+  }
+  return { index, row };
+}
+
+function dropDisabledToolsKey(
+  disabledTools: DisabledToolsMap | undefined,
+  accountId: string,
+): DisabledToolsMap | undefined {
+  if (disabledTools === undefined || !Object.hasOwn(disabledTools, accountId)) {
+    return disabledTools;
+  }
+  const next: DisabledToolsMap = {};
+  for (const [key, names] of Object.entries(disabledTools)) {
+    if (key !== accountId) {
+      next[key] = names;
+    }
+  }
+  return next;
+}
+
 function readConfigurations(document: JsonObject): ConfigurationRecord[] {
   const raw = document.configurations;
   if (!Array.isArray(raw)) {
@@ -63,13 +180,7 @@ function readConfigurations(document: JsonObject): ConfigurationRecord[] {
     if (!isConfigurationRow(value)) {
       continue;
     }
-    rows.push({
-      id: value.id as string,
-      name: value.name as string,
-      tokenHash: value.tokenHash as string,
-      enabled: value.enabled as boolean,
-      accountIds: readAccountIds(value),
-    });
+    rows.push(configurationRecord(value));
   }
   return rows;
 }
@@ -172,24 +283,50 @@ export function createConfigurationsService(store: EncryptedStore): Configuratio
       if (!current) {
         throw new ConfigurationNotFoundError();
       }
-      const updated: ConfigurationRecord = {
-        ...current,
-        accountIds: [...accountIds],
-      };
+      const updated = withAccounts(
+        current,
+        [...accountIds],
+        pruneDisabledTools(current.disabledTools, accountIds),
+      );
       rows[index] = updated;
       await writeConfigurations(store, rows);
       return toPublic(updated);
     },
 
+    readDisabledToolNames(id: string, accountId: string): string[] {
+      const rows = readConfigurations(store.read());
+      const { row } = requireAssignedConfiguration(rows, id, accountId);
+      const names = row.disabledTools?.[accountId];
+      return names === undefined ? [] : [...names];
+    },
+
+    async replaceDisabledToolNames(
+      id: string,
+      accountId: string,
+      toolNames: readonly string[],
+    ): Promise<string[]> {
+      const rows = readConfigurations(store.read());
+      const { index, row } = requireAssignedConfiguration(rows, id, accountId);
+      const disabledTools: DisabledToolsMap = { ...(row.disabledTools ?? {}) };
+      const stored = [...toolNames];
+      disabledTools[accountId] = stored;
+      rows[index] = withAccounts(row, [...row.accountIds], disabledTools);
+      await writeConfigurations(store, rows);
+      return stored;
+    },
+
     async removeAccountIdFromAll(accountId: string): Promise<void> {
       const rows = readConfigurations(store.read());
-      const next = rows.map((row) => ({
-        ...row,
-        accountIds: row.accountIds.filter((id) => id !== accountId),
-      }));
-      const changed = next.some(
-        (row, index) => row.accountIds.length !== rows[index]?.accountIds.length,
-      );
+      const next: ConfigurationRecord[] = [];
+      let changed = false;
+      for (const row of rows) {
+        const accountIds = row.accountIds.filter((id) => id !== accountId);
+        const disabledTools = dropDisabledToolsKey(row.disabledTools, accountId);
+        if (accountIds.length !== row.accountIds.length || disabledTools !== row.disabledTools) {
+          changed = true;
+        }
+        next.push(withAccounts(row, accountIds, disabledTools));
+      }
       if (!changed) {
         return;
       }
