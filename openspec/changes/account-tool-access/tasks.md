@@ -22,4 +22,4 @@
 
 ## 6. Full package check
 
-- [ ] 6.1 From the repository root, `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, and `npm run build` exit 0. Do not edit `mcp-gateway-spec.md` or `openspec/specs/`. Check: every command exits 0.
+- [x] 6.1 From the repository root, `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, and `npm run build` exit 0. Do not edit `mcp-gateway-spec.md` or `openspec/specs/`. Check: every command exits 0.
