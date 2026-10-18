@@ -19,8 +19,17 @@ import type { EncryptedStore } from '../../../src/store/store.js';
 import { createMailruFakeEgressTransport } from './fake-egress.js';
 
 const FIXTURE_PASSWORD = 'mailru-fixture-app-password-UNIQUE';
+const NEXT_FIXTURE_PASSWORD = 'mailru-fixture-app-password-NEXT';
 const FIXTURE_ADDRESS = 'user@mail.ru';
 const here = path.dirname(fileURLToPath(import.meta.url));
+
+function openedSession(
+  sessions: readonly { host: string; port: number }[],
+  host: string,
+  port: number,
+): boolean {
+  return sessions.some((session) => session.host === host && session.port === port);
+}
 
 function createMemoryStore(initial: JsonObject = {}): EncryptedStore {
   let document: JsonObject = structuredClone(initial);
@@ -85,12 +94,12 @@ describe('connector-contract: Production registry includes registered product co
   });
 });
 
-describe('connector-mail-ru: Mail.ru connection check uses IMAP LOGIN and SMTP AUTH over egress', () => {
-  it('Successful check when fake IMAP and SMTP both accept login', async () => {
+describe('connector-mail-ru: Mail.ru connection check uses IMAP LOGIN over egress', () => {
+  it('Successful check when fake IMAP accepts LOGIN', async () => {
     const store = createMemoryStore({});
     const transport = createMailruFakeEgressTransport({
       imap: { user: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD, acceptLogin: true },
-      smtp: { user: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD, acceptAuth: true },
+      smtp: { user: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD, acceptAuth: false },
     });
     const app = createAdminApp({
       store,
@@ -112,39 +121,14 @@ describe('connector-mail-ru: Mail.ru connection check uses IMAP LOGIN and SMTP A
     const accounts = store.read().accounts as JsonObject[];
     expect(accounts).toHaveLength(1);
     expect((accounts[0]?.values as Record<string, string>).password).toBe(FIXTURE_PASSWORD);
+    expect(openedSession(transport.tlsSessions, MAILRU_IMAP_HOST, MAILRU_IMAP_PORT)).toBe(true);
+    expect(openedSession(transport.tlsSessions, MAILRU_SMTP_HOST, MAILRU_SMTP_PORT)).toBe(false);
   });
 
   it('Failed check when fake IMAP rejects login', async () => {
     const store = createMemoryStore({});
     const transport = createMailruFakeEgressTransport({
       imap: { user: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD, acceptLogin: false },
-      smtp: { user: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD, acceptAuth: true },
-    });
-    const app = createAdminApp({
-      store,
-      connectorRegistry: productionConnectorRegistry,
-      egressTransport: transport,
-    });
-
-    const response = await request(app)
-      .post('/api/accounts')
-      .set('Content-Type', 'application/json')
-      .send({
-        connector: 'mailru',
-        label: 'Inbox',
-        values: { address: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD },
-      });
-
-    expect(response.status).toBe(400);
-    expect(response.text).toBe('Connection check failed');
-    expect(response.text).not.toContain(FIXTURE_PASSWORD);
-    expect(store.read().accounts ?? []).toEqual([]);
-  });
-
-  it('Failed check when fake SMTP rejects AUTH', async () => {
-    const store = createMemoryStore({});
-    const transport = createMailruFakeEgressTransport({
-      imap: { user: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD, acceptLogin: true },
       smtp: { user: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD, acceptAuth: false },
     });
     const app = createAdminApp({
@@ -166,6 +150,79 @@ describe('connector-mail-ru: Mail.ru connection check uses IMAP LOGIN and SMTP A
     expect(response.text).toBe('Connection check failed');
     expect(response.text).not.toContain(FIXTURE_PASSWORD);
     expect(store.read().accounts ?? []).toEqual([]);
+    expect(openedSession(transport.tlsSessions, MAILRU_SMTP_HOST, MAILRU_SMTP_PORT)).toBe(false);
+  });
+
+  it('Explicit check succeeds after IMAP LOGIN only', async () => {
+    const store = createMemoryStore({});
+    const transport = createMailruFakeEgressTransport({
+      imap: { user: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD, acceptLogin: true },
+      smtp: { user: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD, acceptAuth: false },
+    });
+    const app = createAdminApp({
+      store,
+      connectorRegistry: productionConnectorRegistry,
+      egressTransport: transport,
+    });
+
+    const created = await request(app)
+      .post('/api/accounts')
+      .set('Content-Type', 'application/json')
+      .send({
+        connector: 'mailru',
+        label: 'Inbox',
+        values: { address: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD },
+      });
+    expect(created.status).toBe(201);
+    const createdBody = JSON.parse(created.text) as { id: string };
+    const before = JSON.stringify(store.read());
+
+    const response = await request(app)
+      .post(`/api/accounts/${createdBody.id}/check`)
+      .set('Content-Type', 'application/json');
+
+    expect(response.status).toBe(200);
+    expect(response.text).not.toContain(FIXTURE_PASSWORD);
+    expect(JSON.stringify(store.read())).toBe(before);
+    expect(openedSession(transport.tlsSessions, MAILRU_SMTP_HOST, MAILRU_SMTP_PORT)).toBe(false);
+  });
+
+  it('Credential patch succeeds after IMAP LOGIN only', async () => {
+    const store = createMemoryStore({});
+    const imap = { user: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD, acceptLogin: true };
+    const transport = createMailruFakeEgressTransport({
+      imap,
+      smtp: { user: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD, acceptAuth: false },
+    });
+    const app = createAdminApp({
+      store,
+      connectorRegistry: productionConnectorRegistry,
+      egressTransport: transport,
+    });
+
+    const created = await request(app)
+      .post('/api/accounts')
+      .set('Content-Type', 'application/json')
+      .send({
+        connector: 'mailru',
+        label: 'Inbox',
+        values: { address: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD },
+      });
+    expect(created.status).toBe(201);
+    const createdBody = JSON.parse(created.text) as { id: string };
+    imap.password = NEXT_FIXTURE_PASSWORD;
+
+    const response = await request(app)
+      .patch(`/api/accounts/${createdBody.id}`)
+      .set('Content-Type', 'application/json')
+      .send({ values: { password: NEXT_FIXTURE_PASSWORD } });
+
+    expect(response.status).toBe(200);
+    expect(response.text).not.toContain(NEXT_FIXTURE_PASSWORD);
+    expect(response.text).not.toContain(FIXTURE_PASSWORD);
+    const accounts = store.read().accounts as JsonObject[];
+    expect((accounts[0]?.values as Record<string, string>).password).toBe(NEXT_FIXTURE_PASSWORD);
+    expect(openedSession(transport.tlsSessions, MAILRU_SMTP_HOST, MAILRU_SMTP_PORT)).toBe(false);
   });
 });
 
@@ -173,7 +230,7 @@ describe('connector-mail-ru: Mail.ru uses the shared mail protocol module', () =
   it('Mail.ru login uses the shared module over the egress duplex', async () => {
     const transport = createMailruFakeEgressTransport({
       imap: { user: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD, acceptLogin: true },
-      smtp: { user: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD, acceptAuth: true },
+      smtp: { user: FIXTURE_ADDRESS, password: FIXTURE_PASSWORD, acceptAuth: false },
     });
 
     await mailruConnector.checkConnection(
@@ -181,7 +238,8 @@ describe('connector-mail-ru: Mail.ru uses the shared mail protocol module', () =
       asEgressClient(transport),
     );
 
-    expect(transport.tlsSessionCallCount).toBe(2);
+    expect(transport.tlsSessions).toEqual([{ host: MAILRU_IMAP_HOST, port: MAILRU_IMAP_PORT }]);
+    expect(openedSession(transport.tlsSessions, MAILRU_SMTP_HOST, MAILRU_SMTP_PORT)).toBe(false);
 
     const source = await readFile(
       path.join(here, '../../../src/connectors/mailru/index.ts'),
@@ -189,7 +247,6 @@ describe('connector-mail-ru: Mail.ru uses the shared mail protocol module', () =
     );
     expect(source).toMatch(/from '\.\.\/mail\/index\.js'/);
     expect(source).toMatch(/createImapClient/);
-    expect(source).toMatch(/createSmtpClient/);
     expect(source).not.toMatch(/node:net/);
     expect(source).not.toMatch(/node:tls/);
     expect(source).not.toMatch(/\bcreateConnection\b/);
