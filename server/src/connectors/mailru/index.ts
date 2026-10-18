@@ -10,7 +10,6 @@ import {
   assertNotFreeFormSearch,
   ATTACHMENT_INDEX_REQUIRED_MESSAGE,
   createImapClient,
-  createSmtpClient,
   DESTINATION_MAILBOX_DOES_NOT_EXIST_MESSAGE,
   FLAG_IS_REQUIRED_MESSAGE,
   INBOX_CANNOT_BE_DELETED_MESSAGE,
@@ -45,18 +44,6 @@ async function mailruCheckConnection(
   } finally {
     imap.close();
     imapDuplex.destroy();
-  }
-
-  const smtpDuplex = await egressClient.tlsSession({
-    host: MAILRU_SMTP_HOST,
-    port: MAILRU_SMTP_PORT,
-  });
-  const smtp = createSmtpClient(smtpDuplex);
-  try {
-    await smtp.auth(address, password);
-  } finally {
-    smtp.close();
-    smtpDuplex.destroy();
   }
 }
 

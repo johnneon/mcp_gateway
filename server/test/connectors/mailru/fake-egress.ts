@@ -18,21 +18,31 @@ type FakeImapDuplex = ReturnType<typeof createFakeImapDuplex>;
 /**
  * Fake egress transport that hands out fake IMAP/SMTP duplexes for Mail.ru hosts.
  */
+export type RecordedTlsSession = {
+  host: string;
+  port: number;
+};
+
 export function createMailruFakeEgressTransport(options: {
   imap: FakeImapOptions;
   smtp: FakeSmtpOptions;
 }): EgressTransport & {
   tlsSessionCallCount: number;
+  tlsSessions: readonly RecordedTlsSession[];
   searchCommandCount: number;
   messageFlags(mailboxName: string, uid: number): { seen: boolean; flagged: boolean } | undefined;
 } {
   const state = { tlsSessionCallCount: 0 };
+  const tlsSessions: RecordedTlsSession[] = [];
   const imapSessions: FakeImapDuplex[] = [];
   const sharedMailboxes = createSharedFakeImapMailboxes(options.imap);
 
   return {
     get tlsSessionCallCount() {
       return state.tlsSessionCallCount;
+    },
+    get tlsSessions() {
+      return tlsSessions;
     },
     get searchCommandCount() {
       return imapSessions.reduce((sum, duplex) => sum + duplex.searchCommandCount, 0);
@@ -53,6 +63,7 @@ export function createMailruFakeEgressTransport(options: {
     },
     tlsSession(params): Promise<Duplex> {
       state.tlsSessionCallCount += 1;
+      tlsSessions.push({ host: params.host, port: params.port });
       if (params.host === MAILRU_IMAP_HOST && params.port === MAILRU_IMAP_PORT) {
         const duplex = createFakeImapDuplex({ ...options.imap, sharedMailboxes });
         imapSessions.push(duplex);
