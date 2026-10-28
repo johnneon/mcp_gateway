@@ -46,6 +46,11 @@ export type FakeImapOptions = {
   /** When set, a body FETCH replies NO with this text and leaves the message unchanged. */
   attachmentNo?: string;
   /**
+   * When set, a UID FETCH whose recorded command text is longer than this many
+   * UTF-8 bytes ends the duplex without OK. Unset answers every UID FETCH.
+   */
+  maxUidFetchCommandBytes?: number;
+  /**
    * Mailbox list reused by every duplex created with this array.
    * Omit it to give each duplex its own copy.
    */
@@ -288,6 +293,13 @@ export function createFakeImapDuplex(options: FakeImapOptions): Duplex & {
 
     if (upper.startsWith('UID FETCH ')) {
       state.fetchCommandCount += 1;
+      if (
+        options.maxUidFetchCommandBytes !== undefined &&
+        Buffer.byteLength(rest, 'utf8') > options.maxUidFetchCommandBytes
+      ) {
+        duplex.push(null);
+        return;
+      }
       const fetchMatch = /^UID FETCH\s+([\d,]+)\s+\((.*)\)$/i.exec(rest);
       const items = (fetchMatch?.[2] ?? '').toUpperCase();
       if (
