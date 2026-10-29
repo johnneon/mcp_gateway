@@ -12,6 +12,16 @@ import type { EncryptedStore } from '../../../src/store/store.js';
 import { hashToken } from '../../../src/token/token.js';
 import { createGmailFakeEgressTransport } from './fake-egress.js';
 import type { FakeImapMessage, FakeImapOptions } from '../mail/fake-imap.js';
+import {
+  aliceUidsInSearchOrder,
+  expectUidFetchesWithinBudget,
+  filteredAliceBobInbox,
+  largeInbox,
+  newestAliceUids,
+  newestLargeUids,
+  SUMMARY_FETCH_BUDGET_BYTES,
+  utf8Bytes,
+} from '../mail/summary-fetch-budget.js';
 
 const openServers: http.Server[] = [];
 
@@ -93,11 +103,21 @@ function manyMessages(count: number): FakeImapMessage[] {
 type GmailEgress = EgressTransport & {
   tlsSessionCallCount: number;
   searchCommandCount: number;
+  commands: readonly string[];
   messageFlags(mailboxName: string, uid: number): { seen: boolean; flagged: boolean } | undefined;
 };
 
 type GmailImapExtras = Partial<
-  Pick<FakeImapOptions, 'mailboxes' | 'deleteNo' | 'moveNo' | 'copyNo' | 'storeNo' | 'attachmentNo'>
+  Pick<
+    FakeImapOptions,
+    | 'mailboxes'
+    | 'deleteNo'
+    | 'moveNo'
+    | 'copyNo'
+    | 'storeNo'
+    | 'attachmentNo'
+    | 'maxUidFetchCommandBytes'
+  >
 >;
 
 function resolveImapExtras(
@@ -569,6 +589,52 @@ describe('connector-gmail: Gmail list_messages tool', () => {
       ],
     );
   });
+
+  it('Large mailbox summary fetch stays within the command budget', async () => {
+    const messages = largeInbox();
+    const searchOrder = messages.map((message) => message.uid);
+    expect(utf8Bytes(searchOrder.join(','))).toBeGreaterThan(SUMMARY_FETCH_BUDGET_BYTES);
+    await withGmailMcpClient(
+      messages,
+      async (client, egress) => {
+        const text = toolText(
+          await client.callTool({
+            name: 'gmail_list_messages',
+            arguments: { account: ACCOUNT_ID, order: 'newest' },
+          }),
+        );
+        expect(text).not.toContain(FIXTURE_PASSWORD);
+        expect(text).not.toContain('large-body-');
+        const envelope = parseEnvelope(text);
+        expect(envelope).toMatchObject({ offset: 0, limit: null, total: 1100 });
+        expect(envelope.messages).toHaveLength(1100);
+        expect(messageUids(envelope)).toEqual(newestLargeUids());
+        for (const message of envelope.messages) {
+          expectSummaryShape(message);
+          expect(message.to).toBe('me@example.test');
+        }
+        expectUidFetchesWithinBudget(egress.commands, searchOrder);
+
+        const before = egress.commands.length;
+        const pageText = toolText(
+          await client.callTool({
+            name: 'gmail_list_messages',
+            arguments: { account: ACCOUNT_ID, limit: 2, offset: 0, order: 'newest' },
+          }),
+        );
+        expect(pageText).not.toContain(FIXTURE_PASSWORD);
+        expect(pageText).not.toContain('large-body-');
+        const page = parseEnvelope(pageText);
+        expect(page).toMatchObject({ total: 1100, offset: 0, limit: 2 });
+        expect(messageUids(page)).toEqual([1100, 1099]);
+        for (const message of page.messages) {
+          expectSummaryShape(message);
+        }
+        expectUidFetchesWithinBudget(egress.commands.slice(before), searchOrder);
+      },
+      { maxUidFetchCommandBytes: 4096 },
+    );
+  });
 });
 
 describe('connector-gmail: Gmail search_messages tool', () => {
@@ -696,6 +762,65 @@ describe('connector-gmail: Gmail search_messages tool', () => {
       expect(egress.tlsSessionCallCount).toBe(before);
       expect(egress.searchCommandCount).toBe(0);
     });
+  });
+
+  it('Filtered summary fetch stays within the command budget', async () => {
+    const alice = aliceUidsInSearchOrder();
+    expect(utf8Bytes(alice.join(','))).toBeGreaterThan(SUMMARY_FETCH_BUDGET_BYTES);
+    await withGmailMcpClient(
+      filteredAliceBobInbox(),
+      async (client, egress) => {
+        const text = toolText(
+          await client.callTool({
+            name: 'gmail_search_messages',
+            arguments: {
+              account: ACCOUNT_ID,
+              filter: { from: 'alice@example.test' },
+              order: 'newest',
+            },
+          }),
+        );
+        expect(text).not.toContain(FIXTURE_PASSWORD);
+        expect(text).not.toContain('alice-body-');
+        expect(text).not.toContain('bob-body-');
+        expect(text).not.toContain('bob@example.test');
+        const envelope = parseEnvelope(text);
+        expect(envelope).toMatchObject({ offset: 0, limit: null, total: 400 });
+        expect(envelope.messages).toHaveLength(400);
+        expect(messageUids(envelope)).toEqual(newestAliceUids());
+        for (const message of envelope.messages) {
+          expect(message.from).toBe('alice@example.test');
+          expectSummaryShape(message);
+        }
+        expectUidFetchesWithinBudget(egress.commands, alice);
+
+        const before = egress.commands.length;
+        const pageText = toolText(
+          await client.callTool({
+            name: 'gmail_search_messages',
+            arguments: {
+              account: ACCOUNT_ID,
+              filter: { from: 'alice@example.test' },
+              limit: 2,
+              offset: 0,
+              order: 'newest',
+            },
+          }),
+        );
+        expect(pageText).not.toContain(FIXTURE_PASSWORD);
+        expect(pageText).not.toContain('alice-body-');
+        expect(pageText).not.toContain('bob@example.test');
+        const page = parseEnvelope(pageText);
+        expect(page).toMatchObject({ total: 400, offset: 0, limit: 2 });
+        expect(messageUids(page)).toEqual([1000000799, 1000000797]);
+        for (const message of page.messages) {
+          expect(message.from).not.toBe('bob@example.test');
+          expectSummaryShape(message);
+        }
+        expectUidFetchesWithinBudget(egress.commands.slice(before), alice);
+      },
+      { maxUidFetchCommandBytes: 4096 },
+    );
   });
 });
 

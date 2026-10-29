@@ -30,6 +30,7 @@ export function createMailruFakeEgressTransport(options: {
   tlsSessionCallCount: number;
   tlsSessions: readonly RecordedTlsSession[];
   searchCommandCount: number;
+  commands: readonly string[];
   messageFlags(mailboxName: string, uid: number): { seen: boolean; flagged: boolean } | undefined;
 } {
   const state = { tlsSessionCallCount: 0 };
@@ -46,6 +47,13 @@ export function createMailruFakeEgressTransport(options: {
     },
     get searchCommandCount() {
       return imapSessions.reduce((sum, duplex) => sum + duplex.searchCommandCount, 0);
+    },
+    get commands() {
+      const recorded: string[] = [];
+      for (const session of imapSessions) {
+        recorded.push(...session.commands);
+      }
+      return recorded;
     },
     messageFlags(mailboxName: string, uid: number) {
       const mailbox = sharedMailboxes.find((entry) => entry.name === mailboxName);

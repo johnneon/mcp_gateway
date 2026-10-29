@@ -71,7 +71,7 @@ The Mail.ru connector's `checkConnection` SHALL receive account field values and
 
 ### Requirement: Mail.ru list_messages tool
 
-The Mail.ru connector SHALL declare a tool with short name `list_messages` (MCP name `mailru_list_messages`). Model arguments SHALL include an optional `mailbox` string that defaults to `INBOX` when omitted or empty, an optional `offset` integer, an optional `limit` integer, and an optional `order` string. When `offset` is omitted, is not an integer, or is less than 0, the applied offset SHALL be 0. When `limit` is omitted, is not an integer, or is less than 1, the tool SHALL return the entire matching set from the applied offset and the envelope `limit` SHALL be null. When `limit` is an integer greater than or equal to 1, the applied limit SHALL be that integer and SHALL have no maximum. When `order` is omitted, the applied order SHALL be `newest`. When `order` is present and is not `newest` or `oldest`, the tool SHALL fail with English error text that contains `Invalid order` and does not contain the account password, and SHALL NOT issue SEARCH. The handler SHALL load the mailbox, sort that set by parsed message date, and then cut. `newest` SHALL place the highest date first. `oldest` SHALL place the lowest date first. A date that does not parse SHALL sort as older than every date that does. When two parsed dates are equal, `newest` SHALL place the higher uid first and `oldest` SHALL place the lower uid first. The same uid tie-break SHALL apply to two unparseable dates. The result SHALL be a JSON object `{ messages, total, offset, limit }`, not a JSON array. `total` SHALL be the size of the mailbox set before the cut. `offset` and `limit` in the object SHALL be the applied values. `messages` SHALL be the cut after the sort. When the applied offset is greater than or equal to `total`, `messages` SHALL be an empty array and `total` SHALL stay the full set size. Each message SHALL include `uid`, `from`, `to`, `subject`, `date`, `seen`, and `unread`, and SHALL NOT include a message body. `unread` SHALL be the boolean opposite of `seen`. `date` SHALL be the message date string. `to` SHALL be the To header, or an empty string when that header is absent. Passing `mailbox` SHALL select that folder, including a folder whose name came from `list_mailboxes`. The handler SHALL use the egress TLS session to the IMAP host only. Model arguments SHALL NOT contain a URL, a host, a secret, or a raw IMAP command string. Automated tests SHALL use a fake IMAP server and SHALL NOT contact a live mailbox.
+The Mail.ru connector SHALL declare a tool with short name `list_messages` (MCP name `mailru_list_messages`). Model arguments SHALL include an optional `mailbox` string that defaults to `INBOX` when omitted or empty, an optional `offset` integer, an optional `limit` integer, and an optional `order` string. When `offset` is omitted, is not an integer, or is less than 0, the applied offset SHALL be 0. When `limit` is omitted, is not an integer, or is less than 1, the tool SHALL return the entire matching set from the applied offset and the envelope `limit` SHALL be null. When `limit` is an integer greater than or equal to 1, the applied limit SHALL be that integer and SHALL have no maximum. When `order` is omitted, the applied order SHALL be `newest`. When `order` is present and is not `newest` or `oldest`, the tool SHALL fail with English error text that contains `Invalid order` and does not contain the account password, and SHALL NOT issue SEARCH. The handler SHALL load the mailbox, sort that set by parsed message date, and then cut. Before the sort and the cut, the handler SHALL fetch a summary for every UID in the matched set. When that set is non-empty, the handler SHALL request those summaries with one or more `UID FETCH` commands that name specific matched UIDs in a comma-separated list. The UTF-8 byte length of each such command, excluding the IMAP tag and the line ending, SHALL be at most 4096. The commands for one call together SHALL name each matched UID exactly once. The handler SHALL NOT request that set with `UID FETCH 1:*` and SHALL NOT replace the comma-separated UID list with a UID range. When one command naming every matched UID would exceed 4096 bytes, the handler SHALL use more than one command. When one command naming every matched UID is at most 4096 bytes, the handler SHALL issue that one command. When the matched set is empty, the handler SHALL NOT issue `UID FETCH`. `newest` SHALL place the highest date first. `oldest` SHALL place the lowest date first. A date that does not parse SHALL sort as older than every date that does. When two parsed dates are equal, `newest` SHALL place the higher uid first and `oldest` SHALL place the lower uid first. The same uid tie-break SHALL apply to two unparseable dates. The result SHALL be a JSON object `{ messages, total, offset, limit }`, not a JSON array. `total` SHALL be the size of the mailbox set before the cut. `offset` and `limit` in the object SHALL be the applied values. `messages` SHALL be the cut after the sort. When the applied offset is greater than or equal to `total`, `messages` SHALL be an empty array and `total` SHALL stay the full set size. Each message SHALL include `uid`, `from`, `to`, `subject`, `date`, `seen`, and `unread`, and SHALL NOT include a message body. `unread` SHALL be the boolean opposite of `seen`. `date` SHALL be the message date string. `to` SHALL be the To header, or an empty string when that header is absent. Passing `mailbox` SHALL select that folder, including a folder whose name came from `list_mailboxes`. The handler SHALL use the egress TLS session to the IMAP host only. Model arguments SHALL NOT contain a URL, a host, a secret, or a raw IMAP command string. Automated tests SHALL use a fake IMAP server and SHALL NOT contact a live mailbox.
 
 #### Scenario: Default call returns the full newest set inside an envelope
 
@@ -188,9 +188,42 @@ The Mail.ru connector SHALL declare a tool with short name `list_messages` (MCP 
 - **AND** the result text does not contain the account password
 - **AND** the result text does not contain `[Gmail]/`
 
+#### Scenario: Large mailbox summary fetch stays within the command budget
+
+- **GIVEN** an eligible Mail.ru account on an enabled configuration and a fake IMAP server
+- **AND** the fake IMAP server ends the connection without completing the command when any one `UID FETCH` command exceeds 4096 UTF-8 bytes, excluding the IMAP tag and the line ending
+- **AND** `INBOX` contains uids 1 through 1100, each from `alice@example.test` and to `me@example.test`
+- **AND** uid 1100 has date `02 Feb 2024 00:00:00 +0000`
+- **AND** uid 1099 has date `01 Feb 2024 00:00:00 +0000`
+- **AND** every other uid has date `01 Jan 2024 00:00:00 +0000`
+- **AND** a comma-separated list of uids 1 through 1100 is longer than 4096 UTF-8 bytes
+- **WHEN** an authenticated MCP client calls `mailru_list_messages` with no `mailbox`, no `offset`, no `limit`, and `order` `newest`
+- **THEN** the result text parses as a JSON object with `messages`, `total`, `offset`, and `limit`
+- **AND** `offset` is 0, `limit` is null, and `total` is 1100
+- **AND** `messages` has length 1100
+- **AND** `messages[0].uid` is 1100, `messages[1].uid` is 1099, and `messages[2].uid` is 1098
+- **AND** the last message uid is 1
+- **AND** `messages` contains each uid from 1 through 1100 exactly once
+- **AND** each message includes `uid`, `from`, `to`, `subject`, `date`, `seen`, and `unread`
+- **AND** each message `to` is `me@example.test`
+- **AND** no message includes a message body
+- **AND** the call issued more than one `UID FETCH` command
+- **AND** each of those commands is at most 4096 UTF-8 bytes, excluding the IMAP tag and the line ending
+- **AND** those commands together name each uid from 1 through 1100 exactly once
+- **AND** no `UID FETCH` command uses `1:*` or a UID range
+- **AND** the result text does not contain the account password
+- **WHEN** the client calls `mailru_list_messages` with `limit` 2, `offset` 0, and `order` `newest`
+- **THEN** the envelope has `total` 1100, `offset` 0, and `limit` 2
+- **AND** `messages` uids are 1100 then 1099
+- **AND** that call issued more than one `UID FETCH` command, each at most 4096 UTF-8 bytes, excluding the IMAP tag and the line ending
+- **AND** those commands together name each uid from 1 through 1100 exactly once
+- **AND** no `UID FETCH` command uses `1:*` or a UID range
+- **AND** no message includes a message body
+- **AND** the result text does not contain the account password
+
 ### Requirement: Mail.ru search_messages tool
 
-The Mail.ru connector SHALL declare a tool with short name `search_messages` (MCP name `mailru_search_messages`). Model arguments SHALL include an optional `mailbox` string defaulting to `INBOX`, the same optional `offset`, `limit`, and `order` as `list_messages`, and a narrow filter object whose only allowed keys are `unseen` (boolean), `from` (string), `subject` (string substring), and `since` (date string). The handler SHALL reject a free-form IMAP search string or any filter key outside that set, and SHALL NOT issue that free-form search to the IMAP server. After the filter matches, the handler SHALL apply the same date sort and page rules as `list_messages`, including a null `limit` when the limit is omitted, not an integer, or below 1, and `Invalid order` when `order` is neither `newest` nor `oldest`. `total` SHALL be the number of matches before the cut. Successful results SHALL use the same JSON envelope and the same summary shape as `list_messages` (`uid`, `from`, `to`, `subject`, `date`, `seen`, `unread`) and SHALL NOT include bodies. A call with no offset and no limit SHALL return every match from the start of the chosen order, with envelope `limit` null. Model arguments SHALL NOT contain a URL, a host, a secret, or a raw IMAP command string. Automated tests SHALL use a fake IMAP server and SHALL NOT contact a live mailbox.
+The Mail.ru connector SHALL declare a tool with short name `search_messages` (MCP name `mailru_search_messages`). Model arguments SHALL include an optional `mailbox` string defaulting to `INBOX`, the same optional `offset`, `limit`, and `order` as `list_messages`, and a narrow filter object whose only allowed keys are `unseen` (boolean), `from` (string), `subject` (string substring), and `since` (date string). The handler SHALL reject a free-form IMAP search string or any filter key outside that set, and SHALL NOT issue that free-form search to the IMAP server. After the filter matches, the handler SHALL apply the same date sort and page rules as `list_messages`, including a null `limit` when the limit is omitted, not an integer, or below 1, and `Invalid order` when `order` is neither `newest` nor `oldest`. `total` SHALL be the number of matches before the cut. Successful results SHALL use the same JSON envelope and the same summary shape as `list_messages` (`uid`, `from`, `to`, `subject`, `date`, `seen`, `unread`) and SHALL NOT include bodies. A call with no offset and no limit SHALL return every match from the start of the chosen order, with envelope `limit` null. Model arguments SHALL NOT contain a URL, a host, a secret, or a raw IMAP command string. Summary fetch for the matched UIDs SHALL follow the same `UID FETCH` batching rules as `list_messages`, including when the matched UIDs are not every UID in the mailbox. Automated tests SHALL use a fake IMAP server and SHALL NOT contact a live mailbox.
 
 #### Scenario: Narrow filter search returns matching summaries on a fake IMAP server
 
@@ -230,6 +263,39 @@ The Mail.ru connector SHALL declare a tool with short name `search_messages` (MC
 - **WHEN** an authenticated MCP client calls `mailru_search_messages` with a free-form search string argument or a filter key outside `unseen`, `from`, `subject`, and `since`
 - **THEN** the tool call fails without issuing that free-form search to the fake IMAP server
 - **AND** the error text does not contain the account password
+
+#### Scenario: Filtered summary fetch stays within the command budget
+
+- **GIVEN** an eligible Mail.ru account on an enabled configuration and a fake IMAP server
+- **AND** the fake IMAP server ends the connection without completing the command when any one `UID FETCH` command exceeds 4096 UTF-8 bytes, excluding the IMAP tag and the line ending
+- **AND** for each integer `i` from 0 through 399, `INBOX` contains uid `1000000001 + 2 * i` from `alice@example.test` and uid `1000000002 + 2 * i` from `bob@example.test`, both to `me@example.test`
+- **AND** uid 1000000799 has date `02 Feb 2024 00:00:00 +0000`
+- **AND** uid 1000000797 has date `01 Feb 2024 00:00:00 +0000`
+- **AND** every other message has date `01 Jan 2024 00:00:00 +0000`
+- **AND** a comma-separated list of the alice uids is longer than 4096 UTF-8 bytes
+- **WHEN** an authenticated MCP client calls `mailru_search_messages` with filter `{ "from": "alice@example.test" }`, no `limit`, and `order` `newest`
+- **THEN** the result text parses as a JSON object with `messages`, `total`, `offset`, and `limit`
+- **AND** `offset` is 0, `limit` is null, and `total` is 400
+- **AND** `messages` has length 400
+- **AND** `messages[0].uid` is 1000000799, `messages[1].uid` is 1000000797, and `messages[2].uid` is 1000000795
+- **AND** the last message uid is 1000000001
+- **AND** every message `from` is `alice@example.test` and no message `from` is `bob@example.test`
+- **AND** `messages` contains each alice uid exactly once
+- **AND** each message includes `uid`, `from`, `to`, `subject`, `date`, `seen`, and `unread`, and includes no message body
+- **AND** the call issued more than one `UID FETCH` command
+- **AND** each of those commands is at most 4096 UTF-8 bytes, excluding the IMAP tag and the line ending
+- **AND** those commands together name each alice uid exactly once and name no bob uid
+- **AND** no `UID FETCH` command uses `1:*` or a UID range
+- **AND** the result text does not contain the account password
+- **WHEN** the client calls `mailru_search_messages` with the same filter, `limit` 2, `offset` 0, and `order` `newest`
+- **THEN** the envelope has `total` 400, `offset` 0, and `limit` 2
+- **AND** `messages` uids are 1000000799 then 1000000797
+- **AND** no message `from` is `bob@example.test`
+- **AND** that call issued more than one `UID FETCH` command, each at most 4096 UTF-8 bytes, excluding the IMAP tag and the line ending
+- **AND** those commands together name each alice uid exactly once and name no bob uid
+- **AND** no `UID FETCH` command uses `1:*` or a UID range
+- **AND** no message includes a message body
+- **AND** the result text does not contain the account password
 
 ### Requirement: Mail.ru read_message tool
 

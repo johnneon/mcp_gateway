@@ -437,6 +437,57 @@ type TaggedResult = {
   listed: ListedMailbox[];
 };
 
+/** UTF-8 length of the command passed to runTagged, without the tag or the line ending. */
+const SUMMARY_FETCH_COMMAND_BYTES = 4096;
+const SUMMARY_FETCH_ITEMS = '(FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE)])';
+
+function summaryFetchCommand(uids: readonly number[]): string {
+  return `UID FETCH ${uids.join(',')} ${SUMMARY_FETCH_ITEMS}`;
+}
+
+function summaryFetchCommandBytes(uids: readonly number[]): number {
+  return Buffer.byteLength(summaryFetchCommand(uids), 'utf8');
+}
+
+/**
+ * Pack UIDs in search order. Append the next UID while the command stays within
+ * the byte budget; otherwise the current list is one command and the UID starts the next.
+ */
+function summaryFetchBatches(uids: readonly number[]): number[][] {
+  const batches: number[][] = [];
+  let batch: number[] = [];
+  for (const uid of uids) {
+    const next = batch.concat(uid);
+    if (summaryFetchCommandBytes(next) <= SUMMARY_FETCH_COMMAND_BYTES) {
+      batch = next;
+      continue;
+    }
+    if (batch.length > 0) {
+      batches.push(batch);
+    }
+    batch = [uid];
+  }
+  if (batch.length > 0) {
+    batches.push(batch);
+  }
+  return batches;
+}
+
+function summaryFromFetch(fetch: ParsedFetch): MessageSummary {
+  const headerSection = fetch.sections.find((section) =>
+    section.name.startsWith('BODY[HEADER.FIELDS'),
+  );
+  const headers = parseHeaderBlock(headerSection?.data ?? '');
+  return {
+    uid: fetch.uid,
+    from: headers.from,
+    to: headers.to,
+    subject: headers.subject,
+    date: headers.date,
+    seen: hasImapFlag(fetch.flags, 'Seen'),
+  };
+}
+
 /**
  * IMAP client that speaks only over a provided duplex (no own TCP/TLS).
  */
@@ -737,27 +788,14 @@ export function createImapClient(duplex: Duplex): ImapClient {
     },
 
     async fetchSummaries(uids) {
-      if (uids.length === 0) {
-        return [];
+      const summaries: MessageSummary[] = [];
+      for (const batch of summaryFetchBatches(uids)) {
+        const { fetches } = await runTagged(summaryFetchCommand(batch));
+        for (const fetch of fetches) {
+          summaries.push(summaryFromFetch(fetch));
+        }
       }
-      const set = uids.join(',');
-      const { fetches } = await runTagged(
-        `UID FETCH ${set} (FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE)])`,
-      );
-      return fetches.map((fetch) => {
-        const headerSection = fetch.sections.find((section) =>
-          section.name.startsWith('BODY[HEADER.FIELDS'),
-        );
-        const headers = parseHeaderBlock(headerSection?.data ?? '');
-        return {
-          uid: fetch.uid,
-          from: headers.from,
-          to: headers.to,
-          subject: headers.subject,
-          date: headers.date,
-          seen: hasImapFlag(fetch.flags, 'Seen'),
-        } satisfies MessageSummary;
-      });
+      return summaries;
     },
 
     async pageMessages(query = {}) {
